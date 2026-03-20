@@ -1,0 +1,68 @@
+{
+  "mainTitle": "Discover Great Flight Deals.",
+  "subTitle": "Book your Flight, Hotels and Desire Holiday Packages",
+  "bannerimage": {
+      "id": 22,
+      "index": 1,
+      "imageUrl": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&h=400&fit=crop"
+  },
+  "sliderimage": [
+      {
+          "id": 16,
+          "index": 1,
+          "imageUrl": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&h=600&fit=crop"
+      },
+      {
+          "id": 17,
+          "index": 2,
+          "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=1200&h=600&fit=crop"
+      },
+      {
+          "id": 18,
+          "index": 3,
+          "imageUrl": "https://images.unsplash.com/photo-1500382017468-f049863256fe?w=1200&h=600&fit=crop"
+      },
+      {
+          "id": 19,
+          "index": 4,
+          "imageUrl": "https://images.unsplash.com/photo-1434725039859-f7d4570e60d5?w=1200&h=600&fit=crop"
+      },
+      {
+          "id": 20,
+          "index": 5,
+          "imageUrl": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=1200&h=600&fit=crop"
+      }
+  ],
+  "bannerimageMobile": {
+      "id": 2,
+      "index": 1,
+      "imageUrl": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&h=400&fit=crop"
+  },
+  "sliderimageMobile": [
+      {
+          "id": 1,
+          "index": 1,
+          "imageUrl": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&h=600&fit=crop"
+      },
+      {
+          "id": 2,
+          "index": 2,
+          "imageUrl": "https://images.unsplash.com/photo-1469854523086-cc02fe5d8800?w=600&h=600&fit=crop"
+      },
+      {
+          "id": 3,
+          "index": 3,
+          "imageUrl": "https://images.unsplash.com/photo-1500382017468-f049863256fe?w=600&h=600&fit=crop"
+      },
+      {
+          "id": 4,
+          "index": 4,
+          "imageUrl": "https://images.unsplash.com/photo-1434725039859-f7d4570e60d5?w=600&h=600&fit=crop"
+      },
+      {
+          "id": 5,
+          "index": 5,
+          "imageUrl": "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=600&h=600&fit=crop"
+      }
+  ]
+}

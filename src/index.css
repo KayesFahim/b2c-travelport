@@ -1,0 +1,228 @@
+@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --radius: 0.9rem;
+  --background: 204 64% 98%;
+  --foreground: 211 57% 16%;
+  --card: 0 0% 100%;
+  --card-foreground: 211 57% 16%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 211 57% 16%;
+  --primary: 197 100% 42%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 173 81% 40%;
+  --secondary-foreground: 0 0% 100%;
+  --muted: 210 47% 94%;
+  --muted-foreground: 215 22% 39%;
+  --accent: 197 100% 42%;
+  --accent-foreground: 0 0% 100%;
+  --destructive: 0 84% 60%;
+  --destructive-foreground: 0 0% 100%;
+  --border-hsl: 210 34% 85%;
+  --input-hsl: 210 34% 85%;
+  --ring-hsl: 197 100% 42%;
+
+  --primary-color: #009ad6;
+  --primary-text-color: #f4f8fc;
+  --secondary-color: #8ea5bb;
+  --button-color: var(--primary-color);
+  --white: #ffffff;
+  --fotter-color: #002a49;
+  --footer-text-color: #c9d8e8;
+  --footer-text-color-heading: #f4f8fd;
+  --primary-button: var(--primary-color);
+  --icons-color: #a7c4db;
+  --black: #0d1f33;
+  --text-color: #7f95aa;
+  --flight-color: #17324f;
+  --meta-black: #10233c;
+  --flight-text-color: #6a8197;
+  --depature-color: #0f2d4b;
+  --airport-color: #0b3c6e;
+  --refundable-color: #0f8b58;
+  --filter-text-color: #1a3553;
+  --filter-color: #60758a;
+  --tour-color: #005ca8;
+  --black-daimond: #001a2d;
+  --darak-red-color: #d61f34;
+  --selected-color: #00b5ad;
+  --label-bg: #d9eefa;
+  --border: rgb(170, 165, 165);
+  --card-bg: #f2f9ff;
+}
+
+@layer base {
+  * {
+    border-color: hsl(var(--border-hsl));
+  }
+
+  body {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: "Manrope", sans-serif !important;
+    background-image:
+      radial-gradient(
+        circle at 8% 0%,
+        rgba(0, 154, 214, 0.17),
+        rgba(0, 70, 120, 0) 45%
+      ),
+      radial-gradient(
+        circle at 92% 8%,
+        rgba(20, 184, 166, 0.1),
+        rgba(20, 184, 166, 0) 40%
+      ),
+      linear-gradient(180deg, #f7fbff 0%, #edf5fc 100%);
+    min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+    transition: color 0.18s ease;
+  }
+}
+
+.travelport-shell {
+  min-height: 100vh;
+}
+
+.travelport-shell .MuiContainer-root {
+  max-width: 1280px;
+}
+
+.travelport-shell .MuiPaper-root,
+.travelport-shell .MuiAccordion-root {
+  border-radius: 16px;
+  border: 1px solid rgba(8, 55, 98, 0.12);
+  box-shadow: 0 14px 34px rgba(6, 42, 78, 0.08);
+}
+
+.travelport-shell .MuiButton-root {
+  text-transform: none;
+  font-weight: 700;
+  border-radius: 12px;
+}
+
+.travelport-shell .MuiButton-containedPrimary,
+.travelport-shell .MuiButton-contained {
+  background: linear-gradient(120deg, #009ad6 0%, #0077aa 100%);
+}
+
+.travelport-shell .MuiButton-containedPrimary:hover,
+.travelport-shell .MuiButton-contained:hover {
+  background: linear-gradient(120deg, #007eaf 0%, #00618b 100%);
+}
+
+.travelport-shell .MuiChip-root {
+  border-radius: 999px;
+  font-weight: 700;
+}
+
+.travelport-shell .MuiDialog-paper,
+.travelport-shell .MuiDrawer-paper {
+  border-radius: 16px;
+  border: 1px solid rgba(8, 55, 98, 0.12);
+}
+
+.DatePicker-style .react-datepicker {
+  font-size: 16px;
+}
+
+.DatePicker-style .react-datepickerheader {
+  color: var(--primary-color);
+  border-radius: 5px;
+  border: 0;
+  width: 290px;
+}
+
+.DatePicker-style .react-datepickermonth {
+  display: flex;
+}
+.DatePicker-style .react-datepickernavigation {
+  top: 10px;
+  right: 10px;
+}
+.DatePicker-style .react-datepickernavigation-icon--previous {
+  left: 10px;
+}
+
+.DatePicker-style .react-datepickerday-name {
+  font-weight: 500;
+  background-color: var(--primary-color);
+}
+
+.DatePicker-style .react-datepickerday--selected {
+  background-color: var(--primary-color);
+  color: #ffffff;
+  width: 100% !important;
+  padding: 20px;
+}
+
+.DatePicker-style .react-datepickermonth-dropdown-container {
+  margin-left: 8px;
+  padding: 20px;
+}
+
+.DatePicker-style .react-datepickeryear-dropdown-container {
+  margin-right: 8px;
+  padding: 20px;
+}
+
+.DatePicker-style .react-datepickermonth-text--keyboard-selected {
+  background-color: var(--primary-color);
+  border-radius: 50px;
+}
+
+.DatePicker-style .react-datepickermonth-text--keyboard-selected:hover {
+  background-color: var(--primary-color);
+}
+
+.DatePicker-style .react-datepickernavigation-icon::before {
+  border-color: var(--primary-color);
+}
+.DatePicker-style .react-datepickernavigation-icon {
+  top: 9px;
+}
+
+.DatePicker-style .react-datepickernavigation {
+  height: 40px;
+}
+.DatePicker-style .react-datepickermonth-text--today {
+  font-weight: 500;
+}
+
+.DatePicker-style input {
+  width: 100%;
+  border: 1px solid var(--primary-color);
+  color: var(--primary-color);
+  border-radius: 10px;
+  font-weight: 500;
+  height: 60px;
+  font-size: 13px;
+  padding: 0px 50px;
+  padding-top: 20px;
+  cursor: pointer;
+}
+
+#google-oauth2-login-dialog {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  position: fixed !important;
+}
+
+.react-datepicker-popper {
+  z-index: 1000 !important;
+}
