@@ -28,9 +28,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# local OCR language data
-tessdata/
-*.traineddata
+# local OCR language data (tessdata committed so Vercel serverless can access it)
+# tessdata/
+/*.traineddata
 
 # local sample payload/data folders
 sample/
