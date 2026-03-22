@@ -9,7 +9,7 @@
  *
  * Env:
  *   SMOKE_BASE_URL  — origin only, no trailing slash (default http://127.0.0.1:3000)
- *   SMOKE_PATHS     — comma-separated paths (default /,/homepage)
+ *   SMOKE_PATHS     — comma-separated paths (default key public routes)
  *   SMOKE_PORT      — with --with-server only (default 4310)
  */
 
@@ -24,7 +24,16 @@ const projectRoot = path.resolve(__dirname, "..");
 const require = createRequire(import.meta.url);
 const nextBin = require.resolve("next/dist/bin/next");
 
-const defaultPaths = ["/", "/homepage"];
+const defaultPaths = [
+  "/",
+  "/homepage",
+  "/offers",
+  "/bookingdetails",
+  "/previewbooking",
+  "/bookingconfirmation",
+  "/onewaysearchresult",
+  "/selectedflightdetails",
+];
 
 function parsePaths() {
   const raw = process.env.SMOKE_PATHS;
