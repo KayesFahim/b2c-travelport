@@ -5,7 +5,7 @@ import { config } from "../config";
 import secureLocalStorage from "react-secure-storage";
 import GoogleIcon from "@mui/icons-material/Google";
 import { Box } from "@mui/material";
-const GoogleLogIn = ({ closeModal }) => {
+const GoogleLogIn = ({ closeModal, onLoginSuccess }) => {
   const handleSignWithGoogle = async (data) => {
     if (!data?.access_token) {
       toast.error("Google login token is missing.");
@@ -26,7 +26,11 @@ const GoogleLogIn = ({ closeModal }) => {
       secureLocalStorage.setItem("access_token", userData?.access_token);
       secureLocalStorage.setItem("userData", userData?.userData);
       secureLocalStorage.setItem("data", userData);
-      window.location.reload();
+      if (typeof onLoginSuccess === "function") {
+        onLoginSuccess(userData);
+      } else {
+        window.location.reload();
+      }
     } catch (error) {
       toast.error(error.message || "Login failed. Please try again.");
     }
@@ -65,20 +69,15 @@ const GoogleLogIn = ({ closeModal }) => {
   );
 };
 
-const SignInWithGoogle = ({ closeModal }) => {
-  // Show message if Google OAuth is not configured
+const SignInWithGoogle = ({ closeModal, onLoginSuccess }) => {
+  // Hide Google sign-in silently when OAuth client ID is not configured.
   if (!config.googleClientId) {
-    return (
-      <Box sx={{ color: "red", p: 2, textAlign: "center" }}>
-        Google Login is not configured. Please add
-        NEXT_PUBLIC_GOOGLE_CLIENT_ID to .env
-      </Box>
-    );
+    return null;
   }
 
   return (
     <GoogleOAuthProvider clientId={config.googleClientId}>
-      <GoogleLogIn closeModal={closeModal} />
+      <GoogleLogIn closeModal={closeModal} onLoginSuccess={onLoginSuccess} />
     </GoogleOAuthProvider>
   );
 };

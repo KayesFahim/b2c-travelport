@@ -43,6 +43,7 @@ import Hotel from "./Pages/Hotel/Hotel"
 import TourSearchResultNew from "./Pages/Tour/TourSearchResult/TourSearchResultNew"
 import TourDetails from "./Pages/Tour/TourDetails/TourDetails"
 import Footer from "./Shared/Footer/Footer"
+import MyAccountPanel from "./Pages/MyAccount/MyAccountPanel"
 
 const App: FC = () => {
 
@@ -79,6 +80,7 @@ const App: FC = () => {
           <Route path="/blog" element={<Blog />} />
           <Route path="/nobooking" element={<NoBookingsFound />} />
           <Route path="/signIn" element={<SignIn />} />
+          <Route path="/my-account" element={<MyAccountPanel />} />
           {/* booking route  */}
 
           <Route

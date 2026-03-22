@@ -221,46 +221,78 @@ const NavBar = () => {
       password: String(userSignInInfo?.signInPass),
     };
     try {
-      const response = await fetch(`${config.baseUrl}/auth/signInUser`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
+      let loginSucceeded = false;
+      let lastErrorMessage = "Error signing in. Please try again.";
+
+      try {
+        const response = await fetch(`${config.baseUrl}/auth/signInUser`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          secureLocalStorage.setItem("access_token", data?.access_token || "");
+          secureLocalStorage.setItem("userData", data?.userData || {});
+          secureLocalStorage.setItem("data", data || {});
+          loginSucceeded = true;
+        } else {
+          lastErrorMessage = data?.message || lastErrorMessage;
+        }
+      } catch (networkError) {
+        // Fall back to local Next.js auth if external API is unavailable.
+      }
+
+      if (!loginSucceeded) {
+        const response = await fetch(`/api/auth/login`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
+
+        const data = await response.json().catch(() => ({}));
+        if (response.ok) {
+          secureLocalStorage.removeItem("access_token");
+          secureLocalStorage.setItem("userData", data?.user || {});
+          secureLocalStorage.setItem("data", {
+            ...data,
+            authSource: "local-session",
+          });
+          loginSucceeded = true;
+        } else {
+          lastErrorMessage = data?.message || lastErrorMessage;
+        }
+      }
+
+      if (!loginSucceeded) {
+        toast.error(lastErrorMessage, {
+          position: "top-right",
+          autoClose: 5000,
+          closeOnClick: false,
+        });
+        return;
+      }
+
+      setUserSignInInfo({
+        signInEmail: "",
+        signInPass: "",
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        secureLocalStorage.setItem("access_token", data?.access_token);
-        secureLocalStorage.setItem("userData", data?.userData);
-        secureLocalStorage.setItem("data", data);
-
-        // Reset the form fields
-        setUserSignInInfo({
-          signInEmail: "",
-          signInPass: "",
-        });
-
-        toast.success(data.message || "User signed in successfully!", {
-          position: "top-right",
-          autoClose: 5000,
-          closeOnClick: false,
-        });
-        setOpenSignIn(false); // Reopen the dialog when user clicks OK
-
-        // Refresh the page after successful login
-        window.location.reload();
-      } else {
-        toast.error(data.message || "Error signing in. Please try again.", {
-          position: "top-right",
-          autoClose: 5000,
-          closeOnClick: false,
-        });
-      }
+      toast.success("User signed in successfully!", {
+        position: "top-right",
+        autoClose: 5000,
+        closeOnClick: false,
+      });
+      setOpenSignIn(false);
+      navigate("/my-account");
     } catch (error) {
-      console.error("Error signing in:", error);
-      toast.error("Something went wrong. Please try again.", {
+      toast.error("Unable to sign in. Please check server and try again.", {
         position: "top-right",
         autoClose: 5000,
         closeOnClick: false,
@@ -371,24 +403,86 @@ const NavBar = () => {
     };
 
     try {
-      const response = await fetch(`${config.baseUrl}/user/signUp`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-      });
+      let externalSignUpCompleted = false;
 
-      const data = await response.json();
+      try {
+        const response = await fetch(`${config.baseUrl}/user/signUp`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+        });
 
-      if (response.ok) {
-        Swal.fire({
-          icon: "success",
-          title: "Success!",
-          text: data?.message || "User signed up successfully!",
-          confirmButtonText: "OK",
-        }).then(() => {
-          setOpenSignUpOtp(true); // Open OTP dialog
+        const data = await response.json().catch(() => ({}));
+
+        if (response.ok) {
+          externalSignUpCompleted = true;
+          Swal.fire({
+            icon: "success",
+            title: "Success!",
+            text: data?.message || "User signed up successfully!",
+            confirmButtonText: "OK",
+          }).then(() => {
+            setOpenSignUpOtp(true); // Keep existing external OTP flow
+          });
+
+          setUserInfo({
+            userName: "",
+            userEmail: "",
+            userPass: "",
+            userPhone: "",
+          });
+          setErrors({});
+          setOpenSignUp(false);
+        } else {
+          Swal.fire({
+            icon: "error",
+            title: "Sign up failed",
+            text:
+              data?.message ||
+              "There was an issue with the sign-up. Please try again.",
+            confirmButtonText: "Try Again",
+          });
+          setOpenSignUp(false);
+          return;
+        }
+      } catch (networkError) {
+        // External signup API unreachable. Fall back to local Next auth signup.
+      }
+
+      if (!externalSignUpCompleted) {
+        const fallbackResponse = await fetch(`/api/auth/register`, {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            name: body.fullName,
+            email: body.email,
+            password: body.password,
+          }),
+        });
+
+        const fallbackData = await fallbackResponse.json().catch(() => ({}));
+        if (!fallbackResponse.ok) {
+          Swal.fire({
+            icon: "error",
+            title: "Sign up failed",
+            text:
+              fallbackData?.message ||
+              "Unable to register right now. Please try again.",
+            confirmButtonText: "Try Again",
+          });
+          return;
+        }
+
+        secureLocalStorage.removeItem("access_token");
+        secureLocalStorage.setItem("userData", fallbackData?.user || {});
+        secureLocalStorage.setItem("data", {
+          ...fallbackData,
+          authSource: "local-session",
         });
 
         setUserInfo({
@@ -398,17 +492,17 @@ const NavBar = () => {
           userPhone: "",
         });
         setErrors({});
-      } else {
+        setOpenSignUp(false);
+
         Swal.fire({
-          icon: "error",
-          title: "Sign up failed",
-          text:
-            data.message ||
-            "There was an issue with the sign-up. Please try again.",
-          confirmButtonText: "Try Again",
+          icon: "success",
+          title: "Success!",
+          text: "User registered successfully!",
+          confirmButtonText: "OK",
+        }).then(() => {
+          navigate("/my-account");
         });
       }
-      setOpenSignUp(false);
     } catch (error) {
       console.error("Error signing up:", error);
       Swal.fire({
@@ -497,8 +591,6 @@ const NavBar = () => {
     "/paymentcancelled",
     "/paymentfailed",
     "/bookingquedetails",
-    "/userinfov2/userprofile",
-    "/userinfov2/userbooking",
     "/userinfov2/userwallet",
     "/userinfov2/usertransctions",
     "/userinfov2/usertraveler",
@@ -506,6 +598,7 @@ const NavBar = () => {
     "/userinfov2/adddeposite",
     "/paymentgateway",
     "/userinfov2/updateprofilev2",
+    "/my-account",
     "*",
     "/tourdetails",
   ]);
@@ -571,7 +664,6 @@ const NavBar = () => {
                 <Typography
                   sx={{
                     fontSize: { xs: "28px", md: "34px" },
-                    fontWeight: 900,
                     letterSpacing: "0.4px",
                     lineHeight: 1,
                     background:
@@ -751,7 +843,7 @@ const NavBar = () => {
                               fontWeight: 500,
                               fontSize: "18px",
                             }}
-                            to="/userinfov2/userprofile"
+                            to="/my-account?tab=profile"
                           >
                             <ListItemIcon>
                               <AccountCircle
@@ -761,7 +853,7 @@ const NavBar = () => {
                                 fontSize="small"
                               />
                             </ListItemIcon>
-                            Profile
+                            My Account
                           </Link>
                         </MenuItem>
 
@@ -772,7 +864,7 @@ const NavBar = () => {
                               color: "var(--primary-button)",
                               fontWeight: 500,
                             }}
-                            to="/userinfov2/userbooking"
+                            to="/my-account?tab=bookings"
                           >
                             <ListItemIcon>
                               <Bookmark
@@ -782,7 +874,7 @@ const NavBar = () => {
                                 fontSize="small"
                               />
                             </ListItemIcon>
-                            My Booking
+                            Booking History
                           </Link>
                         </MenuItem>
                         <Divider />
@@ -889,13 +981,13 @@ const NavBar = () => {
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location?.pathname ===
-                                                          "/userinfov2/userprofile"
+                                                          "/my-account"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location?.pathname ===
-                                                          "/userinfov2/userprofile"
+                                                          "/my-account"
                                                           ? "#3D3A49"
                                                           : "#003E6B",
                                                       alignItems: "center",
@@ -906,7 +998,7 @@ const NavBar = () => {
                                                       gap: "10px",
                                                       cursor: "pointer",
                                                     }}
-                                                    to="/userinfov2/userprofile"
+                                                    to="/my-account?tab=profile"
                                                   >
                                                     <PersonIcon
                                                       sx={{ fontSize: "20px" }}
@@ -924,18 +1016,18 @@ const NavBar = () => {
                                                 {/* bookings */}
                                                 <Box>
                                                   <Link
-                                                    to="/userinfov2/userbooking"
+                                                    to="/my-account?tab=bookings"
                                                     style={{
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location?.pathname ===
-                                                          "/userinfov2/userbooking"
+                                                          "/my-account"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location.pathname ===
-                                                          "/userinfov2/userbooking"
+                                                          "/my-account"
                                                           ? "#3D3A49"
                                                           : "#003E6B",
                                                       alignItems: "center",
@@ -1599,7 +1691,7 @@ const NavBar = () => {
                   justifyContent: "center",
                   my: "10px",
                 }}
-                >
+              >
                 <BrandWordmark width={120} height={100} fontSize={30} />
               </Box>
               <Typography
@@ -1726,7 +1818,13 @@ const NavBar = () => {
               borderRadius: "5px",
             }}
           >
-            <SignInWithGoogle closeModal={() => setOpenSignIn(false)} />
+            <SignInWithGoogle
+              closeModal={() => setOpenSignIn(false)}
+              onLoginSuccess={() => {
+                setOpenSignIn(false);
+                navigate("/my-account");
+              }}
+            />
 
             <Box sx={{ pt: "20px" }}>
               <Typography

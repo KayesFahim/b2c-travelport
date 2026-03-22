@@ -32,3 +32,6 @@
 2026-03-22T06:39:54.201Z | FAILED | Stage=precommit_add_offer | Status=502 | ReservationId=f364ef2d-b63f-411e-8334-58feeda0e5f0 | FlowKey=flow_round_ord_yyz_1774161589966_0 | OfferKey=offer_round_ord_yyz_1774161589966_0 | Message=Travelport add offer failed (200) | Details=FLIGHT DOES NOT EXIST ON THIS DATE OR TO THE REQUESTED CITY PAIRS
 2026-03-22T06:40:05.413Z | Locator=FRCKZ6 | ReservationId=1a4c894c-4679-4661-81b4-d5f3dc05fc24 | OfferIdentifiers=N/A
 2026-03-22T06:40:23.235Z | Locator=FRCKZ7 | ReservationId=d886a8ef-a3ac-47a7-aab1-6b50a2afe394 | OfferIdentifiers=N/A
+2026-03-22T14:43:03.018Z | Locator=FRCLDN | ReservationId=be62516f-5e35-4641-ac40-cccf5ecffca0 | OfferIdentifiers=N/A
+2026-03-22T14:43:20.977Z | FAILED | Stage=commit_only_flow_expired | Status=409 | ReservationId=be62516f-5e35-4641-ac40-cccf5ecffca0 | FlowKey=flow_216d7b7e-01f0-429f-bc71-84efad6c66c2 | OfferKey=offer_aff3ce49-076c-4940-8e5e-a53a784fefef | Message=Booking flow key is missing or expired. Start booking preview again. | Details=N/A
+2026-03-22T14:43:28.876Z | FAILED | Stage=commit_only_flow_expired | Status=409 | ReservationId=be62516f-5e35-4641-ac40-cccf5ecffca0 | FlowKey=flow_216d7b7e-01f0-429f-bc71-84efad6c66c2 | OfferKey=offer_aff3ce49-076c-4940-8e5e-a53a784fefef | Message=Booking flow key is missing or expired. Start booking preview again. | Details=N/A

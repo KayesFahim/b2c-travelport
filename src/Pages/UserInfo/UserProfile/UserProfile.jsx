@@ -18,34 +18,57 @@ const isMobile = window.innerWidth <= 768;
 const UserProfile = () => {
   const [userInfo, setUserInfo] = useState([]);
   const token = secureLocalStorage.getItem("access_token");
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const api = `${config.baseUrl}/user/profileInfo`;
-
     const fetchUserProfile = async () => {
+      const api = `${config.baseUrl}/user/profileInfo`;
+
       try {
-        const response = await fetch(api, {
+        if (token) {
+          const response = await fetch(api, {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            setUserInfo(data);
+            return;
+          }
+        }
+
+        // Fallback to local Next.js auth session when external API is unavailable.
+        const sessionResponse = await fetch("/api/auth/me", {
           method: "GET",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
+          credentials: "include",
         });
 
-        if (response.ok) {
-          const data = await response.json();
-          setUserInfo(data);
-        } else {
-          throw new Error("Failed to fetch user profile information");
+        if (sessionResponse.ok) {
+          const payload = await sessionResponse.json().catch(() => ({}));
+          const sessionUser = payload?.user || {};
+          setUserInfo({
+            firstName: String(sessionUser?.name || "").split(" ")[0] || "",
+            lastName: String(sessionUser?.name || "").split(" ").slice(1).join(" "),
+            email: sessionUser?.email || "",
+            phone: "",
+            nationality: "BD",
+            passport: "",
+          });
+          return;
         }
+
+        navigate("/");
       } catch (error) {
         console.error("Error:", error);
       }
     };
 
     fetchUserProfile();
-  }, []);
-  const navigate = useNavigate();
+  }, [token, navigate]);
 
   const [editMode, setEditMode] = useState(false);
   const handleEditClick = () => {
@@ -81,7 +104,7 @@ const UserProfile = () => {
             cursor: "pointer",
             mb: 2,
           }}
-          // onClick={handleAddDepositClick}
+        // onClick={handleAddDepositClick}
         >
           <Typography
             sx={{

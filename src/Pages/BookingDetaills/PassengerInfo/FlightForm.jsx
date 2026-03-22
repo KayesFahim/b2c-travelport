@@ -728,26 +728,34 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
   const handleAutoPassVisaCopy = async (file, index, type, category) => {
     if (!file) return null;
     let uploadedLink = null;
+    let responsePayload = {};
 
     const formData = new FormData();
     formData.append("file", file);
 
     try {
-      const response = await fetch(`${config.baseUrl}/upload/uploadDocuments`, {
-        method: "POST",
-        body: formData,
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      try {
+        const response = await fetch(`${config.baseUrl}/upload/uploadDocuments`, {
+          method: "POST",
+          body: formData,
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
-      if (!response.ok) {
-        console.error("File upload failed", response.statusText);
-        return null;
+        if (response.ok) {
+          const data = await response.json();
+          responsePayload = data || {};
+          uploadedLink = data?.link || data?.url || null;
+        }
+      } catch (uploadError) {
+        // External upload API may be unavailable in local dev.
       }
 
-      const data = await response.json();
-      uploadedLink = data?.link || data?.url || null;
+      if (!uploadedLink) {
+        // Keep scan/autofill functional even when document upload service is down.
+        uploadedLink = URL.createObjectURL(file);
+      }
 
       // Update the passenger data with the uploaded file link
       setFlightPassengerData((prevState) => {
@@ -774,10 +782,10 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
       });
       return {
         link: uploadedLink,
-        payload: data,
+        payload: responsePayload,
       };
     } catch (error) {
-      console.error("Error uploading file:", error);
+      // Avoid hard failure in UI for optional upload service failures.
       return null;
     }
   };

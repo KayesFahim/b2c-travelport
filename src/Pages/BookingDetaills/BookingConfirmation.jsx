@@ -579,6 +579,7 @@ const BookingConfirmation = () => {
   const [issueTicketFeedback, setIssueTicketFeedback] = useState({
     severity: "",
     message: "",
+    needsPreviewRecovery: false,
   });
 
   useEffect(() => {
@@ -830,12 +831,13 @@ const BookingConfirmation = () => {
         severity: "warning",
         message:
           "Issue-ticket reference not found in v11 response. Please reload this confirmation from a fresh booking.",
+        needsPreviewRecovery: false,
       });
       return;
     }
 
     setIssueTicketSubmitting(true);
-    setIssueTicketFeedback({ severity: "", message: "" });
+    setIssueTicketFeedback({ severity: "", message: "", needsPreviewRecovery: false });
 
     try {
       const response = await fetch("/api/travelport/book-hold", {
@@ -856,11 +858,25 @@ const BookingConfirmation = () => {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(
+        const commitOnlyMismatch =
+          payload?.stage === "commit_only_missing_prepared_booking" ||
+          response.status === 409;
+        let resolvedMessage =
           payload?.message ||
           payload?.details ||
-          `Issue ticket failed (${response.status})`
-        );
+          `Issue ticket failed (${response.status})`;
+
+        if (payload?.requiresLogin || response.status === 401) {
+          resolvedMessage =
+            "Login required for Issue Ticket. Please sign in again and retry.";
+        } else if (commitOnlyMismatch) {
+          resolvedMessage =
+            "Issue Ticket v11 flow reference expired/missing. Please run Preview Booking again, then confirm and issue ticket.";
+        }
+
+        const issueError = new Error(resolvedMessage);
+        issueError.needsPreviewRecovery = commitOnlyMismatch;
+        throw issueError;
       }
 
       setFinalCommitResponse(payload || null);
@@ -870,6 +886,7 @@ const BookingConfirmation = () => {
       setIssueTicketFeedback({
         severity: "success",
         message: `Ticket issue flow completed. Reservation ${reservationRef} | PNR ${issuedLocator}`,
+        needsPreviewRecovery: false,
       });
       setPnrRefreshTick((prev) => prev + 1);
     } catch (error) {
@@ -877,6 +894,8 @@ const BookingConfirmation = () => {
         severity: "error",
         message:
           error instanceof Error ? error.message : "Unable to issue ticket right now.",
+        needsPreviewRecovery:
+          Boolean(error && typeof error === "object" && error.needsPreviewRecovery),
       });
     } finally {
       setIssueTicketSubmitting(false);
@@ -1187,6 +1206,25 @@ const BookingConfirmation = () => {
           >
             {issueTicketFeedback.message}
           </Alert>
+        ) : null}
+
+        {issueTicketFeedback?.needsPreviewRecovery ? (
+          <Box sx={{ mb: 3, display: "flex", justifyContent: "flex-start" }}>
+            <Button
+              variant="contained"
+              onClick={() => navigate("/previewbooking")}
+              sx={{
+                textTransform: "none",
+                borderRadius: "10px",
+                fontWeight: 700,
+                fontFamily: FONT,
+                bgcolor: "#0A527A",
+                ":hover": { bgcolor: "#0A527A" },
+              }}
+            >
+              Re-Run Preview Flow
+            </Button>
+          </Box>
         ) : null}
 
       </Container>

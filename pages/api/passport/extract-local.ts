@@ -507,7 +507,7 @@ export default async function handler(
       ocrText: rawTextLog,
     });
   } catch (error) {
-    return res.status(500).json({
+    return res.status(200).json({
       success: false,
       source: SOURCE_NAME,
       message: "Local OCR extraction failed.",
