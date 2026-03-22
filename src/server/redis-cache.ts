@@ -50,6 +50,12 @@ async function getRedisClient(): Promise<Redis | null> {
   const redisUrl = String(process.env.REDIS_URL || "").trim();
   if (!redisUrl) return null;
 
+  // On Vercel, localhost Redis is unavailable; fall back to in-memory cache.
+  const isVercel = process.env.VERCEL === "1";
+  if (isVercel && /127\.0\.0\.1|localhost/.test(redisUrl)) {
+    return null;
+  }
+
   const host = globalThis as RedisHost;
   if (host.__flyjattRedisUnavailable) return null;
   if (host.__flyjattRedisClient && host.__flyjattRedisClient.status === "ready") {
@@ -62,6 +68,10 @@ async function getRedisClient(): Promise<Redis | null> {
       maxRetriesPerRequest: 1,
       enableOfflineQueue: false,
       connectTimeout: 1500,
+    });
+    // Prevent noisy unhandled ioredis error events in serverless logs.
+    host.__flyjattRedisClient.on("error", () => {
+      host.__flyjattRedisUnavailable = true;
     });
   }
 

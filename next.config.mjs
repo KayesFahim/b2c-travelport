@@ -8,6 +8,13 @@ const nextConfig = {
   reactStrictMode: true,
   // Parent folder has its own package-lock.json; pin tracing + Turbopack to this app.
   outputFileTracingRoot: __dirname,
+  outputFileTracingIncludes: {
+    "/api/passport/extract-local": [
+      "./node_modules/tesseract.js-core/**/*",
+      "./node_modules/tesseract.js/dist/worker.min.js",
+      "./tessdata/**/*.traineddata",
+    ],
+  },
   turbopack: {
     root: __dirname,
   },

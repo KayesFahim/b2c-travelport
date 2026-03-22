@@ -284,8 +284,8 @@ const extractMrzFromPayload = (payload = {}) => {
   const directLinesRaw = Array.isArray(payload?.mrzLines)
     ? payload.mrzLines
     : Array.isArray(payload?.machineReadableLines)
-    ? payload.machineReadableLines
-    : [];
+      ? payload.machineReadableLines
+      : [];
 
   const allText = [
     ...collectTextValues(payload),
@@ -448,12 +448,12 @@ const parsePassportExtractionPayload = (payload = {}) => {
 const hasExtractedPassportFields = (extracted = {}) =>
   Boolean(
     extracted?.passNo ||
-      extracted?.fName ||
-      extracted?.lName ||
-      extracted?.passEx ||
-      extracted?.dob ||
-      extracted?.passNationRaw ||
-      extracted?.passIssueCountryRaw
+    extracted?.fName ||
+    extracted?.lName ||
+    extracted?.passEx ||
+    extracted?.dob ||
+    extracted?.passNationRaw ||
+    extracted?.passIssueCountryRaw
   );
 
 const parseStoredUserData = (value) => {
@@ -571,7 +571,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
       if (field === "title") {
         if (["Mr", "Mstr"].includes(value)) {
           updatedState[type][index]["gender"] = "Male";
-        } else if (["Mrs", "Miss","Ms"].includes(value)) {
+        } else if (["Mrs", "Miss", "Ms"].includes(value)) {
           updatedState[type][index]["gender"] = "Female";
         }
       }
@@ -700,10 +700,10 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
         seatSelections: Array.isArray(seatSelections) && seatSelections.length
           ? seatSelections
           : Array.isArray(data?.seatSelections)
-          ? data.seatSelections
-          : Array.isArray(activeAirPrice?.seatSelections)
-          ? activeAirPrice.seatSelections
-          : [],
+            ? data.seatSelections
+            : Array.isArray(activeAirPrice?.seatSelections)
+              ? activeAirPrice.seatSelections
+              : [],
       };
 
       try {
@@ -1167,7 +1167,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
                         Select Title *
                       </Typography>
                       <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
-                        {["Mr","Mrs","Ms", "Mstr",  "Miss"].map((option) => (
+                        {["Mr", "Mrs", "Ms", "Mstr", "Miss"].map((option) => (
                           <Button
                             key={option}
                             variant={
@@ -1537,43 +1537,6 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
                         }
                         minDate={new Date()}
                         popperPlacement={"bottom-start"}
-                      />
-                    </FormControl>
-                  </Grid>
-
-                  <Grid item xs={12} md={6} sx={{ p: { xs: 0.5, md: 1 }, my: 1 }}>
-                    <Box
-                      sx={{
-                        fontSize: { xs: 14, md: 15 },
-                        color: "#123d66",
-                        fontWeight: 700,
-                        mb: 0.6,
-                      }}
-                    >
-                      Frequent Flyer
-                    </Box>
-                    <FormControl fullWidth>
-                      <Typography
-                        variant="subtitle1"
-                        gutterBottom
-                        sx={{ fontSize: "14px", color: "gray" }}
-                      >
-                        Frequent Flyer Number (If Any)
-                      </Typography>
-                      <TextField
-                        value={passenger.FFNumber}
-                        onChange={(e) =>
-                          handleInputChange(e, category, index, "FFNumber")
-                        }
-                        fullWidth
-                        InputProps={{
-                          sx: {
-                            height: 40, // Reduce field height
-                            borderRadius: 2, // Add border radius
-                            borderColor: "lightgray", // Set border color to light gray
-                            fontSize: "12px", // Set font size to 12px
-                          },
-                        }}
                       />
                     </FormControl>
                   </Grid>

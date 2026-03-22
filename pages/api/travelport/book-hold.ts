@@ -21,12 +21,12 @@ type BookHoldBody = {
   childCount?: number | string;
   infantCount?: number | string;
   passengers?:
-    | Array<Record<string, unknown>>
-    | {
-        adult?: number | string;
-        child?: number | string;
-        infant?: number | string;
-      };
+  | Array<Record<string, unknown>>
+  | {
+    adult?: number | string;
+    child?: number | string;
+    infant?: number | string;
+  };
 };
 
 type ErrorResponse = {
@@ -517,10 +517,10 @@ function resolvePassengerCounts(
   const bodyPassengerCounts =
     body?.passengers && !Array.isArray(body.passengers)
       ? (body.passengers as {
-          adult?: number | string;
-          child?: number | string;
-          infant?: number | string;
-        })
+        adult?: number | string;
+        child?: number | string;
+        infant?: number | string;
+      })
       : {};
 
   const adtFromBody = toNumber(body?.adultCount ?? bodyPassengerCounts?.adult ?? 0, 0);
@@ -689,8 +689,8 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
             segmentSequence: derivedSequence > 0 ? derivedSequence : segmentSequence,
             brandTier: toText(
               getValueByKeys(segment, ["brandTier", "BrandTier"]) ??
-                getValueByKeys(brandFeatures, ["tier", "Tier"]) ??
-                "1"
+              getValueByKeys(brandFeatures, ["tier", "Tier"]) ??
+              "1"
             ),
             AvailabilitySourceCode:
               toText(
@@ -797,7 +797,7 @@ function resolveReservationId(payload: Record<string, unknown>): string {
       | undefined) || reservationResponse;
   return toText(
     getValueByKeys(reservation, ["Identifier", "identifier", "id", "ID"]) ??
-      getValueByKeys(payload, ["reservationId", "ReservationId"])
+    getValueByKeys(payload, ["reservationId", "ReservationId"])
   );
 }
 
@@ -996,8 +996,8 @@ function resolveSeatSelections(
   const rawSelections = Array.isArray(body?.seatSelections)
     ? body.seatSelections
     : Array.isArray((selectedOffer as Record<string, unknown>)?.seatSelections)
-    ? ((selectedOffer as Record<string, unknown>).seatSelections as unknown[])
-    : [];
+      ? ((selectedOffer as Record<string, unknown>).seatSelections as unknown[])
+      : [];
   if (!rawSelections.length) return [];
 
   const defaultCatalogRequest = resolveCatalogOfferingsRequest(selectedOffer);
@@ -1121,13 +1121,13 @@ function resolveSeatSelections(
       ...(travelerTypeCode
         ? { travelerTypeCode }
         : travelerCodeAndNumberFallback.travelerTypeCode
-        ? { travelerTypeCode: travelerCodeAndNumberFallback.travelerTypeCode }
-        : {}),
+          ? { travelerTypeCode: travelerCodeAndNumberFallback.travelerTypeCode }
+          : {}),
       ...(travelerNumber
         ? { travelerNumber }
         : travelerCodeAndNumberFallback.travelerNumber
-        ? { travelerNumber: travelerCodeAndNumberFallback.travelerNumber }
-        : {}),
+          ? { travelerNumber: travelerCodeAndNumberFallback.travelerNumber }
+          : {}),
       ...(segmentRef ? { segmentRef } : {}),
       seatAssignment,
     });
@@ -1222,9 +1222,8 @@ async function persistLocatorToLocalFile(params: {
   if (!normalizedLocator) return;
 
   const filePath = path.join(process.cwd(), "atpn.txt");
-  const line = `${new Date().toISOString()} | Locator=${normalizedLocator} | ReservationId=${
-    params.reservationId
-  } | OfferIdentifiers=${params.offerIdentifiers.join(",") || "N/A"}\n`;
+  const line = `${new Date().toISOString()} | Locator=${normalizedLocator} | ReservationId=${params.reservationId
+    } | OfferIdentifiers=${params.offerIdentifiers.join(",") || "N/A"}\n`;
   await appendFile(filePath, line, "utf8");
 }
 
@@ -1272,12 +1271,9 @@ async function persistBookingFailureToLocalFile(params: {
   await appendFile(filePath, `${serialized}\n`, "utf8");
   await appendFile(
     sharedLogPath,
-    `${logEntry.timestamp} | FAILED | Stage=${logEntry.stage} | Status=${
-      logEntry.status
-    } | ReservationId=${logEntry.reservationId} | FlowKey=${
-      logEntry.bookingFlowKey
-    } | OfferKey=${logEntry.bookingOfferKey} | Message=${logEntry.message} | Details=${
-      logEntry.details || "N/A"
+    `${logEntry.timestamp} | FAILED | Stage=${logEntry.stage} | Status=${logEntry.status
+    } | ReservationId=${logEntry.reservationId} | FlowKey=${logEntry.bookingFlowKey
+    } | OfferKey=${logEntry.bookingOfferKey} | Message=${logEntry.message} | Details=${logEntry.details || "N/A"
     }\n`,
     "utf8"
   );
@@ -1333,11 +1329,11 @@ function extractTravelportErrorMessage(payload: Record<string, unknown>): string
   const roots: Array<Record<string, unknown> | null> = [
     payload,
     getValueByKeys(payload, ["OfferListResponse", "offerListResponse"]) as
-      | Record<string, unknown>
-      | null,
+    | Record<string, unknown>
+    | null,
     getValueByKeys(payload, ["ReservationResponse", "reservationResponse"]) as
-      | Record<string, unknown>
-      | null,
+    | Record<string, unknown>
+    | null,
   ];
 
   for (const root of roots) {
@@ -1462,8 +1458,8 @@ function resolvePassengersForTravelerPayload(
 ): Array<Record<string, unknown>> {
   const listPassengers = Array.isArray(body?.passengers)
     ? (body.passengers as Array<Record<string, unknown>>).filter(
-        (item) => item && typeof item === "object"
-      )
+      (item) => item && typeof item === "object"
+    )
     : [];
   if (listPassengers.length) return listPassengers;
 
@@ -2147,8 +2143,8 @@ export default async function handler(
           (commitOnlyRequested
             ? "commit_only"
             : commitRequested
-            ? "precommit_before_commit"
-            : "precommit");
+              ? "precommit_before_commit"
+              : "precommit");
 
         if (params.destroyFlowKey && activeBookingFlowKey) {
           clearBookingFlow(activeBookingFlowKey);
@@ -2646,45 +2642,36 @@ export default async function handler(
         travelerReferences,
       });
       if (!seatAncillaryPayload) {
-        return logAndRespondError({
-          status: 400,
-          message:
-            "Seat selections were provided but traveler mapping is missing for seat assignment.",
-          warnings,
-          stage: "precommit_seat_mapping",
-          destroyFlowKey: true,
+        warnings.push(
+          "Seat selections were provided but traveler mapping is missing — proceeding without seat assignment."
+        );
+      } else {
+        const addSeatOfferUrl = `${bookingBaseUrl}/airoffer/reservationworkbench/${encodeURIComponent(
+          reservationId
+        )}/offers/buildancillaryoffersfromcatalogofferings`;
+        const addSeatOfferResponse = await fetch(addSeatOfferUrl, {
+          method: "POST",
+          headers: commonHeaders,
+          body: JSON.stringify(seatAncillaryPayload),
         });
-      }
+        const addSeatOfferPayloadResponse = (await parseJsonSafe(
+          addSeatOfferResponse
+        )) as Record<string, unknown>;
 
-      const addSeatOfferUrl = `${bookingBaseUrl}/airoffer/reservationworkbench/${encodeURIComponent(
-        reservationId
-      )}/offers/buildancillaryoffersfromcatalogofferings`;
-      const addSeatOfferResponse = await fetch(addSeatOfferUrl, {
-        method: "POST",
-        headers: commonHeaders,
-        body: JSON.stringify(seatAncillaryPayload),
-      });
-      const addSeatOfferPayloadResponse = (await parseJsonSafe(
-        addSeatOfferResponse
-      )) as Record<string, unknown>;
-
-      if (
-        !addSeatOfferResponse.ok ||
-        hasTravelportErrors(addSeatOfferPayloadResponse)
-      ) {
-        return logAndRespondError({
-          status: 502,
-          message: `Travelport add seat offer failed (${addSeatOfferResponse.status})`,
-          details:
+        if (
+          !addSeatOfferResponse.ok ||
+          hasTravelportErrors(addSeatOfferPayloadResponse)
+        ) {
+          const seatOfferErrorDetail =
             extractTravelportErrorMessage(addSeatOfferPayloadResponse) ||
-            "Unable to add seat offers in pre-commit stage.",
-          warnings,
-          stage: "precommit_add_seat",
-          destroyFlowKey: true,
-        });
+            `Add seat offer failed with status ${addSeatOfferResponse.status}`;
+          warnings.push(
+            `Seat offer could not be added — proceeding without seat assignment. (${seatOfferErrorDetail})`
+          );
+        } else {
+          seatOfferPayloadResponse = addSeatOfferPayloadResponse;
+        }
       }
-
-      seatOfferPayloadResponse = addSeatOfferPayloadResponse;
     }
 
     const primaryContactInput = resolvePrimaryContactInput(selectedOffer, body);
@@ -2723,19 +2710,19 @@ export default async function handler(
       } else {
         warnings.push(
           extractTravelportErrorMessage(primaryContactResponsePayload) ||
-            "Primary contact was not added."
+          "Primary contact was not added."
         );
       }
     }
 
     let preparedBookingRecord:
       | {
-          id: number;
-          routeKey: string;
-          airlineCode: string;
-          travelDate: Date;
-          flightSignature: string;
-        }
+        id: number;
+        routeKey: string;
+        airlineCode: string;
+        travelDate: Date;
+        flightSignature: string;
+      }
       | null = null;
 
     try {

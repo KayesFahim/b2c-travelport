@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { createRequire } from "node:module";
 import sharp from "sharp";
 import { createWorker, PSM } from "tesseract.js";
 
@@ -50,10 +51,20 @@ type OcrVariant = {
 };
 
 const SOURCE_NAME = "local-sharp-tesseract-mrz";
+const require = createRequire(import.meta.url);
 const TESSDATA_DIR =
   process.env.PASSPORT_TESSDATA_PATH || path.join(process.cwd(), "tessdata");
+const TESSERACT_CORE_DIR = path.dirname(
+  require.resolve("tesseract.js-core/package.json")
+);
+const TESSERACT_WORKER_PATH = require.resolve("tesseract.js/dist/worker.min.js");
+const TESSERACT_CORE_PATH = path.join(TESSERACT_CORE_DIR, "tesseract-core.wasm.js");
 const MRZ_WHITELIST = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789<";
 const OCR_LANG_PREFERENCE = ["ocrb_int", "eng"];
+const OCR_TIMEOUT_MS = Math.max(
+  10000,
+  Number(process.env.PASSPORT_OCR_TIMEOUT_MS || 55000)
+);
 
 const toDataBuffer = (imageBase64: string): Buffer | null => {
   if (!imageBase64) return null;
@@ -361,12 +372,14 @@ const runOcr = async (
   useLocalTessdata: boolean
 ): Promise<string> => {
   const worker = await createWorker(lang, 1, {
+    corePath: TESSERACT_CORE_PATH,
+    workerPath: TESSERACT_WORKER_PATH,
     ...(useLocalTessdata
       ? {
-          langPath: TESSDATA_DIR,
-          gzip: false,
-          cacheMethod: "none",
-        }
+        langPath: TESSDATA_DIR,
+        gzip: false,
+        cacheMethod: "none",
+      }
       : {}),
   });
 
@@ -382,6 +395,22 @@ const runOcr = async (
     return data?.text || "";
   } finally {
     await worker.terminate();
+  }
+};
+
+const withTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(new Error(`OCR timed out after ${timeoutMs}ms`));
+        }, timeoutMs);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 };
 
@@ -454,7 +483,10 @@ export default async function handler(
   }
 
   try {
-    const { mrz, rawTextLog } = await extractMrz(inputBuffer);
+    const { mrz, rawTextLog } = await withTimeout(
+      extractMrz(inputBuffer),
+      OCR_TIMEOUT_MS
+    );
 
     if (!mrz) {
       return res.status(200).json({
