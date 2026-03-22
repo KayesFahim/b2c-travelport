@@ -902,6 +902,41 @@ const BookingConfirmation = () => {
     }
   };
 
+  const handleGoToPreviewBooking = () => {
+    let previewPayload =
+      bookingPayload && bookingPayload?.bookingBody ? bookingPayload : null;
+
+    if (!previewPayload && typeof window !== "undefined") {
+      try {
+        const raw = window.sessionStorage.getItem("flyjatt:preview_booking");
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed?.bookingBody) {
+            previewPayload = parsed;
+          }
+        }
+      } catch (error) {
+        console.warn("Unable to restore preview booking payload", error);
+      }
+    }
+
+    if (typeof window !== "undefined" && previewPayload?.bookingBody) {
+      try {
+        window.sessionStorage.setItem(
+          "flyjatt:preview_booking",
+          JSON.stringify(previewPayload)
+        );
+      } catch (error) {
+        console.warn("Unable to persist preview booking payload", error);
+      }
+
+      navigate("/previewbooking", { state: previewPayload });
+      return;
+    }
+
+    navigate("/previewbooking");
+  };
+
   return (
     <Box sx={{ fontFamily: FONT, backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
       <NavBar />
@@ -1164,7 +1199,7 @@ const BookingConfirmation = () => {
             {issueTicketSubmitting ? "Issuing Ticket..." : "Issue Ticket"}
           </Button>
           <Button
-            variant="outlined"
+            onClick={handleGoToPreviewBooking}
             onClick={() => navigate("/")}
             sx={{
               textTransform: "none",
@@ -1212,7 +1247,7 @@ const BookingConfirmation = () => {
           <Box sx={{ mb: 3, display: "flex", justifyContent: "flex-start" }}>
             <Button
               variant="contained"
-              onClick={() => navigate("/previewbooking")}
+              onClick={handleGoToPreviewBooking}
               sx={{
                 textTransform: "none",
                 borderRadius: "10px",

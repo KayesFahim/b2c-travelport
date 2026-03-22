@@ -112,6 +112,196 @@ function getInitials(name) {
     return `${parts[0].slice(0, 1)}${parts[1].slice(0, 1)}`.toUpperCase();
 }
 
+function normalizeEmail(value) {
+    return String(value || "").trim().toLowerCase();
+}
+
+function getValueByPathList(source, paths = []) {
+    for (const path of paths) {
+        if (!path) continue;
+        const keys = String(path).split(".");
+        let current = source;
+        let isMissing = false;
+
+        for (const key of keys) {
+            if (
+                current === null ||
+                current === undefined ||
+                typeof current !== "object" ||
+                !(key in current)
+            ) {
+                isMissing = true;
+                break;
+            }
+            current = current[key];
+        }
+
+        if (!isMissing && current !== undefined && current !== null && current !== "") {
+            return current;
+        }
+    }
+
+    return undefined;
+}
+
+function extractBookingEmails(booking) {
+    const collected = [];
+    const pushEmail = (value) => {
+        const email = normalizeEmail(value);
+        if (email && email.includes("@")) {
+            collected.push(email);
+        }
+    };
+
+    pushEmail(booking?.email);
+    pushEmail(booking?.Email);
+    pushEmail(booking?.userEmail);
+    pushEmail(booking?.contactEmail);
+    pushEmail(booking?.ContactEmail);
+    pushEmail(booking?.contact?.email);
+    pushEmail(booking?.Contact?.Email);
+
+    const passengerBuckets = [
+        booking?.PassengerList,
+        booking?.passengers,
+        booking?.bookingBody?.Passengers,
+    ];
+
+    passengerBuckets.forEach((bucket) => {
+        if (!Array.isArray(bucket)) return;
+        bucket.forEach((passenger) => {
+            pushEmail(passenger?.email);
+            pushEmail(passenger?.Email);
+            pushEmail(passenger?.contactEmail);
+            pushEmail(passenger?.ContactEmail);
+        });
+    });
+
+    return Array.from(new Set(collected));
+}
+
+function filterBookingsByEmail(rows, email) {
+    const normalizedEmail = normalizeEmail(email);
+    if (!normalizedEmail) return Array.isArray(rows) ? rows : [];
+
+    return (Array.isArray(rows) ? rows : []).filter((booking) => {
+        const bookingEmails = extractBookingEmails(booking);
+        if (!bookingEmails.length) return true;
+        return bookingEmails.includes(normalizedEmail);
+    });
+}
+
+function parseSessionStorageJson(key) {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = window.sessionStorage.getItem(key);
+        if (!raw) return null;
+        return JSON.parse(raw);
+    } catch (error) {
+        return null;
+    }
+}
+
+function buildCachedBookingFromSession(previewPayload, finalCommitPayload) {
+    if (!previewPayload?.bookingBody && !finalCommitPayload) {
+        return null;
+    }
+
+    const selectedAirPrice =
+        previewPayload?.selectedAirPrice && typeof previewPayload.selectedAirPrice === "object"
+            ? previewPayload.selectedAirPrice
+            : previewPayload?.selectedOffer && typeof previewPayload.selectedOffer === "object"
+                ? previewPayload.selectedOffer
+                : {};
+
+    const firstSegment =
+        Array.isArray(selectedAirPrice?.AllLegsInfo) && selectedAirPrice.AllLegsInfo[0]?.Segments?.[0]
+            ? selectedAirPrice.AllLegsInfo[0].Segments[0]
+            : {};
+
+    const reservationId = toText(
+        getValueByPathList(finalCommitPayload, [
+            "reservationId",
+            "ReservationResponse.Reservation.Identifier.value",
+            "ReservationResponse.Reservation.Identifier",
+            "Reservation.Identifier.value",
+            "Reservation.Identifier",
+            "data.reservationId",
+        ])
+    );
+
+    const locator = toText(finalCommitPayload?.locator || selectedAirPrice?.locator);
+    const bookingId = reservationId || locator || "LOCAL-BOOKING";
+
+    const passengers = Array.isArray(previewPayload?.passengers)
+        ? previewPayload.passengers
+        : Array.isArray(previewPayload?.bookingBody?.Passengers)
+            ? previewPayload.bookingBody.Passengers
+            : [];
+
+    const bookingEmail =
+        toText(passengers?.[0]?.Email) ||
+        toText(passengers?.[0]?.email) ||
+        toText(previewPayload?.bookingBody?.Email);
+
+    return {
+        ...selectedAirPrice,
+        bookingId,
+        BookingId: bookingId,
+        bookingStatus: "Booked",
+        BookingStatus: "Booked",
+        reservationId,
+        locator,
+        PNR: locator || "N/A",
+        email: bookingEmail,
+        PassengerList: passengers,
+        laginfo: selectedAirPrice?.laginfo || [
+            {
+                DepFrom: firstSegment?.DepFrom || "-",
+                ArrTo: firstSegment?.ArrTo || "-",
+                DepDate: firstSegment?.DepTime || new Date().toISOString(),
+                ArrDate: firstSegment?.ArrTime || firstSegment?.DepTime || new Date().toISOString(),
+            },
+        ],
+    };
+}
+
+function dedupeBookings(rows) {
+    const map = new Map();
+    (Array.isArray(rows) ? rows : []).forEach((booking, index) => {
+        const key =
+            toText(booking?.bookingId) ||
+            toText(booking?.BookingId) ||
+            toText(booking?.reservationId) ||
+            toText(booking?.locator) ||
+            toText(booking?.PNR) ||
+            `fallback-${index}`;
+        map.set(key, booking);
+    });
+    return Array.from(map.values());
+}
+
+function getSessionFallbackAccountData(email) {
+    const previewPayload = parseSessionStorageJson("flyjatt:preview_booking");
+    const commitWrapper = parseSessionStorageJson("flyjatt:last_book_hold_response");
+    const finalCommitPayload =
+        commitWrapper && typeof commitWrapper === "object" && commitWrapper.data
+            ? commitWrapper.data
+            : commitWrapper;
+
+    const localBookings = [];
+    const cachedBooking = buildCachedBookingFromSession(previewPayload, finalCommitPayload);
+    if (cachedBooking) {
+        localBookings.push(cachedBooking);
+    }
+
+    return {
+        bookings: filterBookingsByEmail(dedupeBookings(localBookings), email),
+        transactions: [],
+        travelBuddies: [],
+    };
+}
+
 function adaptBookingForPdf(rawBooking) {
     const depDate = getDepDate(rawBooking) || new Date().toISOString();
     const arrDate = rawBooking?.laginfo?.[0]?.ArrDate || depDate;
@@ -264,23 +454,36 @@ export default function MyAccountPanel() {
                 setLoading(true);
                 setErrorText("");
 
+                let sessionProfile = null;
+                try {
+                    sessionProfile = await hydrateFromSessionUser();
+                } catch (error) {
+                    sessionProfile = null;
+                }
+
+                const sessionEmail = toText(sessionProfile?.email);
+
                 if (!token) {
-                    const minimalProfile = await hydrateFromSessionUser();
+                    if (!sessionProfile) {
+                        throw new Error("Not authenticated");
+                    }
                     if (cancelled) return;
 
-                    setProfile(minimalProfile);
+                    const fallbackData = getSessionFallbackAccountData(sessionEmail);
+
+                    setProfile(sessionProfile);
                     setProfileDraft({
-                        fullName: `${toText(minimalProfile?.firstName)} ${toText(minimalProfile?.lastName)}`.trim(),
-                        email: toText(minimalProfile?.email),
+                        fullName: `${toText(sessionProfile?.firstName)} ${toText(sessionProfile?.lastName)}`.trim(),
+                        email: toText(sessionProfile?.email),
                         phone: "",
                         gender: "",
                         dob: "",
                         nationality: "BD",
                         passport: "",
                     });
-                    setBookings([]);
-                    setTransactions([]);
-                    setTravelBuddies([]);
+                    setBookings(fallbackData.bookings);
+                    setTransactions(fallbackData.transactions);
+                    setTravelBuddies(fallbackData.travelBuddies);
                     return;
                 }
 
@@ -301,9 +504,15 @@ export default function MyAccountPanel() {
                 if (cancelled) return;
 
                 const allBookings = bookingDataByStatus.flat();
-                const uniqueBookings = Array.from(
-                    new Map(allBookings.map((b) => [b?.bookingId || b?.id || Math.random(), b])).values()
-                );
+                const uniqueBookings = dedupeBookings(allBookings);
+
+                const resolvedEmail = toText(profileData?.email) || sessionEmail;
+                const filteredRemoteBookings = filterBookingsByEmail(uniqueBookings, resolvedEmail);
+                const fallbackData = getSessionFallbackAccountData(resolvedEmail);
+                const mergedBookings = dedupeBookings([
+                    ...filteredRemoteBookings,
+                    ...fallbackData.bookings,
+                ]);
 
                 setProfile(profileData || {});
                 setProfileDraft({
@@ -317,7 +526,7 @@ export default function MyAccountPanel() {
                 });
                 setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
                 setTransactions(Array.isArray(transactionData?.transactions) ? transactionData.transactions : []);
-                setBookings(uniqueBookings);
+                setBookings(mergedBookings);
             } catch (error) {
                 if (!cancelled) {
                     const errorMessage = error instanceof Error ? error.message : "Failed to load account data.";
