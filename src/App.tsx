@@ -8,10 +8,11 @@ import { ToastContainer } from "react-toastify"
 import Home from "./Pages/Home/Home"
 import SignIn from "./Pages/SignUp/SignIn/SignIn"
 import SignUp from "./Pages/SignUp/SignUp"
-import OneWaySearchResult from "./Pages/OneWay/OneWaySearchResult"
 import TourHome from "./Pages/Tour/TourHome/TourHome"
-import RoundWaySearchResult from "./Pages/RoundWay/RoundWaySearchResult"
+import FlightsResult from "./Pages/FlightResults/FlightsResult"
 import BookingDetaills from "./Pages/BookingDetaills/BookingDetaills"
+import PreviewBooking from "./Pages/BookingDetaills/PreviewBooking"
+import BookingConfirmation from "./Pages/BookingDetaills/BookingConfirmation"
 import BookingQueInfo from "./Pages/BookingQueInfo/BookingQueInfo"
 import UserProfileUpdated from "./Pages/UserInfo/UserProfile/UserProfileUpdated"
 import PaymentGateway from "./Pages/PaymentGateway/PaymentGateway"
@@ -21,7 +22,6 @@ import AddDeposite from "./Pages/UserInfo/UserWallet/AddDeposite"
 import UserTransactions from "./Pages/UserInfo/UserTransactions/UserTransactions"
 import UserTraveler from "./Pages/UserInfo/UserTraveler/UserTraveler"
 import AddTraveler from "./Pages/UserInfo/UserTraveler/AddTraveler"
-import MultiCitySearchResult from "./Pages/MultiCity/MultiCitySearchResult"
 import PaymentSuccess from "./Pages/PaymentGateway/PaymentSuccess/PaymentSuccess"
 import PaymentCancelled from "./Pages/PaymentGateway/PaymentCancelled/PaymentCancelled"
 import ScrollToTop from "./ScrollToTop"
@@ -56,7 +56,12 @@ const App: FC = () => {
         <Routes>
           <Route path="/" element={<Home />} />
 
-          <Route path="/onewaysearchresult" element={<OneWaySearchResult />} />
+          <Route path="/offers" element={<FlightsResult />} />
+          <Route path="/flightsresult" element={<FlightsResult />} />
+          <Route path="/onewaysearchresult" element={<FlightsResult />} />
+          <Route path="/roundwaysearchresult" element={<FlightsResult />} />
+          <Route path="/roundsearchresult" element={<FlightsResult />} />
+          <Route path="/multicitysearchresult" element={<FlightsResult />} />
           <Route path="/OtpVerification" element={<OtpVerification />} />
           <Route path="/OtpEmail" element={<ForgetEmail />} />
           <Route path="/resetpassword" element={<ChangePassword />} />
@@ -66,20 +71,15 @@ const App: FC = () => {
           <Route path="/contact" element={<Contact />} />
           <Route path="/blog" element={<Blog />} />
           <Route path="/nobooking" element={<NoBookingsFound />} />
-          <Route
-            path="/roundwaysearchresult"
-            element={<RoundWaySearchResult />}
-          />
-          <Route
-            path="/multicitysearchresult"
-            element={<MultiCitySearchResult />}
-          />
           <Route path="/signIn" element={<SignIn />} />
           {/* booking route  */}
 
           <Route
           >
+            <Route path="/selectedflightdetails" element={<BookingDetaills />} />
             <Route path="/bookingdetails" element={<BookingDetaills />} />
+            <Route path="/previewbooking" element={<PreviewBooking />} />
+            <Route path="/bookingconfirmation" element={<BookingConfirmation />} />
             <Route path="/bookingquedetails" element={<BookingQueInfo />} />
             <Route path="/paymentgateway" element={<PaymentGateway />} />
             <Route path="/paymentsuccess" element={<PaymentSuccess />} />

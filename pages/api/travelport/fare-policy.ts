@@ -1,9 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { getTravelportAccessToken } from "./_token-cache";
 
 type FarePolicyBody = {
-  offerIdentifier?: string;
-  resultId?: string;
-  ResultId?: string;
+  offerIdentifier?: unknown;
+  OfferIdentifier?: unknown;
+  offerListIdentifier?: unknown;
+  OfferListIdentifier?: unknown;
+  productIdentifiers?: unknown;
+  ProductIdentifiers?: unknown;
+  productIdentifier?: unknown;
+  ProductIdentifier?: unknown;
+  resultId?: unknown;
+  ResultId?: unknown;
   fareRuleType?: string;
 };
 
@@ -79,6 +87,51 @@ function stringifyValue(value: unknown): string {
     if (typeof source.code === "string") return source.code.trim();
   }
   return "";
+}
+
+function normalizeIdentifier(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = normalizeIdentifier(item);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    return (
+      normalizeIdentifier(source.value) ||
+      normalizeIdentifier(source.Value) ||
+      normalizeIdentifier(source.id) ||
+      normalizeIdentifier(source.ID) ||
+      normalizeIdentifier(source.identifier) ||
+      normalizeIdentifier(source.Identifier) ||
+      normalizeIdentifier(source.offerIdentifier) ||
+      normalizeIdentifier(source.OfferIdentifier) ||
+      ""
+    );
+  }
+  return "";
+}
+
+function normalizeIdentifierList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((item) => normalizeIdentifier(item))
+          .filter((item) => item.length > 0)
+      )
+    );
+  }
+
+  const single = normalizeIdentifier(value);
+  return single ? [single] : [];
 }
 
 function collectDetailLines(
@@ -464,6 +517,15 @@ function mapTravelportFareRules(
       const structuredRules = Array.isArray(fareRule?.StructuredFareRules)
         ? fareRule.StructuredFareRules
         : [];
+      const textFareRuleCandidates = [
+        fareRule?.TextFareRule,
+        fareRule?.textFareRule,
+        fareRule?.TextFareRules,
+        fareRule?.textFareRules,
+      ].filter((item) => item !== undefined && item !== null);
+      const textFareRules = textFareRuleCandidates.flatMap((item) =>
+        Array.isArray(item) ? item : [item]
+      );
       const shortTextCandidates = [
         fareRule?.ShortTextFareRules,
         fareRule?.ShortTextFareRule,
@@ -471,16 +533,34 @@ function mapTravelportFareRules(
         fareRule?.shortTextFareRule,
         fareRule?.ShortTextRules,
         fareRule?.shortTextRules,
+        fareRule?.ShortText,
+        fareRule?.shortText,
         fareRule?.FareRuleText,
         fareRule?.fareRuleText,
         fareRule?.Text,
         fareRule?.text,
       ].filter((item) => item !== undefined && item !== null);
-      const shortTextRules = shortTextCandidates.flatMap((item) =>
+      const shortTextRules = [...shortTextCandidates, ...textFareRules].flatMap((item) =>
         Array.isArray(item) ? item : [item]
       );
+      const longTextCandidates = [
+        fareRule?.LongTextFareRules,
+        fareRule?.LongTextFareRule,
+        fareRule?.longTextFareRules,
+        fareRule?.longTextFareRule,
+        fareRule?.LongTextRules,
+        fareRule?.longTextRules,
+        fareRule?.LongText,
+        fareRule?.longText,
+      ].filter((item) => item !== undefined && item !== null);
+      const longTextRules = [...longTextCandidates, ...textFareRules].flatMap((item) =>
+        Array.isArray(item) ? item : [item]
+      );
+      const fareRuleTypeLower = String(fareRuleTypeHint).toLowerCase();
       const preferShortText =
-        String(fareRuleTypeHint).toLowerCase() === "shorttext";
+        fareRuleTypeLower === "shorttext";
+      const preferLongText = fareRuleTypeLower === "longtext";
+      const preferStructured = fareRuleTypeLower === "structured";
 
       const paxRuleMap = new Map<string, NormalizedFareRulePaxInfo>();
 
@@ -500,15 +580,30 @@ function mapTravelportFareRules(
       const orderedRuleSources = preferShortText
         ? [
             { type: "shortText", items: shortTextRules },
+            { type: "longText", items: longTextRules },
             { type: "structured", items: structuredRules },
           ]
-        : [
-            { type: "structured", items: structuredRules },
-            { type: "shortText", items: shortTextRules },
-          ];
+        : preferLongText
+          ? [
+              { type: "longText", items: longTextRules },
+              { type: "shortText", items: shortTextRules },
+              { type: "structured", items: structuredRules },
+            ]
+          : [
+              { type: "structured", items: structuredRules },
+              { type: "longText", items: longTextRules },
+              { type: "shortText", items: shortTextRules },
+            ];
 
       for (const sourceGroup of orderedRuleSources) {
-        if (sourceGroup.type === "shortText" && paxRuleMap.size > 0) {
+        if (sourceGroup.type !== "structured" && paxRuleMap.size > 0) {
+          continue;
+        }
+        if (
+          sourceGroup.type === "structured" &&
+          !preferStructured &&
+          paxRuleMap.size > 0
+        ) {
           continue;
         }
 
@@ -518,7 +613,7 @@ function mapTravelportFareRules(
             if (!text) continue;
             ensurePax("ALL", "");
             paxRuleMap.get("ALL")?.fareRuleInfos.push({
-              category: "Short Text",
+              category: sourceGroup.type === "longText" ? "Long Text" : "Short Text",
               info: text,
             });
             continue;
@@ -585,20 +680,40 @@ function mapTravelportFareRules(
             continue;
           }
 
+          const defaultCategory =
+            sourceGroup.type === "longText" ? "Long Text" : "Short Text";
           const category = formatLabel(
             stringifyValue(
-              rule?.category ??
+              rule?.name ??
+                rule?.Name ??
+                rule?.category ??
                 rule?.Category ??
                 rule?.title ??
                 rule?.Title ??
                 rule?.headline ??
                 rule?.Headline ??
-                "Short Text"
+                defaultCategory
             )
           );
+          const primaryValue = stripHtml(
+            stringifyValue(rule?.value ?? rule?.Value)
+          );
+          if (primaryValue) {
+            for (const paxType of normalizedPaxTypes) {
+              paxRuleMap.get(String(paxType))?.fareRuleInfos.push({
+                category,
+                info: primaryValue,
+              });
+            }
+            continue;
+          }
           const textCandidates = [
+            rule?.value,
+            rule?.Value,
             rule?.ShortText,
             rule?.shortText,
+            rule?.LongText,
+            rule?.longText,
             rule?.Text,
             rule?.text,
             rule?.Description,
@@ -688,22 +803,152 @@ function mergePenaltySummary(primary: PenaltySummary, fallback: PenaltySummary):
   };
 }
 
-function buildFareRulesUrl(
-  fareRulesUrl: string,
-  fareRuleType: string,
-  offerIdentifier: string
-) {
-  return `${fareRulesUrl}?fareRuleType=${encodeURIComponent(
-    fareRuleType
-  )}&offerIdentifier=${encodeURIComponent(offerIdentifier)}`;
+type FareRuleEndpoints = {
+  fromOffer: string;
+  fromCatalogProductOfferings: string;
+};
+
+type FareRuleAttempt = {
+  fareRuleType: string;
+  offerIdentifier: string;
+  productIdentifier: string;
+  strategy: "fromoffer" | "fromcatalogproductofferings";
+  url: string;
+};
+
+function resolveFareRulesEndpoints(version: string): FareRuleEndpoints {
+  const configuredFareRules = String(process.env.TRAVELPORT_FARE_RULES || "").trim();
+  const configuredFromOffer = String(
+    process.env.TRAVELPORT_FARE_RULES_FROM_OFFER || ""
+  ).trim();
+  const configuredFromCatalog = String(
+    process.env.TRAVELPORT_FARE_RULES_FROM_CATALOG_PRODUCT_OFFERINGS || ""
+  ).trim();
+
+  const baseUrl = String(process.env.TRAVELPORT_BASE_URL || "https://api.pp.travelport.net")
+    .trim()
+    .replace(/\/+$/, "");
+  const baseWithVersion = /\/\d+$/.test(baseUrl) ? baseUrl : `${baseUrl}/${version}`;
+
+  const defaultFromOffer = `${baseWithVersion}/air/farerule/farerules/fromoffer`;
+  const defaultFromCatalog = `${baseWithVersion}/air/farerule/farerules/fromcatalogproductofferings`;
+
+  const configuredFareRulesLower = configuredFareRules.toLowerCase();
+
+  let fromOffer = configuredFromOffer || defaultFromOffer;
+  let fromCatalogProductOfferings = configuredFromCatalog || defaultFromCatalog;
+
+  if (configuredFareRulesLower.includes("/fromoffer")) {
+    fromOffer = configuredFareRules;
+  }
+  if (configuredFareRulesLower.includes("/fromcatalogproductofferings")) {
+    fromCatalogProductOfferings = configuredFareRules;
+  } else if (
+    !configuredFromCatalog &&
+    fromOffer.toLowerCase().includes("/fromoffer")
+  ) {
+    fromCatalogProductOfferings = fromOffer.replace(
+      /\/fromoffer(?:\?.*)?$/i,
+      "/fromcatalogproductofferings"
+    );
+  }
+
+  return {
+    fromOffer,
+    fromCatalogProductOfferings,
+  };
+}
+
+function buildQueryUrl(
+  baseUrl: string,
+  entries: Array<[string, string | undefined]>
+): string {
+  const [path, rawQuery = ""] = String(baseUrl || "").split("?");
+  const query = new URLSearchParams(rawQuery);
+
+  for (const [key, rawValue] of entries) {
+    const value = String(rawValue || "").trim();
+    if (!value) continue;
+    query.set(key, value);
+  }
+
+  const queryString = query.toString();
+  return queryString ? `${path}?${queryString}` : path;
+}
+
+function buildFareRulesFromOfferUrl(params: {
+  baseUrl: string;
+  fareRuleType: string;
+  offerIdentifier: string;
+  productIdentifier?: string;
+}) {
+  return buildQueryUrl(params.baseUrl, [
+    ["fareRuleType", params.fareRuleType],
+    ["offerIdentifier", params.offerIdentifier],
+    ["productIDs", params.productIdentifier],
+  ]);
+}
+
+function buildFareRulesFromCatalogProductOfferingsUrl(params: {
+  baseUrl: string;
+  fareRuleType: string;
+  catalogProductOfferingsIdentifier: string;
+  catalogProductOfferingID: string;
+  productID: string;
+}) {
+  return buildQueryUrl(params.baseUrl, [
+    ["fareRuleType", params.fareRuleType],
+    ["catalogProductOfferingsIdentifier", params.catalogProductOfferingsIdentifier],
+    ["catalogProductOfferingID", params.catalogProductOfferingID],
+    ["productIDs", params.productID],
+  ]);
 }
 
 function getFallbackRuleTypes(primaryRuleType: string): string[] {
   const normalized = String(primaryRuleType || "Structured").trim() || "Structured";
-  if (normalized.toLowerCase() === "structured") {
-    return ["Structured", "ShortText"];
+  const lower = normalized.toLowerCase();
+
+  const candidateTypes =
+    lower === "structured"
+      ? ["Structured", "LongText", "ShortText"]
+      : lower === "longtext"
+        ? ["LongText", "ShortText", "Structured"]
+        : lower === "shorttext"
+          ? ["ShortText", "LongText", "Structured"]
+          : [normalized, "ShortText", "LongText", "Structured"];
+
+  return Array.from(new Set(candidateTypes.filter(Boolean)));
+}
+
+function buildOfferIdentifierCandidates(values: unknown[]): string[] {
+  const candidates: string[] = [];
+
+  for (const rawValue of values) {
+    const normalized = normalizeIdentifier(rawValue);
+    if (!normalized) continue;
+    candidates.push(normalized);
+
+    const withoutNumericSuffix = normalized.replace(/_\d+$/, "");
+    if (withoutNumericSuffix && withoutNumericSuffix !== normalized) {
+      candidates.push(withoutNumericSuffix);
+    }
   }
-  return [normalized];
+
+  return Array.from(new Set(candidates));
+}
+
+function buildOfferListIdentifierCandidates(value: string): string[] {
+  const normalized = String(value || "").trim();
+  if (!normalized) return [];
+
+  const withoutPcSuffix = normalized.replace(/_PC$/i, "");
+  const withPcSuffix = /_PC$/i.test(normalized)
+    ? normalized
+    : `${normalized}_PC`;
+
+  return Array.from(
+    new Set([normalized, withoutPcSuffix, withPcSuffix].filter(Boolean))
+  );
 }
 
 function getErrorDetails(payload: any, status: number): string {
@@ -717,6 +962,34 @@ function getErrorDetails(payload: any, status: number): string {
 
 function hasPenaltyData(summary: PenaltySummary): boolean {
   return summary.change.length > 0 || summary.cancel.length > 0;
+}
+
+function extractTravelportFareRuleErrors(payload: unknown): string[] {
+  if (!payload || typeof payload !== "object") {
+    return [];
+  }
+
+  const fareRuleListResponse =
+    ((payload as Record<string, unknown>).FareRuleListResponse as
+      | Record<string, unknown>
+      | undefined) || (payload as Record<string, unknown>);
+  const result = (fareRuleListResponse?.Result ?? {}) as Record<string, unknown>;
+  const errorList = Array.isArray(result?.Error) ? result.Error : [];
+
+  const messages = errorList
+    .map((item) => {
+      if (!item || typeof item !== "object") return "";
+      const source = item as Record<string, unknown>;
+      const message = stringifyValue(source.Message);
+      const sourceId = stringifyValue(source.SourceID);
+      const sourceCode = stringifyValue(source.SourceCode);
+      if (!message) return "";
+      const suffix = [sourceId, sourceCode].filter(Boolean).join("/");
+      return suffix ? `${message} (${suffix})` : message;
+    })
+    .filter(Boolean);
+
+  return uniqueLines(messages);
 }
 
 async function fetchFareRulesPayload(
@@ -742,36 +1015,100 @@ async function fetchFareRulesPayload(
 }
 
 async function resolveFareRulesWithFallback(
-  fareRulesUrl: string,
-  offerIdentifier: string,
+  fareRuleEndpoints: FareRuleEndpoints,
+  offerIdentifiers: string[],
+  offerListIdentifiers: string[],
+  productIdentifiers: string[],
   requestedFareRuleType: string,
   accessGroup: string,
   version: string,
   accessToken: string
 ) {
   const attemptTypes = getFallbackRuleTypes(requestedFareRuleType);
+  const primaryProductIdentifier = productIdentifiers[0] || "";
+  const attemptCandidates: FareRuleAttempt[] = [];
+
+  for (const currentFareRuleType of attemptTypes) {
+    for (const currentOfferIdentifier of offerIdentifiers) {
+      if (primaryProductIdentifier) {
+        attemptCandidates.push({
+          fareRuleType: currentFareRuleType,
+          offerIdentifier: currentOfferIdentifier,
+          productIdentifier: primaryProductIdentifier,
+          strategy: "fromoffer",
+          url: buildFareRulesFromOfferUrl({
+            baseUrl: fareRuleEndpoints.fromOffer,
+            fareRuleType: currentFareRuleType,
+            offerIdentifier: currentOfferIdentifier,
+            productIdentifier: primaryProductIdentifier,
+          }),
+        });
+      }
+
+      attemptCandidates.push({
+        fareRuleType: currentFareRuleType,
+        offerIdentifier: currentOfferIdentifier,
+        productIdentifier: "",
+        strategy: "fromoffer",
+        url: buildFareRulesFromOfferUrl({
+          baseUrl: fareRuleEndpoints.fromOffer,
+          fareRuleType: currentFareRuleType,
+          offerIdentifier: currentOfferIdentifier,
+        }),
+      });
+    }
+  }
+
+  if (offerListIdentifiers.length > 0 && primaryProductIdentifier) {
+    for (const currentFareRuleType of attemptTypes) {
+      for (const currentOfferListIdentifier of offerListIdentifiers) {
+        for (const currentOfferIdentifier of offerIdentifiers) {
+          attemptCandidates.push({
+            fareRuleType: currentFareRuleType,
+            offerIdentifier: currentOfferIdentifier,
+            productIdentifier: primaryProductIdentifier,
+            strategy: "fromcatalogproductofferings",
+            url: buildFareRulesFromCatalogProductOfferingsUrl({
+              baseUrl: fareRuleEndpoints.fromCatalogProductOfferings,
+              fareRuleType: currentFareRuleType,
+              catalogProductOfferingsIdentifier: currentOfferListIdentifier,
+              catalogProductOfferingID: currentOfferIdentifier,
+              productID: primaryProductIdentifier,
+            }),
+          });
+        }
+      }
+    }
+  }
+
+  const attempts = attemptCandidates.filter(
+    (attempt, index, list) =>
+      list.findIndex((item) => item.url === attempt.url) === index
+  );
   let lastErrorDetails = "";
 
-  for (let index = 0; index < attemptTypes.length; index += 1) {
-    const currentFareRuleType = attemptTypes[index];
-    const url = buildFareRulesUrl(
-      fareRulesUrl,
-      currentFareRuleType,
-      offerIdentifier
-    );
+  for (let index = 0; index < attempts.length; index += 1) {
+    const attempt = attempts[index];
     const { response, payload } = await fetchFareRulesPayload(
-      url,
+      attempt.url,
       accessGroup,
       version,
       accessToken
     );
 
     if (!response.ok) {
-      lastErrorDetails = getErrorDetails(payload, response.status);
+      const details = getErrorDetails(payload, response.status);
+      lastErrorDetails = `${details} [${attempt.strategy}, type=${attempt.fareRuleType}]`;
       continue;
     }
 
-    const fareRules = mapTravelportFareRules(payload, currentFareRuleType);
+    const embeddedErrors = extractTravelportFareRuleErrors(payload);
+    if (embeddedErrors.length > 0) {
+      lastErrorDetails = embeddedErrors.join(" | ");
+      continue;
+    }
+
+    const fareRules = mapTravelportFareRules(payload, attempt.fareRuleType);
     const primaryPenaltySummary = extractUnifiedPenaltySummary(payload);
     const fallbackPenaltySummary = extractPenaltySummaryFromMappedRules(fareRules);
     const penaltiesCancellation = mergePenaltySummary(
@@ -780,14 +1117,15 @@ async function resolveFareRulesWithFallback(
     );
 
     const usableData = fareRules.length > 0 || hasPenaltyData(penaltiesCancellation);
-    if (usableData || index === attemptTypes.length - 1) {
+    if (usableData || index === attempts.length - 1) {
       return {
         fareRules,
         penaltiesCancellation,
-        fareRuleType: currentFareRuleType,
-        fallbackUsed:
-          String(currentFareRuleType).toLowerCase() !==
-          String(requestedFareRuleType).toLowerCase(),
+        fareRuleType: attempt.fareRuleType,
+        fallbackUsed: index > 0,
+        strategy: attempt.strategy,
+        offerIdentifier: attempt.offerIdentifier,
+        productIdentifier: attempt.productIdentifier || null,
       };
     }
   }
@@ -796,50 +1134,7 @@ async function resolveFareRulesWithFallback(
 }
 
 async function createToken(): Promise<string> {
-  const authUrl = getRequiredEnv("TRAVELPORT_AUTH_URL");
-  const clientId = getRequiredEnv("TRAVELPORT_CLIENT_ID");
-  const clientSecret = getRequiredEnv("TRAVELPORT_CLIENT_SECRET");
-  const username = getRequiredEnv("TRAVELPORT_USERNAME");
-  const password = getRequiredEnv("TRAVELPORT_PASSWORD");
-  const grantType = process.env.TRAVELPORT_AUTH_GRANT_TYPE || "password";
-  const useBasicAuth = process.env.TRAVELPORT_USE_BASIC_AUTH === "true";
-
-  const body = new URLSearchParams();
-  body.append("grant_type", grantType);
-  body.append("username", username);
-  body.append("password", password);
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
-
-  if (useBasicAuth) {
-    const basicToken = Buffer.from(`${clientId}:${clientSecret}`).toString(
-      "base64"
-    );
-    headers.Authorization = `Basic ${basicToken}`;
-  } else {
-    body.append("client_id", clientId);
-    body.append("client_secret", clientSecret);
-  }
-
-  const response = await fetch(authUrl, {
-    method: "POST",
-    headers,
-    body: body.toString(),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.access_token) {
-    throw new Error(
-      payload?.error_description ||
-        payload?.message ||
-        `Travelport auth failed (${response.status})`
-    );
-  }
-
-  return payload.access_token as string;
+  return getTravelportAccessToken();
 }
 
 export default async function handler(
@@ -853,8 +1148,25 @@ export default async function handler(
 
   try {
     const body = (req.body ?? {}) as FarePolicyBody;
-    const offerIdentifier =
-      body.offerIdentifier || body.resultId || body.ResultId || "";
+    const offerIdentifiers = buildOfferIdentifierCandidates([
+      body.offerIdentifier,
+      body.OfferIdentifier,
+      body.resultId,
+      body.ResultId,
+    ]);
+    const offerIdentifier = offerIdentifiers[0] || "";
+    const offerListIdentifier = normalizeIdentifier(
+      body.offerListIdentifier ?? body.OfferListIdentifier
+    );
+    const offerListIdentifiers = buildOfferListIdentifierCandidates(
+      offerListIdentifier
+    );
+    const productIdentifiers = normalizeIdentifierList(
+      body.productIdentifiers ??
+        body.ProductIdentifiers ??
+        body.productIdentifier ??
+        body.ProductIdentifier
+    );
     const requestedFareRuleType = body.fareRuleType || "Structured";
 
     if (!offerIdentifier) {
@@ -862,13 +1174,15 @@ export default async function handler(
     }
 
     const accessToken = await createToken();
-    const fareRulesUrl = getRequiredEnv("TRAVELPORT_FARE_RULES");
     const accessGroup = getRequiredEnv("TRAVELPORT_ACCESS_GROUP");
     const version = process.env.TRAVELPORT_VERSION || "11";
+    const fareRuleEndpoints = resolveFareRulesEndpoints(version);
 
     const resolved = await resolveFareRulesWithFallback(
-      fareRulesUrl,
-      offerIdentifier,
+      fareRuleEndpoints,
+      offerIdentifiers,
+      offerListIdentifiers,
+      productIdentifiers,
       requestedFareRuleType,
       accessGroup,
       version,
@@ -881,11 +1195,23 @@ export default async function handler(
       fareRuleType: resolved.fareRuleType,
       requestedFareRuleType,
       fallbackUsed: resolved.fallbackUsed,
-      offerIdentifier,
+      strategy: resolved.strategy,
+      offerIdentifier: resolved.offerIdentifier,
+      requestedOfferIdentifier: offerIdentifier,
+      offerListIdentifier,
+      productIdentifier: resolved.productIdentifier,
     });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Unexpected server error";
+    const normalized = String(message).toUpperCase();
+    if (normalized.includes("OFFER NOT FOUND")) {
+      return res.status(404).json({
+        message: "Fare rules offer not found",
+        details:
+          "This offer identifier is no longer valid. Search again and request fare rules with a fresh offerIdentifier.",
+      });
+    }
     return res.status(500).json({ message });
   }
 }

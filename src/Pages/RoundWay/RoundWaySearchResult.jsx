@@ -7,7 +7,7 @@ import {
   Pagination,
   Typography,
 } from "@mui/material";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AfterSearchBanner from "../AfterSearch/AfterSearchBanner";
 import { useLocation } from "react-router-dom";
 import moment from "moment";
@@ -24,6 +24,47 @@ import SingleFlight from "../SingleFlight/SingleFlight";
 import Slider from "@mui/material/Slider";
 import { searchTravelportFlights } from "../../utils/travelportSearch";
 import { groupFlightsBySchedule } from "../common/flightGrouping";
+import { readRecentSearches } from "../../utils/recentSearches";
+import {
+  getCurrencySymbol,
+  getFlightCurrencyCode,
+} from "../../utils/flightPolicyUtils";
+import { resolveAirportInfo } from "../../utils/travelLookup";
+import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
+
+const toUpperText = (value) => String(value ?? "").trim().toUpperCase();
+const toText = (value) => String(value ?? "").trim();
+
+const toIsoDate = (value) => {
+  const raw = toText(value);
+  if (!raw) return "";
+  const parsed = moment(raw, ["YYYY-MM-DD", "DD MMM YY", "DD MMM YYYY", moment.ISO_8601], true);
+  if (parsed.isValid()) {
+    return parsed.format("YYYY-MM-DD");
+  }
+  const fallbackParsed = moment(raw);
+  return fallbackParsed.isValid() ? fallbackParsed.format("YYYY-MM-DD") : "";
+};
+
+const normalizeSearchSegment = (segment) => {
+  const depfrom = toUpperText(segment?.depfrom ?? segment?.DepFrom);
+  const arrto = toUpperText(segment?.arrto ?? segment?.ArrTo);
+  const depdate = toIsoDate(segment?.depdate ?? segment?.Date);
+  const depFromText = toText(segment?.depFromText);
+  const arrToText = toText(segment?.arrToText);
+
+  if (!depfrom || !arrto || !depdate) {
+    return null;
+  }
+
+  return {
+    depfrom,
+    arrto,
+    depdate,
+    depFromText,
+    arrToText,
+  };
+};
 
 const RoundWaySearchResult = () => {
   const location = useLocation();
@@ -48,6 +89,153 @@ const RoundWaySearchResult = () => {
     searchData,
     value,
   } = location?.state || {};
+
+  const resolvedSearchContext = useMemo(() => {
+    const normalizedStateSegments = (
+      Array.isArray(segments) && segments.length > 0
+        ? segments
+        : Array.isArray(searchData?.segments)
+          ? searchData.segments
+          : []
+    )
+      .map((segment) => normalizeSearchSegment(segment))
+      .filter(Boolean);
+
+    let resolvedSegments = normalizedStateSegments.slice(0, 2);
+    let recoveredFromRecent = null;
+
+    if (resolvedSegments.length < 2) {
+      const outboundCode = toUpperText(fromSendData);
+      const inboundCode = toUpperText(toSendData);
+      const outboundDate = toIsoDate(departureDate);
+      const inboundDate = toIsoDate(arrivalDate);
+
+      if (outboundCode && inboundCode && outboundDate && inboundDate) {
+        resolvedSegments = [
+          {
+            depfrom: outboundCode,
+            arrto: inboundCode,
+            depdate: outboundDate,
+            depFromText: toText(fromSearchText),
+            arrToText: toText(toSearchText),
+          },
+          {
+            depfrom: inboundCode,
+            arrto: outboundCode,
+            depdate: inboundDate,
+            depFromText: toText(toSearchText),
+            arrToText: toText(fromSearchText),
+          },
+        ];
+      }
+    }
+
+    if (resolvedSegments.length < 2) {
+      const latestRoundSearch = readRecentSearches().find((item) => {
+        const tripTypeValue = toText(item?.tripType).toLowerCase();
+        return (
+          ["roundway", "roundtrip", "return"].includes(tripTypeValue) &&
+          Array.isArray(item?.segments) &&
+          item.segments.length >= 2
+        );
+      });
+
+      if (latestRoundSearch) {
+        recoveredFromRecent = latestRoundSearch;
+        resolvedSegments = latestRoundSearch.segments
+          .map((segment) => normalizeSearchSegment(segment))
+          .filter(Boolean)
+          .slice(0, 2);
+      }
+    }
+
+    const safeAdultCount = Math.max(
+      1,
+      Number(adultCount || recoveredFromRecent?.adultCount || 1)
+    );
+    const safeChildCount = Math.max(
+      0,
+      Number(childCount || recoveredFromRecent?.childCount || 0)
+    );
+    const safeInfantCount = Math.max(
+      0,
+      Number(infant || recoveredFromRecent?.infantCount || 0)
+    );
+    const safeCabinClass = toText(className || recoveredFromRecent?.cabinClass || "Economy");
+
+    const displayFromCode = toUpperText(
+      fromSendData || resolvedSegments[0]?.depfrom || recoveredFromRecent?.fromCode
+    );
+    const displayToCode = toUpperText(
+      toSendData || resolvedSegments[0]?.arrto || recoveredFromRecent?.toCode
+    );
+
+    const displayFromSearch = toText(
+      fromSearchText ||
+        recoveredFromRecent?.fromLabel ||
+        resolvedSegments[0]?.depFromText ||
+        displayFromCode
+    );
+    const displayToSearch = toText(
+      toSearchText ||
+        recoveredFromRecent?.toLabel ||
+        resolvedSegments[0]?.arrToText ||
+        displayToCode
+    );
+
+    const displayDepartureDate =
+      toText(departureDate) ||
+      (resolvedSegments[0]?.depdate
+        ? moment(resolvedSegments[0]?.depdate).format("DD MMM YY")
+        : "");
+    const displayArrivalDate =
+      toText(arrivalDate) ||
+      (resolvedSegments[1]?.depdate
+        ? moment(resolvedSegments[1]?.depdate).format("DD MMM YY")
+        : "");
+
+    return {
+      valid: resolvedSegments.length >= 2,
+      payload: {
+        adultcount: safeAdultCount,
+        childcount: safeChildCount,
+        infantcount: safeInfantCount,
+        cabinclass: safeCabinClass,
+        segments: resolvedSegments.slice(0, 2),
+      },
+      display: {
+        fromCode: displayFromCode,
+        toCode: displayToCode,
+        fromSearch: displayFromSearch,
+        toSearch: displayToSearch,
+        departureDate: displayDepartureDate,
+        arrivalDate: displayArrivalDate,
+        fromAddress: toText(faddress || recoveredFromRecent?.fromAddress),
+        toAddress: toText(toAddress || recoveredFromRecent?.toAddress),
+        adultCount: safeAdultCount,
+        childCount: safeChildCount,
+        infantCount: safeInfantCount,
+        cabinClass: safeCabinClass,
+        valueBox: valueBox || recoveredFromRecent?.tripType || "roundway",
+      },
+    };
+  }, [
+    adultCount,
+    arrivalDate,
+    childCount,
+    className,
+    departureDate,
+    faddress,
+    fromSearchText,
+    fromSendData,
+    infant,
+    searchData?.segments,
+    segments,
+    toAddress,
+    toSearchText,
+    toSendData,
+    valueBox,
+  ]);
 
   const [flights, setFlights] = useState([]);
   const [filteredFlights, setFilteredFlights] = useState([]);
@@ -106,36 +294,40 @@ const RoundWaySearchResult = () => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const data = await searchTravelportFlights(
-          {
-            adultcount: adultCount,
-            childcount: childCount,
-            infantcount: infant,
-            cabinclass: className,
-            segments: [
-              {
-                depfrom: fromSendData,
-                arrto: toSendData,
-                depdate: moment(departureDate).format("YYYY-MM-DD"),
-              },
-              {
-                depfrom: toSendData,
-                arrto: fromSendData,
-                depdate: moment(arrivalDate).format("YYYY-MM-DD"),
-              },
-            ],
-          },
-          token
-        );
-        setFlights(data || []);
-        setFilteredFlights(data || []);
-        setInitialFetchData(data || []);
+        if (!resolvedSearchContext.valid) {
+          setFlights([]);
+          setFilteredFlights([]);
+          setInitialFetchData([]);
+          setMinPrice(0);
+          setMaxPrice(100000);
+          setPriceRange([0, 100000]);
+          return;
+        }
+
+        const data = await searchTravelportFlights(resolvedSearchContext.payload, token);
+        const normalizedData = Array.isArray(data) ? data : [];
+        const roundTripOnlyData = normalizedData.filter((item) => {
+          const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
+          return legs.length > 1;
+        });
+
+        setFlights(roundTripOnlyData);
+        setFilteredFlights(roundTripOnlyData);
+        setInitialFetchData(roundTripOnlyData);
 
         // Calculate min and max price
-        const prices = data.map((item) => item.NetFare);
-        setMinPrice(Math.min(...prices));
-        setMaxPrice(Math.max(...prices));
-        setPriceRange([Math.min(...prices), Math.max(...prices)]);
+        const prices = roundTripOnlyData
+          .map((item) => Number(item?.NetFare))
+          .filter((price) => Number.isFinite(price));
+        if (prices.length > 0) {
+          setMinPrice(Math.min(...prices));
+          setMaxPrice(Math.max(...prices));
+          setPriceRange([Math.min(...prices), Math.max(...prices)]);
+        } else {
+          setMinPrice(0);
+          setMaxPrice(100000);
+          setPriceRange([0, 100000]);
+        }
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -145,14 +337,8 @@ const RoundWaySearchResult = () => {
 
     fetchData();
   }, [
-    adultCount,
-    childCount,
-    infant,
-    fromSendData,
-    toSendData,
-    departureDate,
-    arrivalDate,
-    className,
+    resolvedSearchContext,
+    token,
   ]);
 
   // const handleAirlineClick = (career) => {
@@ -239,22 +425,33 @@ const RoundWaySearchResult = () => {
   // ----------------Functionality start ----------------
   // uniqueLayover
   const uniqueLayover = Array.from(
-    new Set(
-      flights
-        ?.filter((item) => item.AllLegsInfo[0].Segments.length > 1)
-        .map((item) => ({
-          name:
-            item.AllLegsInfo[0].Segments.length > 2
-              ? item.AllLegsInfo[0].Segments[2].DepAirPort
-              : item.AllLegsInfo[0].Segments[1].DepAirPort,
-          code:
-            item.AllLegsInfo[0].Segments.length > 2
-              ? item.AllLegsInfo[0].Segments[2].DepFrom
-              : item.AllLegsInfo[0].Segments[1].DepFrom,
-        }))
-        .map((entry) => JSON.stringify(entry))
-    )
-  ).map((str) => JSON.parse(str));
+    new Map(
+      (Array.isArray(flights) ? flights : [])
+        .filter((item) => item?.AllLegsInfo?.[0]?.Segments?.length > 1)
+        .map((item) => {
+          const segments = item?.AllLegsInfo?.[0]?.Segments || [];
+          const layoverSegment =
+            segments.length > 2 ? segments[2] : segments[1];
+          if (!layoverSegment) return null;
+
+          const resolvedAirport = resolveAirportInfo(
+            layoverSegment?.DepFrom,
+            layoverSegment?.DepAirPort,
+            layoverSegment?.DepLocation
+          );
+
+          return [
+            resolvedAirport.code,
+            {
+              code: resolvedAirport.code,
+              name: resolvedAirport.name,
+              address: resolvedAirport.address,
+            },
+          ];
+        })
+        .filter(Boolean)
+    ).values()
+  );
 
   const handleSelection = (name, setSelected) => {
     setSelected((prevSelected) => {
@@ -273,14 +470,14 @@ const RoundWaySearchResult = () => {
   const handleStops = (name) => {
     handleSelection(name, setSelectedStops);
   };
-  const handleAirLine = (name, career) => {
-    handleSelection(name, setSelectedAirlins);
-    if (selectedAirline === career) {
+  const handleAirLine = (code) => {
+    handleSelection(code, setSelectedAirlins);
+    if (selectedAirline === code) {
       setSelectedAirline(null);
       setFilteredFlights(flights);
     } else {
-      setSelectedAirline(career);
-      const filtered = flights.filter((flight) => flight.Carrier === career);
+      setSelectedAirline(code);
+      const filtered = flights.filter((flight) => flight.Carrier === code);
       setFilteredFlights(filtered);
     }
     setCurrentPage(1);
@@ -602,11 +799,15 @@ const RoundWaySearchResult = () => {
       ...filteredData.map((item) => parseInt(item.NetFare))
     );
     const carrierName = filteredData[0].CarrierName;
+    const currencyCode = getFlightCurrencyCode(filteredData?.[0] || {});
+    const currencySymbol = getCurrencySymbol(currencyCode);
     // change this property after add
     return {
       code: carrier,
       name: carrierName,
       price: minPrice.toString(),
+      currencyCode,
+      currencySymbol,
     };
   });
   //Baggage Filter
@@ -620,10 +821,14 @@ const RoundWaySearchResult = () => {
     "40k": "40kg",
     "45k": "45kg",
     "35k": "35kg",
+    "baggagechargesdatanotavailable": "0",
   };
 
   const normalizeAndMapBaggageName = (name) => {
     const normalized = name?.toLowerCase().replace(/\s+/g, "") || "";
+    if (normalized.includes("baggagechargesdatanotavailable")) {
+      return "0";
+    }
     return baggageMapping[normalized] || normalized; // Map using baggageMapping, fallback to normalized
   };
   const uniqueBaggage = Array.from(
@@ -667,9 +872,36 @@ const RoundWaySearchResult = () => {
   const toggleBanner = () => {
     setShowBanner(!showBanner);
   };
+  const displayContext = resolvedSearchContext.display;
+  const bannerSegments =
+    Array.isArray(resolvedSearchContext?.payload?.segments) &&
+    resolvedSearchContext.payload.segments.length > 0
+      ? resolvedSearchContext.payload.segments
+      : Array.isArray(segments)
+      ? segments
+      : [];
+  const bannerSearchData =
+    searchData && typeof searchData === "object"
+      ? {
+          ...searchData,
+          segments: bannerSegments,
+        }
+      : {
+          segments: bannerSegments,
+        };
+  const showDebugBadge = String(location?.pathname || "") === "/offers";
+  const debugSegmentCount = resolvedSearchContext?.payload?.segments?.length || 2;
   console.log("flights", paginatedFlightGroups);
   return (
     <Box className="relative bg-transparent" sx={{ bgcolor: "transparent", height: "100%" }}>
+      <SearchContextDebugBadge
+        visible={showDebugBadge}
+        tripType={displayContext?.valueBox || "roundway"}
+        adultCount={displayContext?.adultCount}
+        childCount={displayContext?.childCount}
+        infantCount={displayContext?.infantCount}
+        segmentCount={debugSegmentCount}
+      />
       {showBanner ? (
         ""
       ) : (
@@ -692,22 +924,22 @@ const RoundWaySearchResult = () => {
           }}
         >
           <AfterSearchBanner
-            fromSearch={fromSearchText}
-            toSearch={toSearchText}
-            faddressText={faddress}
-            toAddressText={toAddress}
-            depDate={departureDate}
-            arrDate={arrivalDate}
-            fromSend={fromSendData}
-            toSend={toSendData}
-            adult={adultCount}
-            child={childCount}
-            infantCount={infant}
-            classNa={className}
+            fromSearch={displayContext.fromSearch}
+            toSearch={displayContext.toSearch}
+            faddressText={displayContext.fromAddress}
+            toAddressText={displayContext.toAddress}
+            depDate={displayContext.departureDate}
+            arrDate={displayContext.arrivalDate}
+            fromSend={displayContext.fromCode}
+            toSend={displayContext.toCode}
+            adult={displayContext.adultCount}
+            child={displayContext.childCount}
+            infantCount={displayContext.infantCount}
+            classNa={displayContext.cabinClass}
             paxResult={result}
-            valueBoxs={valueBox}
-            segments={segments}
-            searchDatas={searchData}
+            valueBoxs={displayContext.valueBox}
+            segments={bannerSegments}
+            searchDatas={bannerSearchData}
             value={value}
             toggleBanner={toggleBanner}
           />
@@ -717,22 +949,22 @@ const RoundWaySearchResult = () => {
         sx={{ display: { xs: "none", sm: "none", md: "block", lg: "block" } }}
       >
         <AfterSearchBanner
-          fromSearch={fromSearchText}
-          toSearch={toSearchText}
-          faddressText={faddress}
-          toAddressText={toAddress}
-          depDate={departureDate}
-          arrDate={arrivalDate}
-          fromSend={fromSendData}
-          toSend={toSendData}
-          adult={adultCount}
-          child={childCount}
-          infantCount={infant}
-          classNa={className}
+          fromSearch={displayContext.fromSearch}
+          toSearch={displayContext.toSearch}
+          faddressText={displayContext.fromAddress}
+          toAddressText={displayContext.toAddress}
+          depDate={displayContext.departureDate}
+          arrDate={displayContext.arrivalDate}
+          fromSend={displayContext.fromCode}
+          toSend={displayContext.toCode}
+          adult={displayContext.adultCount}
+          child={displayContext.childCount}
+          infantCount={displayContext.infantCount}
+          classNa={displayContext.cabinClass}
           paxResult={result}
-          valueBoxs={valueBox}
-          segments={segments}
-          searchDatas={searchData}
+          valueBoxs={displayContext.valueBox}
+          segments={bannerSegments}
+          searchDatas={bannerSearchData}
           value={value}
         />
       </Box>
@@ -777,16 +1009,16 @@ const RoundWaySearchResult = () => {
               }}
             >
               <Box>
-                <Typography
-                  sx={{
-                    fontWeight: 600,
-                    fontSize: "18px",
-                    color: "var(--primary-button)",
-                  }}
-                >
-                  {fromSendData}-{toSendData}
-                </Typography>
-              </Box>
+                  <Typography
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: "18px",
+                      color: "var(--primary-button)",
+                    }}
+                  >
+                  {displayContext.fromCode}-{displayContext.toCode}
+                  </Typography>
+                </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <Box>
                   <Button

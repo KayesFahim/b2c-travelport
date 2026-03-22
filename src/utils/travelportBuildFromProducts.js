@@ -1,4 +1,5 @@
 const TRAVELPORT_BUILD_FROM_PRODUCTS_PATH = "/api/travelport/build-from-products";
+const DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY = "USD";
 
 function joinBaseAndPath(baseUrl, path) {
   const base = String(baseUrl || "").trim();
@@ -28,11 +29,13 @@ function getLocalFallbackBuildFromProductsUrl() {
   }
 
   const { protocol, hostname, port } = window.location;
-  if (port !== "3001") {
-    return "";
+  if (port === "3001") {
+    return `${protocol}//${hostname}:3000${TRAVELPORT_BUILD_FROM_PRODUCTS_PATH}`;
   }
-
-  return `${protocol}//${hostname}:3000${TRAVELPORT_BUILD_FROM_PRODUCTS_PATH}`;
+  if (port === "3000") {
+    return `${protocol}//${hostname}:3001${TRAVELPORT_BUILD_FROM_PRODUCTS_PATH}`;
+  }
+  return "";
 }
 
 function getCandidateBuildFromProductsUrls() {
@@ -77,6 +80,7 @@ export async function fetchTravelportBuildFromProducts({
 
   const payload = {
     selectedOffer,
+    currencyCode: DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY,
     adultCount,
     childCount,
     infantCount,

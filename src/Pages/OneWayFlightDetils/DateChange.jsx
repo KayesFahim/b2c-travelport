@@ -2,7 +2,9 @@ import { Box, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import WarningIcon from "@mui/icons-material/Warning";
 import { extractUnifiedPenaltyRows } from "../../utils/flightPolicyUtils";
-import { fetchTravelportFarePolicy } from "../../utils/travelportFarePolicy";
+import {
+  fetchTravelportFarePolicyWithFallback,
+} from "../../utils/travelportFarePolicy";
 
 const DateChange = ({ searchId, resultId }) => {
   const [rows, setRows] = useState([]);
@@ -17,10 +19,11 @@ const DateChange = ({ searchId, resultId }) => {
       setErrorMessage("");
 
       try {
-        const payload = await fetchTravelportFarePolicy({
+        const payload = await fetchTravelportFarePolicyWithFallback({
           searchId,
           resultId,
           offerIdentifier: resultId,
+          fareRuleTypes: ["LongText", "ShortText", "Structured"],
         });
         const extractedRows = extractUnifiedPenaltyRows(payload, "dateChange");
         setRows(extractedRows);
@@ -41,7 +44,7 @@ const DateChange = ({ searchId, resultId }) => {
   }, [searchId, resultId]);
 
   return (
-    <Box sx={{ p: 1 }}>
+    <Box sx={{ p: 1, maxWidth: "100%", overflowX: "hidden" }}>
       {loading ? (
         <Typography sx={{ fontSize: "12px", color: "var(--meta-black)" }}>
           Loading date change policy...
@@ -71,6 +74,7 @@ const DateChange = ({ searchId, resultId }) => {
               fontWeight: 700,
               color: "var(--primary-color)",
               mb: "6px",
+              overflowWrap: "anywhere",
             }}
           >
             {rule.timeFrame}
@@ -84,6 +88,7 @@ const DateChange = ({ searchId, resultId }) => {
                 color: "var(--meta-black)",
                 lineHeight: 1.5,
                 mb: "2px",
+                overflowWrap: "anywhere",
               }}
             >
               {detail}

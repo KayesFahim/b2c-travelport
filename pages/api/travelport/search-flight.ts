@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import path from "path";
 import { mkdir, readFile, writeFile } from "fs/promises";
+import { getTravelportAccessToken } from "./_token-cache";
 
 export type LegacySegment = {
   depfrom: string;
@@ -14,7 +15,9 @@ type LegacySearchBody = {
   infantcount?: number | string;
   cabinclass?: string | number;
   segments?: LegacySegment[];
-  responseModel?: "legacy" | "unified" | "both";
+  contentSourceList?: unknown;
+  contentSource?: unknown;
+  responseModel?: "unified";
   saveResponse?: boolean;
 };
 
@@ -50,7 +53,6 @@ function shouldSaveSearchResponse(body: LegacySearchBody): boolean {
 async function persistSearchResponseSamples(params: {
   requestPayload: Record<string, unknown>;
   travelportRawResponse: Record<string, unknown>;
-  legacyResults: Record<string, unknown>[];
   unifiedResults: Record<string, unknown>[];
 }) {
   const sampleDir = path.join(process.cwd(), "sample");
@@ -64,9 +66,9 @@ async function persistSearchResponseSamples(params: {
   await Promise.all([
     writeJson("searchRequestPayload.json", params.requestPayload),
     writeJson("flightsearchresponse.json", params.travelportRawResponse),
-    writeJson("flightResponseLegacyModel.json", params.legacyResults),
     writeJson("flightResponseUnifiedModel.json", firstUnified),
     writeJson("flightResponseUnifiedModelList.json", params.unifiedResults),
+    writeJson("LatestUnifiedModel.json", params.unifiedResults),
   ]);
 }
 
@@ -91,6 +93,122 @@ function getRequiredEnv(name: string): string {
 function toNumber(value: unknown, fallback = 0): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function firstNonEmptyString(...values: unknown[]): string {
+  for (const value of values) {
+    const normalized = String(value ?? "").trim();
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+  return "";
+}
+
+function resolveCarrierCodeFromTerms(terms: Record<string, unknown>): string {
+  const validatingAirline = (terms as any)?.ValidatingAirline;
+  if (Array.isArray(validatingAirline)) {
+    for (const entry of validatingAirline) {
+      const fromEntry = firstNonEmptyString(
+        (entry as any)?.ValidatingAirline,
+        (entry as any)?.code,
+        (entry as any)?.value
+      );
+      if (fromEntry) {
+        return fromEntry;
+      }
+    }
+  } else {
+    const fromObject = firstNonEmptyString(
+      (validatingAirline as any)?.ValidatingAirline,
+      (validatingAirline as any)?.code,
+      validatingAirline
+    );
+    if (fromObject) {
+      return fromObject;
+    }
+  }
+
+  const baggageAllowance = Array.isArray((terms as any)?.BaggageAllowance)
+    ? (terms as any).BaggageAllowance
+    : [];
+
+  for (const allowance of baggageAllowance) {
+    const allowanceCarrier = firstNonEmptyString(
+      (allowance as any)?.validatingAirlineCode,
+      (allowance as any)?.ValidatingAirlineCode,
+      (allowance as any)?.carrier,
+      (allowance as any)?.Carrier
+    );
+    if (allowanceCarrier) {
+      return allowanceCarrier;
+    }
+
+    const baggageItems = Array.isArray((allowance as any)?.BaggageItem)
+      ? (allowance as any).BaggageItem
+      : [];
+
+    for (const bagItem of baggageItems) {
+      const itemCarrier = firstNonEmptyString(
+        (bagItem as any)?.validatingAirlineCode,
+        (bagItem as any)?.ValidatingAirlineCode,
+        (bagItem as any)?.carrier,
+        (bagItem as any)?.Carrier,
+        (bagItem as any)?.airline,
+        (bagItem as any)?.Airline
+      );
+      if (itemCarrier) {
+        return itemCarrier;
+      }
+    }
+  }
+
+  return "";
+}
+
+function resolveCarrierNameFromSegments(
+  mappedSegments: Array<Record<string, unknown>>,
+  fallbackCode: string
+): string {
+  for (const segment of mappedSegments) {
+    const marketingCarrier = firstNonEmptyString(
+      segment?.marketingCarrier,
+      segment?.MarketingCarrier
+    );
+    const operatingCarrier = firstNonEmptyString(
+      segment?.operatingCarrier,
+      segment?.OperatingCarrier
+    );
+    const marketingCarrierName = firstNonEmptyString(
+      segment?.marketingCarrierName,
+      segment?.MarketingCarrierName
+    );
+    const operatingCarrierName = firstNonEmptyString(
+      segment?.operatingCarrierName,
+      segment?.OperatingCarrierName
+    );
+
+    if (
+      marketingCarrierName &&
+      marketingCarrierName.toUpperCase() !== marketingCarrier.toUpperCase()
+    ) {
+      return marketingCarrierName;
+    }
+    if (
+      operatingCarrierName &&
+      operatingCarrierName.toUpperCase() !== operatingCarrier.toUpperCase()
+    ) {
+      return operatingCarrierName;
+    }
+    if (marketingCarrierName) {
+      return marketingCarrierName;
+    }
+    if (operatingCarrierName) {
+      return operatingCarrierName;
+    }
+  }
+
+  return fallbackCode || "N/A";
 }
 
 function normalizeCabinClass(value: unknown): string {
@@ -122,6 +240,38 @@ function normalizeCabinClass(value: unknown): string {
   }
 
   return "Economy";
+}
+
+function resolveContentSourceList(body: LegacySearchBody): string[] {
+  const bodyRaw = Array.isArray(body?.contentSourceList)
+    ? body.contentSourceList
+    : String(body?.contentSource || "").trim()
+    ? String(body?.contentSource)
+    : "";
+  const envRaw = process.env.TRAVELPORT_CONTENT_SOURCE_LIST || "GDS";
+
+  const normalizeList = (value: unknown): string[] => {
+    if (Array.isArray(value)) {
+      return Array.from(
+        new Set(
+          value
+            .map((entry) => String(entry ?? "").trim().toUpperCase())
+            .filter((entry) => entry === "GDS" || entry === "NDC")
+        )
+      );
+    }
+    const text = String(value ?? "")
+      .split(",")
+      .map((entry) => entry.trim().toUpperCase())
+      .filter((entry) => entry === "GDS" || entry === "NDC");
+    return Array.from(new Set(text));
+  };
+
+  const fromBody = normalizeList(bodyRaw);
+  if (fromBody.length) return fromBody;
+  const fromEnv = normalizeList(envRaw);
+  if (fromEnv.length) return fromEnv;
+  return ["GDS"];
 }
 
 function removeAtType<T>(obj: T): T {
@@ -270,6 +420,128 @@ function toUniversalProductAttributeItem(attribute: unknown) {
     description: String(source.description ?? ""),
     iconSmall: extractUrlByType(iconURL, ["smallurl", "smallURL"]),
     iconLarge: extractUrlByType(iconURL, ["largeurl", "largeURL"]),
+  };
+}
+
+function toAmenityCollectionFromBrand(brandDetails: Record<string, unknown> | null) {
+  const mapped = {
+    basic: [] as Array<{ classification: string; inclusion: string }>,
+    additional: [] as Array<{ classification: string; inclusion: string }>,
+  };
+
+  const basicRows = Array.isArray(brandDetails?.BrandAttribute)
+    ? (brandDetails?.BrandAttribute as Array<Record<string, unknown>>)
+    : [];
+  const additionalRows = Array.isArray(brandDetails?.AdditionalBrandAttribute)
+    ? (brandDetails?.AdditionalBrandAttribute as Array<Record<string, unknown>>)
+    : [];
+
+  const normalizeAmenity = (item: Record<string, unknown>) => ({
+    classification: String(item?.classification ?? item?.Classification ?? "").trim(),
+    inclusion: String(item?.inclusion ?? item?.Inclusion ?? "").trim(),
+  });
+
+  for (const row of basicRows) {
+    const normalized = normalizeAmenity(row);
+    if (normalized.classification && normalized.inclusion) {
+      mapped.basic.push(normalized);
+    }
+  }
+
+  for (const row of additionalRows) {
+    const normalized = normalizeAmenity(row);
+    if (normalized.classification && normalized.inclusion) {
+      mapped.additional.push(normalized);
+    }
+  }
+
+  return mapped;
+}
+
+function toPaxTypeCode(value: unknown): string {
+  const code = String(value ?? "").trim().toUpperCase();
+  if (["ADT", "ADULT"].includes(code)) return "ADT";
+  if (["CHD", "CNN", "CHILD"].includes(code)) return "CHD";
+  if (["INF", "INFANT"].includes(code)) return "INF";
+  return code || "ADT";
+}
+
+function findWeightFromText(text: unknown): string | null {
+  const raw = typeof text === "string" ? text : "";
+  const weightMatch = raw.match(/(\d+\s*KG)/i);
+  if (!weightMatch) return null;
+  return weightMatch[1].replace(/\s+/g, "").toUpperCase();
+}
+
+function resolveBaggageType(item: Record<string, unknown>): "Checked" | "CarryOn" {
+  const explicit = String(
+    item?.type ?? item?.Type ?? item?.baggageType ?? item?.BaggageType ?? ""
+  )
+    .trim()
+    .toLowerCase();
+
+  if (explicit.includes("carry")) return "CarryOn";
+  if (explicit.includes("checked")) return "Checked";
+
+  const text = extractTextValue(item?.Text ?? item?.text).toLowerCase();
+  if (text.includes("carry")) return "CarryOn";
+  return "Checked";
+}
+
+function mapUnifiedBaggageAllowances(
+  terms: Record<string, unknown>,
+  paxTypeCode: string,
+  carrierCode: string
+) {
+  const allAllowances = Array.isArray(terms?.BaggageAllowance)
+    ? (terms.BaggageAllowance as Array<Record<string, unknown>>)
+    : [];
+
+  const scopedAllowances = allAllowances.filter((allowance) => {
+    const passengerTypeCodes = Array.isArray(allowance?.passengerTypeCodes)
+      ? allowance.passengerTypeCodes.map((code) => String(code ?? "").toUpperCase())
+      : [];
+    if (!passengerTypeCodes.length) return true;
+    return passengerTypeCodes.includes(paxTypeCode);
+  });
+
+  const baggageItems = scopedAllowances.flatMap((allowance) =>
+    Array.isArray(allowance?.BaggageItem)
+      ? (allowance.BaggageItem as Array<Record<string, unknown>>)
+      : []
+  );
+
+  const normalizedAllowances = baggageItems.map((item) => {
+    const text = extractTextValue(item?.Text ?? item?.text);
+    const quantity = Math.max(0, toNumber(item?.quantity ?? item?.Quantity, 0));
+    const weight =
+      String(item?.weight ?? item?.Weight ?? "").trim() || findWeightFromText(text);
+
+    return {
+      type: resolveBaggageType(item),
+      quantity,
+      weight: weight || null,
+      text: text || (quantity > 0 ? `${quantity}Pc` : "BAGGAGE CHARGES DATA NOT AVAILABLE"),
+    };
+  });
+
+  if (!normalizedAllowances.length) {
+    return {
+      airline: carrierCode,
+      allowance: [
+        {
+          type: "Checked",
+          quantity: 0,
+          weight: null,
+          text: "BAGGAGE CHARGES DATA NOT AVAILABLE",
+        },
+      ],
+    };
+  }
+
+  return {
+    airline: carrierCode,
+    allowance: normalizedAllowances,
   };
 }
 
@@ -638,51 +910,7 @@ function toUnifiedFlightResult(legacy: Record<string, unknown>) {
 }
 
 async function createToken(): Promise<string> {
-  const authUrl = getRequiredEnv("TRAVELPORT_AUTH_URL");
-  const clientId = getRequiredEnv("TRAVELPORT_CLIENT_ID");
-  const clientSecret = getRequiredEnv("TRAVELPORT_CLIENT_SECRET");
-  const username = getRequiredEnv("TRAVELPORT_USERNAME");
-  const password = getRequiredEnv("TRAVELPORT_PASSWORD");
-  const grantType = process.env.TRAVELPORT_AUTH_GRANT_TYPE || "password";
-  const useBasicAuth = process.env.TRAVELPORT_USE_BASIC_AUTH === "true";
-
-  const body = new URLSearchParams();
-  body.append("grant_type", grantType);
-  body.append("username", username);
-  body.append("password", password);
-
-  const headers: Record<string, string> = {
-    Accept: "application/json",
-    "Content-Type": "application/x-www-form-urlencoded",
-  };
-
-  if (useBasicAuth) {
-    const basicToken = Buffer.from(`${clientId}:${clientSecret}`).toString(
-      "base64"
-    );
-    headers.Authorization = `Basic ${basicToken}`;
-  } else {
-    body.append("client_id", clientId);
-    body.append("client_secret", clientSecret);
-  }
-
-  const response = await fetch(authUrl, {
-    method: "POST",
-    headers,
-    body: body.toString(),
-  });
-
-  const payload = await response.json().catch(() => ({}));
-
-  if (!response.ok || !payload?.access_token) {
-    throw new Error(
-      payload?.error_description ||
-        payload?.message ||
-        `Travelport auth failed (${response.status})`
-    );
-  }
-
-  return payload.access_token as string;
+  return getTravelportAccessToken();
 }
 
 function buildTravelportPayload(body: LegacySearchBody) {
@@ -695,6 +923,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
     0,
     toNumber(process.env.TRAVELPORT_MAX_UPSELLS_TO_RETURN, 20)
   );
+  const contentSourceList = resolveContentSourceList(body);
 
   const passengerCriteria: Array<Record<string, unknown>> = [];
   if (adultCount > 0) {
@@ -737,7 +966,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
         "@type": "CatalogProductOfferingsRequestAir",
         maxNumberOfUpsellsToReturn: maxUpsellsToReturn,
         offersPerPage: 20,
-        contentSourceList: ["NDC", "GDS"],
+        contentSourceList,
         PassengerCriteria: passengerCriteria,
         SearchCriteriaFlight: searchSegments,
         CustomResponseModifiersAir:{
@@ -769,17 +998,25 @@ function buildTravelportPayload(body: LegacySearchBody) {
   };
 }
 
-export function toLegacySearchResult(
+export function toUnifiedSearchResult(
   payloadSegments: LegacySegment[],
   rawResponse: unknown
-): unknown[] {
+): Record<string, unknown>[] {
   const data = removeAtType(rawResponse as Record<string, unknown>);
 
   const catalogResponse =
     (data as any)?.CatalogProductOfferingsResponse ??
     (data as any)?.CatalogProductOfferingResponse;
 
-  const transactionId = catalogResponse?.transactionId || "";
+  const transactionId = String(catalogResponse?.transactionId ?? "");
+  const catalogProductOfferingsIdentifierRaw = String(
+    catalogResponse?.CatalogProductOfferings?.Identifier?.value ?? ""
+  ).trim();
+  const catalogProductOfferingsIdentifier = catalogProductOfferingsIdentifierRaw
+    ? /_PC$/i.test(catalogProductOfferingsIdentifierRaw)
+      ? catalogProductOfferingsIdentifierRaw
+      : `${catalogProductOfferingsIdentifierRaw}_PC`
+    : "";
   const catalogOfferings = Array.isArray(
     catalogResponse?.CatalogProductOfferings?.CatalogProductOffering
   )
@@ -823,29 +1060,568 @@ export function toLegacySearchResult(
     offering: any;
     sequence: number;
     index: number;
+    catalogOfferingId: string;
   }> = [];
   for (const catalog of catalogOfferings) {
     const sequence = toNumber(catalog?.sequence, 1);
+    const catalogOfferingId = String(catalog?.id ?? "").trim();
     for (const brandOption of catalog?.ProductBrandOptions ?? []) {
       for (const offering of brandOption?.ProductBrandOffering ?? []) {
         productBrandOfferings.push({
           offering,
           sequence,
           index: productBrandOfferings.length,
+          catalogOfferingId,
+        });
+      }
+    }
+  }
+
+  const mappedOfferings = productBrandOfferings.map(
+    ({ offering, sequence, index, catalogOfferingId }) => {
+    const bestPrice = (offering?.BestCombinablePrice ?? {}) as Record<string, unknown>;
+    const termsRef = offering?.TermsAndConditions?.termsAndConditionsRef;
+    const terms = (termsMap.get(termsRef) ?? {}) as Record<string, unknown>;
+    const carrierCode = firstNonEmptyString(resolveCarrierCodeFromTerms(terms), "N/A");
+
+    const penalties = Array.isArray((terms as any)?.Penalties)
+      ? ((terms as any).Penalties as Array<Record<string, unknown>>)
+      : [];
+    const penaltiesCancellation = mapPenaltiesCancellationFromTerms(penalties as any[]);
+    const refundable = penalties.some(
+      (entry) => Array.isArray((entry as any)?.Cancel) && (entry as any).Cancel.length > 0
+    );
+
+    const productRef = offering?.Product?.[0]?.productRef;
+    const product = (productMap.get(productRef) ?? {}) as Record<string, unknown>;
+    const productSegments = Array.isArray(product?.FlightSegment)
+      ? (product.FlightSegment as Array<Record<string, unknown>>)
+      : [];
+
+    const firstPassengerFlight = Array.isArray((product as any)?.PassengerFlight)
+      ? (product as any).PassengerFlight[0]
+      : {};
+    const firstFlightProduct =
+      Array.isArray(firstPassengerFlight?.FlightProduct) &&
+      firstPassengerFlight.FlightProduct.length > 0
+        ? (firstPassengerFlight.FlightProduct[0] as Record<string, unknown>)
+        : {};
+    const brandRef = (firstFlightProduct as any)?.Brand?.BrandRef;
+    const brandDetails = (brandMap.get(brandRef) ?? null) as
+      | Record<string, unknown>
+      | null;
+
+    const mappedSegments = productSegments.map((segment) => {
+      const flightRef = (segment as any)?.Flight?.FlightRef;
+      const flight = (flightMap.get(flightRef) ?? {}) as Record<string, unknown>;
+      const amenityRefs = Array.isArray((segment as any)?.amenityRefs)
+        ? (segment as any).amenityRefs.map((ref: unknown) => String(ref))
+        : [];
+      const universalAttributeRefs = Array.isArray(
+        (segment as any)?.universalProductAttributeRefs
+      )
+        ? (segment as any).universalProductAttributeRefs.map((ref: unknown) =>
+            String(ref)
+          )
+        : [];
+
+      const mappedAmenities = amenityRefs
+        .map((ref) => amenityMap.get(ref))
+        .filter(Boolean)
+        .map((item: any) => toAmenityItem(item));
+
+      const mappedUniversalAttributes = universalAttributeRefs
+        .map((ref) => universalProductAttributeMap.get(ref))
+        .filter(Boolean)
+        .map((item: any) => toUniversalProductAttributeItem(item));
+
+      const marketingCarrierCode = firstNonEmptyString(
+        (flight as any)?.carrier,
+        carrierCode
+      );
+      const operatingCarrierCode = firstNonEmptyString(
+        (flight as any)?.operatingCarrier,
+        marketingCarrierCode,
+        carrierCode
+      );
+      const marketingCarrierName = firstNonEmptyString(
+        (flight as any)?.carrierName,
+        (flight as any)?.marketingCarrierName,
+        operatingCarrierCode === marketingCarrierCode
+          ? (flight as any)?.operatingCarrierName
+          : "",
+        marketingCarrierCode
+      );
+      const operatingCarrierName = firstNonEmptyString(
+        (flight as any)?.operatingCarrierName,
+        (flight as any)?.carrierName,
+        operatingCarrierCode
+      );
+
+      return {
+        marketingCarrier: marketingCarrierCode,
+        marketingCarrierName,
+        marketingFlightNumber: String((flight as any)?.number ?? "N/A"),
+        operatingCarrier: operatingCarrierCode,
+        operatingFlightNumber: String(
+          (flight as any)?.operatingCarrierNumber ??
+            (flight as any)?.number ??
+            "N/A"
+        ),
+        operatingCarrierName,
+        depFrom: String((flight as any)?.Departure?.location ?? ""),
+        depAirport: String((flight as any)?.Departure?.location ?? ""),
+        depLocation: String((flight as any)?.Departure?.location ?? ""),
+        depDateAdjustment: 0,
+        depTime: formatDateTime(
+          (flight as any)?.Departure?.date,
+          (flight as any)?.Departure?.time
+        ),
+        arrTo: String((flight as any)?.Arrival?.location ?? ""),
+        arrAirport: String((flight as any)?.Arrival?.location ?? ""),
+        arrLocation: String((flight as any)?.Arrival?.location ?? ""),
+        arrDateAdjustment: 0,
+        arrTime: formatDateTime(
+          (flight as any)?.Arrival?.date,
+          (flight as any)?.Arrival?.time
+        ),
+        operatedBy: operatingCarrierCode,
+        stopCount: toNumber((flight as any)?.stopCount, 0),
+        duration:
+          typeof (flight as any)?.duration === "string" && (flight as any).duration
+            ? String((flight as any).duration)
+            : durationMinutesToIso(parseDurationToMinutes((flight as any)?.duration)),
+        aircraftTypeName: String((flight as any)?.equipment ?? "N/A"),
+        departureGate: String((flight as any)?.Departure?.terminal ?? "TBA"),
+        arrivalGate: String((flight as any)?.Arrival?.terminal ?? "TBA"),
+        hiddenStops: Array.isArray((flight as any)?.hiddenStops)
+          ? (flight as any).hiddenStops
+          : [],
+        totalMilesFlown: toNumber(
+          (segment as any)?.distance ??
+            (segment as any)?.Distance ??
+            (flight as any)?.distance ??
+            0,
+          0
+        ),
+        availabilitySourceCode: String(
+          (segment as any)?.AvailabilitySourceCode ?? "N/A"
+        ),
+        segmentCode: {
+          bookingCode: String((firstFlightProduct as any)?.classOfService ?? ""),
+          cabinCode: String((firstFlightProduct as any)?.cabin ?? "Economy"),
+          seatsAvailable: toNumber((product as any)?.Quantity, 9),
+          fareBasisCode: String((firstFlightProduct as any)?.fareBasisCode ?? ""),
+          fareTypeCode: String((firstFlightProduct as any)?.fareType ?? ""),
+        },
+        amenities: mappedAmenities,
+        amenityRefs,
+        universalProductAttributeRefs: universalAttributeRefs,
+        universalProductAttributes: mappedUniversalAttributes,
+      };
+    });
+
+    const firstMappedSegment = mappedSegments[0] as Record<string, unknown> | undefined;
+    const lastMappedSegment = mappedSegments[mappedSegments.length - 1] as
+      | Record<string, unknown>
+      | undefined;
+    const resolvedCarrierCode = firstNonEmptyString(
+      carrierCode,
+      firstMappedSegment?.marketingCarrier,
+      firstMappedSegment?.operatingCarrier,
+      "N/A"
+    );
+    const resolvedCarrierName = resolveCarrierNameFromSegments(
+      mappedSegments as Array<Record<string, unknown>>,
+      resolvedCarrierCode
+    );
+    const requestedSegment = (payloadSegments[sequence - 1] ??
+      payloadSegments[0] ??
+      {}) as Partial<LegacySegment>;
+
+    const allLegsInfo = [
+      {
+        departureDate:
+          String(firstMappedSegment?.depTime ?? "").split("T")[0] ||
+          String(requestedSegment?.depdate ?? ""),
+        departureFrom:
+          String(requestedSegment?.depfrom ?? "") ||
+          String(firstMappedSegment?.depFrom ?? ""),
+        arrivalTo:
+          String(requestedSegment?.arrto ?? "") ||
+          String(lastMappedSegment?.arrTo ?? ""),
+        totalDuration:
+          typeof (product as any)?.totalDuration === "string" &&
+          (product as any).totalDuration
+            ? String((product as any).totalDuration)
+            : durationMinutesToIso(
+                parseDurationToMinutes((product as any)?.totalDuration)
+              ),
+        brandName: brandDetails?.name ? String(brandDetails.name) : null,
+        brandFeatures: brandDetails,
+        segments: mappedSegments,
+      },
+    ];
+
+    const fallbackCurrency =
+      String(
+        (bestPrice as any)?.CurrencyCode?.value ??
+          (bestPrice as any)?.CurrencyCode ??
+          process.env.TRAVELPORT_DEFAULT_CURRENCY ??
+          "USD"
+      ) || "USD";
+
+    const priceBreakDown = Array.isArray((bestPrice as any)?.PriceBreakdown)
+      ? ((bestPrice as any).PriceBreakdown as Array<Record<string, unknown>>).map(
+          (paxRow) => {
+            const paxTypeCode = toPaxTypeCode((paxRow as any)?.requestedPassengerType);
+            return {
+              paxType: paxTypeCode,
+              baseFare: toNumber((paxRow as any)?.Amount?.Base, 0),
+              taxes: toNumber((paxRow as any)?.Amount?.Taxes?.TotalTaxes, 0),
+              totalFare: toNumber((paxRow as any)?.Amount?.Total, 0),
+              paxCount: Math.max(1, toNumber((paxRow as any)?.quantity, 1)),
+              bag: mapUnifiedBaggageAllowances(
+                terms,
+                paxTypeCode,
+                resolvedCarrierCode
+              ),
+              fareComponent: {},
+            };
+          }
+        )
+      : [];
+
+    const offeringId = String((offering as any)?.id ?? "").trim();
+    const offeringIdentifierValue = String(
+      (offering as any)?.Identifier?.value ?? ""
+    ).trim();
+    const mappedOfferIdentifier =
+      catalogOfferingId || offeringId || offeringIdentifierValue;
+    const mappedProductIdentifiers = Array.isArray((offering as any)?.Product)
+      ? (offering as any).Product
+          .map((item: any) => String(item?.productRef ?? item?.id ?? "").trim())
+          .filter(Boolean)
+      : [];
+
+    const grossFare = toNumber((bestPrice as any)?.TotalPrice, 0);
+    const netFare = grossFare;
+    const identifier =
+      mappedOfferIdentifier ||
+      `${transactionId || "TP"}-${sequence}-${String(index + 1).padStart(3, "0")}`;
+    const firstSegmentCode = (firstMappedSegment?.segmentCode ??
+      {}) as Record<string, unknown>;
+    const amenityCollection = toAmenityCollectionFromBrand(brandDetails);
+
+    const unified = {
+      provider: "Travelport",
+      transactionId,
+      identifier,
+      offerIdentifier: mappedOfferIdentifier || identifier,
+      OfferIdentifier: mappedOfferIdentifier || identifier,
+      offerListIdentifier: catalogProductOfferingsIdentifier,
+      productIdentifiers: mappedProductIdentifiers,
+      farePolicyRequest:
+        mappedOfferIdentifier || identifier
+          ? {
+              offerIdentifier: mappedOfferIdentifier || identifier,
+              offerListIdentifier: catalogProductOfferingsIdentifier,
+              productIdentifiers: mappedProductIdentifiers,
+            }
+          : null,
+      instantPayment: false,
+      issuePermit: true,
+      isBookable: true,
+      journeyType: payloadSegments.length > 1 ? "ROUND_TRIP" : "ONE_WAY",
+      tripType: payloadSegments.length > 1 ? "ROUND_TRIP" : "ONE_WAY",
+      fareType: String((firstFlightProduct as any)?.fareType ?? "PublicFare"),
+      carrierCode: resolvedCarrierCode,
+      carrierName: resolvedCarrierName,
+      cabinClass: String((firstSegmentCode as any)?.cabinCode ?? "Economy"),
+      currencyCode: fallbackCurrency,
+      baseFare: toNumber((bestPrice as any)?.Base, 0),
+      taxes: toNumber((bestPrice as any)?.TotalTaxes, 0),
+      netFare,
+      grossFare,
+      markUp: String(Math.max(grossFare - netFare, 0)),
+      timeLimit: (terms as any)?.PaymentTimeLimit ?? null,
+      refundable,
+      totalSegments: mappedSegments.length,
+      amenities: amenityCollection,
+      penaltiesCancellation,
+      priceBreakDown,
+      allLegsInfo,
+      combination: Array.isArray((offering as any)?.CombinabilityCode)
+        ? (offering as any).CombinabilityCode.map((value: unknown) => String(value)).join(" x ")
+        : "",
+    };
+
+    return {
+      unified,
+      sequence,
+      combinabilityCodes: Array.isArray((offering as any)?.CombinabilityCode)
+        ? (offering as any).CombinabilityCode.map((item: unknown) => String(item))
+        : [],
+    };
+    }
+  );
+
+  if (payloadSegments.length <= 1) {
+    return mappedOfferings
+      .map((item) => item.unified)
+      .sort((a, b) => toNumber((a as any)?.netFare, 0) - toNumber((b as any)?.netFare, 0));
+  }
+
+  const requiredSequences = Array.from(
+    { length: payloadSegments.length },
+    (_, idx) => idx + 1
+  );
+  const groupedByCode = new Map<string, Map<number, Array<Record<string, unknown>>>>();
+
+  for (const option of mappedOfferings) {
+    const combinationCodes =
+      option.combinabilityCodes.length > 0
+        ? option.combinabilityCodes
+        : ["__NO_COMBINABILITY__"];
+
+    for (const code of combinationCodes) {
+      if (!groupedByCode.has(code)) {
+        groupedByCode.set(code, new Map<number, Array<Record<string, unknown>>>());
+      }
+      const sequenceMap = groupedByCode.get(code)!;
+      if (!sequenceMap.has(option.sequence)) {
+        sequenceMap.set(option.sequence, []);
+      }
+      sequenceMap.get(option.sequence)!.push(option.unified);
+    }
+  }
+
+  const combinedOptions: Array<Record<string, unknown>> = [];
+
+  for (const [combinabilityCode, sequenceMap] of groupedByCode) {
+    const hasAllSequences = requiredSequences.every((seq) => sequenceMap.has(seq));
+    if (!hasAllSequences) {
+      continue;
+    }
+
+    const currentSelection: Array<Record<string, unknown>> = [];
+
+    const buildCombinations = (index: number) => {
+      if (index >= requiredSequences.length) {
+        const selectedLegs = [...currentSelection];
+        const firstLeg = selectedLegs[0] ?? {};
+        const primaryOfferIdentifier =
+          String(
+            (firstLeg as any)?.offerIdentifier ??
+              (firstLeg as any)?.OfferIdentifier ??
+              (firstLeg as any)?.identifier ??
+              ""
+          ).trim() || "";
+        const combinedProductIdentifiers = Array.from(
+          new Set(
+            selectedLegs.flatMap((item) => {
+              if (Array.isArray((item as any)?.productIdentifiers)) {
+                return (item as any).productIdentifiers
+                  .map((value: unknown) => String(value ?? "").trim())
+                  .filter(Boolean);
+              }
+              const nested = (item as any)?.farePolicyRequest;
+              if (nested && Array.isArray(nested.productIdentifiers)) {
+                return nested.productIdentifiers
+                  .map((value: unknown) => String(value ?? "").trim())
+                  .filter(Boolean);
+              }
+              return [];
+            })
+          )
+        );
+        const mergedLegs = selectedLegs.flatMap((item) =>
+          Array.isArray((item as any)?.allLegsInfo)
+            ? ((item as any).allLegsInfo as Array<Record<string, unknown>>)
+            : []
+        );
+        const mergedPenalties = selectedLegs.reduce<{
+          change: unknown[];
+          cancel: unknown[];
+        }>((acc, item) => {
+            const penalties = ((item as any)?.penaltiesCancellation ?? {}) as Record<
+              string,
+              unknown
+            >;
+            if (Array.isArray(penalties.change)) {
+              acc.change.push(...(penalties.change as unknown[]));
+            }
+            if (Array.isArray(penalties.cancel)) {
+              acc.cancel.push(...(penalties.cancel as unknown[]));
+            }
+            return acc;
+          },
+          { change: [] as unknown[], cancel: [] as unknown[] }
+        );
+
+        combinedOptions.push({
+          ...firstLeg,
+          identifier: selectedLegs
+            .map((item) => String((item as any)?.identifier ?? ""))
+            .filter(Boolean)
+            .join("_"),
+          offerIdentifier: primaryOfferIdentifier || null,
+          OfferIdentifier: primaryOfferIdentifier || null,
+          productIdentifiers: combinedProductIdentifiers,
+          farePolicyRequest: primaryOfferIdentifier
+            ? {
+                offerIdentifier: primaryOfferIdentifier,
+                offerListIdentifier:
+                  String((firstLeg as any)?.offerListIdentifier ?? "").trim() ||
+                  catalogProductOfferingsIdentifier,
+                productIdentifiers: combinedProductIdentifiers,
+              }
+            : null,
+          journeyType: "ROUND_TRIP",
+          tripType: "ROUND_TRIP",
+          allLegsInfo: mergedLegs,
+          totalSegments: mergedLegs.reduce((sum, leg) => {
+            const segments = Array.isArray((leg as any)?.segments)
+              ? ((leg as any).segments as unknown[])
+              : [];
+            return sum + segments.length;
+          }, 0),
+          penaltiesCancellation: mergedPenalties,
+          combination: combinabilityCode,
+        });
+        return;
+      }
+
+      const sequence = requiredSequences[index];
+      const sequenceItems = sequenceMap.get(sequence) ?? [];
+      for (const item of sequenceItems) {
+        currentSelection.push(item);
+        buildCombinations(index + 1);
+        currentSelection.pop();
+      }
+    };
+
+    buildCombinations(0);
+  }
+
+  const deduped = Array.from(
+    combinedOptions.reduce((map, item) => {
+      const key = String((item as any)?.identifier ?? "");
+      if (key && !map.has(key)) {
+        map.set(key, item);
+      }
+      return map;
+    }, new Map<string, Record<string, unknown>>()).values()
+  );
+
+  return deduped.sort((a, b) => {
+    const fareDiff =
+      toNumber((a as any)?.netFare, Number.MAX_SAFE_INTEGER) -
+      toNumber((b as any)?.netFare, Number.MAX_SAFE_INTEGER);
+    if (fareDiff !== 0) return fareDiff;
+
+    const durationA = ((a as any)?.allLegsInfo ?? []).reduce(
+      (sum: number, leg: Record<string, unknown>) =>
+        sum + parseDurationToMinutes((leg as any)?.totalDuration),
+      0
+    );
+    const durationB = ((b as any)?.allLegsInfo ?? []).reduce(
+      (sum: number, leg: Record<string, unknown>) =>
+        sum + parseDurationToMinutes((leg as any)?.totalDuration),
+      0
+    );
+    return durationA - durationB;
+  });
+}
+
+export function toLegacySearchResult(
+  payloadSegments: LegacySegment[],
+  rawResponse: unknown
+): unknown[] {
+  const data = removeAtType(rawResponse as Record<string, unknown>);
+
+  const catalogResponse =
+    (data as any)?.CatalogProductOfferingsResponse ??
+    (data as any)?.CatalogProductOfferingResponse;
+
+  const transactionId = catalogResponse?.transactionId || "";
+  const catalogProductOfferingsIdentifierRaw = String(
+    catalogResponse?.CatalogProductOfferings?.Identifier?.value ?? ""
+  ).trim();
+  const catalogProductOfferingsIdentifier = catalogProductOfferingsIdentifierRaw
+    ? /_PC$/i.test(catalogProductOfferingsIdentifierRaw)
+      ? catalogProductOfferingsIdentifierRaw
+      : `${catalogProductOfferingsIdentifierRaw}_PC`
+    : "";
+  const catalogOfferings = Array.isArray(
+    catalogResponse?.CatalogProductOfferings?.CatalogProductOffering
+  )
+    ? catalogResponse.CatalogProductOfferings.CatalogProductOffering
+    : [];
+  const referenceList = Array.isArray(catalogResponse?.ReferenceList)
+    ? catalogResponse.ReferenceList
+    : [];
+
+  const flights =
+    referenceList.find((item: any) => Array.isArray(item?.Flight))?.Flight ?? [];
+  const products =
+    referenceList.find((item: any) => Array.isArray(item?.Product))?.Product ??
+    [];
+  const termsList =
+    referenceList.find((item: any) => Array.isArray(item?.TermsAndConditions))
+      ?.TermsAndConditions ?? [];
+  const brands =
+    referenceList.find((item: any) => Array.isArray(item?.Brand))?.Brand ?? [];
+  const amenities =
+    referenceList.find((item: any) => Array.isArray(item?.Amenity))?.Amenity ?? [];
+  const universalProductAttributes =
+    referenceList.find((item: any) =>
+      Array.isArray(item?.UniversalProductAttribute)
+    )?.UniversalProductAttribute ?? [];
+
+  const flightMap = new Map<string, any>(flights.map((f: any) => [f.id, f]));
+  const productMap = new Map<string, any>(products.map((p: any) => [p.id, p]));
+  const termsMap = new Map<string, any>(
+    termsList.map((t: any) => [t.id, t as Record<string, unknown>])
+  );
+  const brandMap = new Map<string, any>(brands.map((brand: any) => [brand.id, brand]));
+  const amenityMap = new Map<string, any>(
+    amenities.map((amenity: any) => [amenity.id, amenity])
+  );
+  const universalProductAttributeMap = new Map<string, any>(
+    universalProductAttributes.map((attribute: any) => [attribute.id, attribute])
+  );
+
+  const productBrandOfferings: Array<{
+    offering: any;
+    sequence: number;
+    index: number;
+    catalogOfferingId: string;
+  }> = [];
+  for (const catalog of catalogOfferings) {
+    const sequence = toNumber(catalog?.sequence, 1);
+    const catalogOfferingId = String(catalog?.id ?? "").trim();
+    for (const brandOption of catalog?.ProductBrandOptions ?? []) {
+      for (const offering of brandOption?.ProductBrandOffering ?? []) {
+        productBrandOfferings.push({
+          offering,
+          sequence,
+          index: productBrandOfferings.length,
+          catalogOfferingId,
         });
       }
     }
   }
 
   const baseResults = productBrandOfferings.map(
-    ({ offering, sequence, index }: any) => {
+    ({ offering, sequence, index, catalogOfferingId }: any) => {
       const bestPrice = offering?.BestCombinablePrice ?? {};
       const termsRef = offering?.TermsAndConditions?.termsAndConditionsRef;
       const terms = termsMap.get(termsRef) ?? {};
-      const carrierCode =
-        terms?.ValidatingAirline?.ValidatingAirline ||
-        terms?.BaggageAllowance?.[0]?.validatingAirlineCode ||
-        "N/A";
+      const carrierCode = firstNonEmptyString(
+        resolveCarrierCodeFromTerms(terms),
+        "N/A"
+      );
 
       const penalties = Array.isArray(terms?.Penalties) ? terms.Penalties : [];
       const penaltiesCancellation = mapPenaltiesCancellationFromTerms(penalties);
@@ -902,16 +1678,34 @@ export function toLegacySearchResult(
           .filter(Boolean)
           .map((item: any) => toUniversalProductAttributeItem(item));
 
+        const marketingCarrierCode = firstNonEmptyString(flight?.carrier, carrierCode);
+        const operatingCarrierCode = firstNonEmptyString(
+          flight?.operatingCarrier,
+          marketingCarrierCode,
+          carrierCode
+        );
+        const marketingCarrierName = firstNonEmptyString(
+          flight?.carrierName,
+          flight?.marketingCarrierName,
+          operatingCarrierCode === marketingCarrierCode
+            ? flight?.operatingCarrierName
+            : "",
+          marketingCarrierCode
+        );
+        const operatingCarrierName = firstNonEmptyString(
+          flight?.operatingCarrierName,
+          flight?.carrierName,
+          operatingCarrierCode
+        );
+
         return {
-          MarketingCarrier: flight?.carrier ?? carrierCode,
-          MarketingCarrierName: flight?.carrier ?? carrierCode,
+          MarketingCarrier: marketingCarrierCode,
+          MarketingCarrierName: marketingCarrierName,
           MarketingFlightNumber: flight?.number ?? "N/A",
-          OperatingCarrier:
-            flight?.operatingCarrier ?? flight?.carrier ?? carrierCode,
+          OperatingCarrier: operatingCarrierCode,
           OperatingFlightNumber:
-            flight?.operatingCarrierName ?? flight?.number ?? "N/A",
-          OperatingCarrierName:
-            flight?.operatingCarrierName ?? flight?.carrier ?? carrierCode,
+            flight?.operatingCarrierNumber ?? flight?.number ?? "N/A",
+          OperatingCarrierName: operatingCarrierName,
           DepFrom: flight?.Departure?.location ?? "",
           DepAirPort: flight?.Departure?.location ?? "",
           DepLocation: flight?.Departure?.location ?? "",
@@ -922,7 +1716,7 @@ export function toLegacySearchResult(
           ArrLocation: flight?.Arrival?.location ?? "",
           ArrDateAdjustment: 0,
           ArrTime: formatDateTime(flight?.Arrival?.date, flight?.Arrival?.time),
-          OperatedBy: flight?.operatingCarrier ?? flight?.carrier ?? carrierCode,
+          OperatedBy: operatingCarrierCode,
           StopCount: flight?.stopCount ?? 0,
           Duration: parseDurationToMinutes(flight?.duration),
           DurationIso: flight?.duration ?? durationMinutesToIso(parseDurationToMinutes(flight?.duration)),
@@ -984,7 +1778,7 @@ export function toLegacySearchResult(
             PaxCount: toNumber(pax?.quantity, 1),
             Bag: [
               {
-                Airline: carrierCode,
+                Airline: resolvedCarrierCode,
                 Allowance: bagAllowance,
               },
             ],
@@ -997,6 +1791,16 @@ export function toLegacySearchResult(
         {}) as Partial<LegacySegment>;
       const firstMappedSegment = mappedSegments[0];
       const lastMappedSegment = mappedSegments[mappedSegments.length - 1];
+      const resolvedCarrierCode = firstNonEmptyString(
+        carrierCode,
+        firstMappedSegment?.MarketingCarrier,
+        firstMappedSegment?.OperatingCarrier,
+        "N/A"
+      );
+      const resolvedCarrierName = resolveCarrierNameFromSegments(
+        mappedSegments as Array<Record<string, unknown>>,
+        resolvedCarrierCode
+      );
 
       const allLegsInfo = [
         {
@@ -1018,7 +1822,14 @@ export function toLegacySearchResult(
       ];
 
       const grossFare = toNumber(bestPrice?.TotalPrice, 0);
+      const mappedProductIdentifiers = Array.isArray(offering?.Product)
+        ? offering.Product
+            .map((item: any) => String(item?.productRef ?? item?.id ?? "").trim())
+            .filter(Boolean)
+        : [];
       const resultId =
+        String(catalogOfferingId ?? "").trim() ||
+        String(offering?.id ?? "").trim() ||
         offering?.Identifier?.value ||
         `${transactionId || "TP"}-${sequence}-${String(index + 1).padStart(
           3,
@@ -1034,8 +1845,8 @@ export function toLegacySearchResult(
           IsBookable: true,
           TripType: payloadSegments.length === 1 ? "Oneway" : "Return",
           FareType: firstFlightProduct?.fareType || "NET",
-          Carrier: carrierCode,
-          CarrierName: carrierCode,
+          Carrier: resolvedCarrierCode,
+          CarrierName: resolvedCarrierName,
           CurrencyCode:
             bestPrice?.CurrencyCode?.value ||
             bestPrice?.CurrencyCode ||
@@ -1054,6 +1865,15 @@ export function toLegacySearchResult(
           ExtraService: null,
           PriceBreakDown: priceBreakDown,
           AllLegsInfo: allLegsInfo,
+          offerIdentifier: resultId,
+          OfferIdentifier: resultId,
+          offerListIdentifier: catalogProductOfferingsIdentifier,
+          productIdentifiers: mappedProductIdentifiers,
+          farePolicyRequest: {
+            offerIdentifier: resultId,
+            offerListIdentifier: catalogProductOfferingsIdentifier,
+            productIdentifiers: mappedProductIdentifiers,
+          },
         },
         sequence,
         combinabilityCodes: Array.isArray(offering?.CombinabilityCode)
@@ -1161,9 +1981,24 @@ export function toLegacySearchResult(
   });
 }
 
-async function loadSampleLegacyFallback(
+async function loadSampleUnifiedFallback(
   payloadSegments: LegacySegment[]
 ): Promise<{ source: string; results: unknown[] } | null> {
+  const isRoundTripRequest = payloadSegments.length > 1;
+  const filterByRequestedTripType = (
+    items: Array<Record<string, unknown>>
+  ): Array<Record<string, unknown>> => {
+    if (!isRoundTripRequest) {
+      return items;
+    }
+
+    return items.filter((item) => {
+      const tripType = normalizeTripType(item?.tripType ?? item?.journeyType);
+      const legs = Array.isArray(item?.allLegsInfo) ? item.allLegsInfo : [];
+      return tripType === "ROUND_TRIP" || legs.length > 1;
+    });
+  };
+
   const candidateRawFiles = ["roundtripdata.json", "flightsearchresponse.json"];
 
   for (const filename of candidateRawFiles) {
@@ -1172,59 +2007,87 @@ async function loadSampleLegacyFallback(
       continue;
     }
 
-    const mapped = toLegacySearchResult(payloadSegments, rawSample);
-    if (Array.isArray(mapped) && mapped.length > 0) {
-      return { source: `sample/${filename}`, results: mapped };
+    const mapped = toUnifiedSearchResult(payloadSegments, rawSample).filter(
+      (item): item is Record<string, unknown> =>
+        Boolean(item) && typeof item === "object"
+    );
+    const filtered = filterByRequestedTripType(mapped);
+    if (filtered.length > 0) {
+      return { source: `sample/${filename}`, results: filtered };
     }
   }
 
-  const legacySample = await readSampleJson<unknown>("flightResponseLegacyModel.json");
-  if (Array.isArray(legacySample) && legacySample.length > 0) {
-    return { source: "sample/flightResponseLegacyModel.json", results: legacySample };
-  }
-
-  if (legacySample && typeof legacySample === "object") {
-    const legacyObject = legacySample as Record<string, unknown>;
-    if (Object.keys(legacyObject).length > 0) {
-      return {
-        source: "sample/flightResponseLegacyModel.json",
-        results: [legacyObject],
-      };
+  const latestUnifiedList = await readSampleJson<Record<string, unknown>[]>(
+    "LatestUnifiedModel.json"
+  );
+  if (Array.isArray(latestUnifiedList) && latestUnifiedList.length > 0) {
+    const filtered = filterByRequestedTripType(
+      latestUnifiedList.filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object"
+      )
+    );
+    if (filtered.length > 0) {
+      return { source: "sample/LatestUnifiedModel.json", results: filtered };
     }
   }
 
-  const unifiedListSample = await readSampleJson<unknown[]>(
+  const unifiedListSample = await readSampleJson<Record<string, unknown>[]>(
     "flightResponseUnifiedModelList.json"
   );
   if (Array.isArray(unifiedListSample) && unifiedListSample.length > 0) {
-    const legacyFromUnified = unifiedListSample
-      .map((item) =>
-        item && typeof item === "object"
-          ? (item as Record<string, unknown>).sourceLegacy
-          : null
-      )
-      .filter(
+    const filtered = filterByRequestedTripType(
+      unifiedListSample.filter(
         (item): item is Record<string, unknown> =>
           Boolean(item) && typeof item === "object"
-      );
-
-    if (legacyFromUnified.length > 0) {
+      )
+    );
+    if (filtered.length > 0) {
       return {
         source: "sample/flightResponseUnifiedModelList.json",
-        results: legacyFromUnified,
+        results: filtered,
       };
     }
   }
 
   const unifiedSingleSample = await readSampleJson<unknown>("flightResponseUnifiedModel.json");
   if (unifiedSingleSample && typeof unifiedSingleSample === "object") {
-    const sourceLegacy = (unifiedSingleSample as Record<string, unknown>).sourceLegacy;
-    if (sourceLegacy && typeof sourceLegacy === "object") {
+    const single = unifiedSingleSample as Record<string, unknown>;
+    const filtered = filterByRequestedTripType([single]);
+    if (filtered.length > 0) {
       return {
         source: "sample/flightResponseUnifiedModel.json",
-        results: [sourceLegacy as Record<string, unknown>],
+        results: filtered,
       };
     }
+  }
+
+  const legacyListSample = await readSampleJson<unknown[]>(
+    "flightResponseLegacyModel.json"
+  );
+  if (Array.isArray(legacyListSample) && legacyListSample.length > 0) {
+    const converted = legacyListSample
+      .filter(
+        (item): item is Record<string, unknown> =>
+          Boolean(item) && typeof item === "object"
+      )
+      .slice(0, 300)
+      .map((item) => toUnifiedFlightResult(item))
+      .filter(Boolean) as Array<Record<string, unknown>>;
+    const filtered = filterByRequestedTripType(converted);
+    if (filtered.length > 0) {
+      return {
+        source: "sample/flightResponseLegacyModel.json",
+        results: filtered,
+      };
+    }
+  }
+
+  if (!isRoundTripRequest && unifiedSingleSample && typeof unifiedSingleSample === "object") {
+    return {
+      source: "sample/flightResponseUnifiedModel.json",
+      results: [unifiedSingleSample as Record<string, unknown>],
+    };
   }
 
   return null;
@@ -1257,7 +2120,7 @@ export default async function handler(
     let responsePayload: Record<string, unknown> = {};
     let liveSearchFailed = false;
     let liveSearchErrorMessage = "";
-    let results: unknown[] = [];
+    let unifiedResults: Record<string, unknown>[] = [];
     let fallbackSource: string | null = null;
 
     try {
@@ -1277,7 +2140,7 @@ export default async function handler(
 
       responsePayload = await response.json().catch(() => ({}));
       if (response.ok) {
-        results = toLegacySearchResult(payloadSegments, responsePayload);
+        unifiedResults = toUnifiedSearchResult(payloadSegments, responsePayload);
       } else {
         liveSearchFailed = true;
         liveSearchErrorMessage =
@@ -1293,10 +2156,10 @@ export default async function handler(
           : "Travelport flight search failed";
     }
 
-    if (!Array.isArray(results) || results.length === 0) {
-      const fallback = await loadSampleLegacyFallback(payloadSegments);
+    if (!Array.isArray(unifiedResults) || unifiedResults.length === 0) {
+      const fallback = await loadSampleUnifiedFallback(payloadSegments);
       if (fallback && fallback.results.length > 0) {
-        results = fallback.results;
+        unifiedResults = fallback.results as Record<string, unknown>[];
         fallbackSource = fallback.source;
         console.warn(
           `[search-flight] Returned sample fallback data from ${fallback.source}`
@@ -1304,7 +2167,18 @@ export default async function handler(
       }
     }
 
-    if (!Array.isArray(results) || results.length === 0) {
+    if (payloadSegments.length > 1) {
+      const roundTripOnly = unifiedResults.filter((item) => {
+        const tripType = normalizeTripType(item?.tripType ?? item?.journeyType);
+        const allLegsInfo = Array.isArray(item?.allLegsInfo) ? item.allLegsInfo : [];
+        return tripType === "ROUND_TRIP" || allLegsInfo.length > 1;
+      });
+      if (roundTripOnly.length > 0) {
+        unifiedResults = roundTripOnly;
+      }
+    }
+
+    if (!Array.isArray(unifiedResults) || unifiedResults.length === 0) {
       if (liveSearchFailed) {
         return res.status(502).json({
           message: "Travelport flight search failed",
@@ -1317,21 +2191,16 @@ export default async function handler(
       return res.status(200).json([]);
     }
 
-    const unifiedResults = results.map((item: unknown) =>
-      toUnifiedFlightResult(item as Record<string, unknown>)
-    );
-
     if (
       shouldSaveSearchResponse(body) &&
       !fallbackSource &&
-      Array.isArray(results) &&
-      results.length > 0
+      Array.isArray(unifiedResults) &&
+      unifiedResults.length > 0
     ) {
       try {
         await persistSearchResponseSamples({
           requestPayload: request as Record<string, unknown>,
           travelportRawResponse: responsePayload as Record<string, unknown>,
-          legacyResults: results as Record<string, unknown>[],
           unifiedResults: unifiedResults as Record<string, unknown>[],
         });
       } catch (persistError) {
@@ -1339,26 +2208,18 @@ export default async function handler(
       }
     }
 
-    const responseModel = String(body.responseModel ?? "legacy")
+    const responseModel = String(body.responseModel ?? "unified")
       .toLowerCase()
       .trim();
 
-    if (responseModel === "unified") {
-      return res.status(200).json(unifiedResults);
-    }
-
-    if (responseModel === "both") {
-      const bothModels = results.map((item: unknown) => {
-        const legacy = item as Record<string, unknown>;
-        return {
-          legacy,
-          unified: toUnifiedFlightResult(legacy),
-        };
+    if (responseModel && responseModel !== "unified") {
+      return res.status(400).json({
+        message:
+          "Legacy and mixed response models are removed. Use responseModel='unified' or omit the field.",
       });
-      return res.status(200).json(bothModels);
     }
 
-    return res.status(200).json(results);
+    return res.status(200).json(unifiedResults);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unexpected server error";
     return res.status(500).json({ message });

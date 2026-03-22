@@ -40,9 +40,11 @@ const Banner = ({ data, onTabChange }) => {
   const [type, setType] = useState("flight");
 
   const [fromSearchText, setFromSearchText] = useState(
-    "Hazrat Shahjalal Intl Airport(DAC)"
+    "Dubai Intl Airport (DXB)"
   );
-  const [toSearchText, setToSearchText] = useState("Cox's Bazar Airport(CXB)");
+  const [toSearchText, setToSearchText] = useState(
+    "John F Kennedy Intl (JFK)"
+  );
 
   const [departureDate, setDepartureDate] = useState(
     format(addDays(new Date(), 1), "dd MMM yy")
@@ -63,10 +65,10 @@ const Banner = ({ data, onTabChange }) => {
   const [from, setFrom] = useState(addDays(now.current, 1));
   const [to, setTo] = useState(addDays(now.current, 3));
 
-  const [faddress, setfaddress] = useState("Dhaka,BANGLADESH");
-  const [toAddress, setToAddress] = useState("Cox's Bazar,Bangladesh");
-  const [fromSendData, setFromSendData] = useState("DAC");
-  const [toSendData, setToSendData] = useState("CXB");
+  const [faddress, setfaddress] = useState("Dubai,UNITED ARAB EMIRATES");
+  const [toAddress, setToAddress] = useState("New York,UNITED STATES");
+  const [fromSendData, setFromSendData] = useState("DXB");
+  const [toSendData, setToSendData] = useState("JFK");
   const [adultCount, setAdultCount] = useState(1);
   const [childCount, setChildCount] = useState(0);
   const [infant, setInfant] = useState(0);
@@ -104,8 +106,8 @@ const Banner = ({ data, onTabChange }) => {
         openFrom: false,
         DepFrom: toSendData.trim(),
         depFromText: toSearchText,
-        ArrTo: "DXB",
-        arrToText: "Dubai Intl Airport (DXB)",
+        ArrTo: fromSendData.trim(),
+        arrToText: fromSearchText,
         openTo: false,
         Date: new Date().toLocaleDateString("sv"),
         openDate: false,
@@ -162,8 +164,8 @@ const Banner = ({ data, onTabChange }) => {
     setInfant(Math.max(0, Number(item.infantCount || 0)));
     setClassName(String(item.cabinClass || "1"));
 
-    setFromSendData(String(firstSegment.depfrom || item.fromCode || "DAC"));
-    setToSendData(String(lastSegment.arrto || item.toCode || "CXB"));
+    setFromSendData(String(firstSegment.depfrom || item.fromCode || "DXB"));
+    setToSendData(String(lastSegment.arrto || item.toCode || "JFK"));
 
     setFromSearchText(
       String(item.fromLabel || firstSegment.depFromText || firstSegment.depfrom || "")
@@ -755,8 +757,8 @@ const Banner = ({ data, onTabChange }) => {
                               gap: 0.6,
                             }}
                           >
-                            {String(item?.fromCode || "DAC")} to{" "}
-                            {String(item?.toCode || "CXB")}
+                            {String(item?.fromCode || "DXB")} to{" "}
+                            {String(item?.toCode || "JFK")}
                             <ArrowOutwardRoundedIcon sx={{ fontSize: "18px" }} />
                           </Typography>
                           <Box

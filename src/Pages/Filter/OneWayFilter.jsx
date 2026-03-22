@@ -158,6 +158,15 @@ const OneWayFilter = ({
   let arr = [];
 
   const convertWeight = (initialFetchData) => {
+    const rawValue = String(initialFetchData ?? "").trim();
+    if (!rawValue) {
+      return "0";
+    }
+    const normalizedValue = rawValue.toLowerCase().replace(/\s+/g, " ");
+    if (normalizedValue.includes("baggage charges data not available")) {
+      return "0";
+    }
+
     const mappings = {
       "1P": "23Kg",
       "2P": "46Kg",
@@ -165,10 +174,8 @@ const OneWayFilter = ({
       "2 N": "46 Kg",
     };
     return (
-      mappings[initialFetchData] ||
-      (initialFetchData.endsWith("Kg")
-        ? initialFetchData
-        : initialFetchData.replace("K", "Kg"))
+      mappings[rawValue] ||
+      (rawValue.endsWith("Kg") ? rawValue : rawValue.replace("K", "Kg"))
     );
   };
   let flightprice = initialFetchData;

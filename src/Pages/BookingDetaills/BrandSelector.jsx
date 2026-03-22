@@ -5,6 +5,7 @@ import {
   getCurrencySymbol,
   getFlightCurrencyCode,
 } from "../../utils/flightPolicyUtils";
+import { getFareOptionKey } from "../../utils/fareOptionKey";
 
 const getBrandName = (option) =>
   option?.AllLegsInfo?.[0]?.BrandName ||
@@ -14,12 +15,6 @@ const getBrandName = (option) =>
   option?.FareType ||
   option?.fareType ||
   "Standard";
-
-const getFareOptionKey = (option, index = 0) =>
-  String(
-    option?.ResultId ||
-      `${option?.SearchId || "search"}-${option?.NetFare || option?.netFare || 0}-${index}`
-  );
 
 const BrandSelector = ({ loading, options = [], selectedKey = "", onSelect }) => {
   if (loading) {

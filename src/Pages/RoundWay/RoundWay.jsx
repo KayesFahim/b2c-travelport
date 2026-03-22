@@ -645,7 +645,31 @@ const RoundWay = ({
       onSearchCommitted();
     }
 
-    navigate("/roundwaysearchresult", {
+    const nextSegments = [
+      {
+        depfrom: fromSendData,
+        arrto: toSendData,
+        depdate: departureDateIso,
+        depFromText: fromSearchText,
+        arrToText: toSearchText,
+      },
+      {
+        depfrom: toSendData,
+        arrto: fromSendData,
+        depdate: returnDateIso,
+        depFromText: toSearchText,
+        arrToText: fromSearchText,
+      },
+    ];
+    const nextSearchData =
+      searchData && typeof searchData === "object"
+        ? {
+            ...searchData,
+            segments: nextSegments,
+          }
+        : { segments: nextSegments };
+
+    navigate("/offers", {
       state: {
         faddress,
         toAddress,
@@ -663,8 +687,8 @@ const RoundWay = ({
         result,
         valueBox,
         changeState,
-        searchData,
-        segments,
+        searchData: nextSearchData,
+        segments: nextSegments,
         value,
       },
     });

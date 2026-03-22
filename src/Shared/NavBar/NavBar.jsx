@@ -489,6 +489,7 @@ const NavBar = () => {
     "/hotel",
     "/terms",
     "/privacypolicy",
+    "/selectedflightdetails",
     "/bookingdetails",
     "/OtpVerification",
     "/paymentsuccess",
@@ -509,8 +510,11 @@ const NavBar = () => {
     "/tourdetails",
   ]);
   const searchResultPaths = new Set([
+    "/offers",
+    "/flightsresult",
     "/onewaysearchresult",
     "/roundwaysearchresult",
+    "/roundsearchresult",
     "/multicitysearchresult",
   ]);
   const isDarkHeader =

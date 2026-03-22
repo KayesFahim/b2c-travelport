@@ -6,6 +6,37 @@ const LEGACY_PREBOOKING_PATHS = [
   "/flights/api2/fareRules",
 ];
 
+function normalizeIdentifier(value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = normalizeIdentifier(item);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    return (
+      normalizeIdentifier(value.value) ||
+      normalizeIdentifier(value.Value) ||
+      normalizeIdentifier(value.id) ||
+      normalizeIdentifier(value.ID) ||
+      normalizeIdentifier(value.code) ||
+      normalizeIdentifier(value.Code) ||
+      normalizeIdentifier(value.offerIdentifier) ||
+      normalizeIdentifier(value.OfferIdentifier) ||
+      normalizeIdentifier(value.identifier) ||
+      normalizeIdentifier(value.Identifier) ||
+      ""
+    );
+  }
+  return "";
+}
+
 function joinBaseAndPath(baseUrl, path) {
   const base = String(baseUrl || "").trim();
   if (!base) {
@@ -94,16 +125,29 @@ export async function fetchTravelportFarePolicy({
   searchId,
   resultId,
   offerIdentifier,
+  offerListIdentifier,
+  productIdentifiers,
   fareRuleType = "Structured",
   token,
 }) {
   const urls = getCandidateFarePolicyUrls();
   let lastError = new Error("Travelport fare policy route is not reachable");
 
+  const normalizedResultId = normalizeIdentifier(resultId);
+  const normalizedOfferIdentifier = normalizeIdentifier(offerIdentifier);
+  const normalizedOfferListIdentifier = normalizeIdentifier(offerListIdentifier);
+  const normalizedProductIdentifiers = Array.isArray(productIdentifiers)
+    ? productIdentifiers
+        .map((item) => normalizeIdentifier(item))
+        .filter(Boolean)
+    : [];
+
   const payload = {
     SearchId: searchId,
-    ResultId: resultId,
-    offerIdentifier: offerIdentifier || resultId,
+    ResultId: normalizedResultId,
+    offerIdentifier: normalizedOfferIdentifier || normalizedResultId,
+    offerListIdentifier: normalizedOfferListIdentifier,
+    productIdentifiers: normalizedProductIdentifiers,
     fareRuleType,
   };
 
@@ -140,4 +184,49 @@ export async function fetchTravelportFarePolicy({
   }
 
   throw lastError;
+}
+
+function hasMeaningfulFarePolicy(payload) {
+  const fareRules = Array.isArray(payload?.fareRules) ? payload.fareRules : [];
+  const penalties = payload?.penaltiesCancellation || {};
+  const change = Array.isArray(penalties?.change) ? penalties.change : [];
+  const cancel = Array.isArray(penalties?.cancel) ? penalties.cancel : [];
+  return fareRules.length > 0 || change.length > 0 || cancel.length > 0;
+}
+
+export async function fetchTravelportFarePolicyWithFallback({
+  fareRuleTypes = ["LongText", "ShortText", "Structured"],
+  ...params
+}) {
+  const orderedTypes = Array.isArray(fareRuleTypes)
+    ? fareRuleTypes.map((item) => String(item || "").trim()).filter(Boolean)
+    : ["LongText", "ShortText", "Structured"];
+
+  const uniqueTypes = Array.from(new Set(orderedTypes));
+  if (!uniqueTypes.length) {
+    uniqueTypes.push("LongText", "ShortText", "Structured");
+  }
+
+  let lastError = null;
+
+  for (let index = 0; index < uniqueTypes.length; index += 1) {
+    const fareRuleType = uniqueTypes[index];
+    try {
+      const payload = await fetchTravelportFarePolicy({
+        ...params,
+        fareRuleType,
+      });
+
+      if (
+        hasMeaningfulFarePolicy(payload) ||
+        index === uniqueTypes.length - 1
+      ) {
+        return payload;
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Fare policy request failed");
+    }
+  }
+
+  throw lastError || new Error("Fare policy not available");
 }

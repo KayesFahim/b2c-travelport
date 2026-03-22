@@ -2,7 +2,9 @@ import { Box, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import { Tabs, Tab } from "@mui/material";
 import { normalizeFareRulesPayload } from "../../utils/flightPolicyUtils";
-import { fetchTravelportFarePolicy } from "../../utils/travelportFarePolicy";
+import {
+  fetchTravelportFarePolicyWithFallback,
+} from "../../utils/travelportFarePolicy";
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -119,11 +121,11 @@ const FarePolicy = ({ searchId, resultId }) => {
       setErrorMessage("");
 
       try {
-        const payload = await fetchTravelportFarePolicy({
+        const payload = await fetchTravelportFarePolicyWithFallback({
           searchId,
           resultId,
           offerIdentifier: resultId,
-          fareRuleType: "Structured",
+          fareRuleTypes: ["LongText", "ShortText", "Structured"],
         });
 
         const normalized = normalizeRulesForUI(
@@ -166,11 +168,26 @@ const FarePolicy = ({ searchId, resultId }) => {
   }
 
   return (
-    <Box sx={{ width: "100%" }}>
-      <Tabs value={tabIndex} onChange={handleChange} aria-label="fare rules tabs">
+    <Box sx={{ width: "100%", maxWidth: "100%", overflowX: "hidden" }}>
+      <Tabs
+        value={tabIndex}
+        onChange={handleChange}
+        aria-label="fare rules tabs"
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{
+          maxWidth: "100%",
+          "& .MuiTab-root": {
+            minHeight: "34px",
+            textTransform: "capitalize",
+            fontSize: "12px",
+          },
+        }}
+      >
         {fareRules.map((rule, index) => (
           <Tab
-            style={{ fontSize: "13px", textTransform: "capitalize" }}
+            style={{ textTransform: "capitalize" }}
             key={`${rule.route}-${index}`}
             label={rule.route || `Rule ${index + 1}`}
           />
@@ -210,10 +227,11 @@ const FarePolicy = ({ searchId, resultId }) => {
                       {info.category}
                     </Typography>
                     <Typography
-                      style={{
+                      sx={{
                         fontSize: "12px",
                         textTransform: "capitalize",
                         color: "gray",
+                        overflowWrap: "anywhere",
                       }}
                       dangerouslySetInnerHTML={{ __html: info.info }}
                     />

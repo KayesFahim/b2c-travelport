@@ -35,7 +35,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import secureLocalStorage from "react-secure-storage";
 import { calculateTransitTime } from "../../Pages/common/funcation";
-import ShowDetails from "../ShowDetails/ShowDetails";
+import ShowDetails from "../ShowDetails/FlightDetails";
 import { config } from "../../config";
 const isMobile = window.innerWidth <= 768;
 const Transition = React.forwardRef(function Transition(props, ref) {
@@ -73,6 +73,15 @@ const SingleOnewayFlight = ({ data, className }) => {
   };
 
   const convertWeight = (data) => {
+    const rawValue = String(data ?? "").trim();
+    if (!rawValue) {
+      return "0";
+    }
+    const normalizedValue = rawValue.toLowerCase().replace(/\s+/g, " ");
+    if (normalizedValue.includes("baggage charges data not available")) {
+      return "0";
+    }
+
     const mappings = {
       "1P": "23Kg",
       "2P": "46Kg",
@@ -80,12 +89,13 @@ const SingleOnewayFlight = ({ data, className }) => {
       "2 N": "46 Kg",
     };
     return (
-      mappings[data] || (data.endsWith("Kg") ? data : data.replace("K", "Kg"))
+      mappings[rawValue] ||
+      (rawValue.endsWith("Kg") ? rawValue : rawValue.replace("K", "Kg"))
     );
   };
 
   // const handleBooking = (data) => {
-  //   navigate("/bookingdetails", { state: data });
+  //   navigate("/selectedflightdetails", { state: data });
 
   //   // if (!token) {
   //   //   Swal.fire({
@@ -105,8 +115,25 @@ const SingleOnewayFlight = ({ data, className }) => {
   //   //   });
   //   // }
   // };
-  const handleBooking = (data) => {
-    navigate("/bookingdetails", { state: data });
+  const handleBooking = (selectedOffer) => {
+    const bookingState = {
+      selectedOffer: selectedOffer || data || {},
+      source: "search-results",
+      selectedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          "flyjatt:selected_offer",
+          JSON.stringify(bookingState)
+        );
+      }
+    } catch (storageError) {
+      console.warn("Unable to cache selected offer for booking flow", storageError);
+    }
+
+    navigate("/selectedflightdetails", { state: bookingState });
   };
 
   const location = useLocation();
@@ -195,7 +222,13 @@ const SingleOnewayFlight = ({ data, className }) => {
           title: "Success",
           text: datas.message || "User signed in successfully!",
         }).then(() => {
-          navigate("/bookingdetails", { state: data });
+          navigate("/selectedflightdetails", {
+            state: {
+              selectedOffer: data || {},
+              source: "search-results",
+              selectedAt: new Date().toISOString(),
+            },
+          });
         });
       } else {
         // Display dynamic error message
@@ -971,7 +1004,7 @@ const SingleOnewayFlight = ({ data, className }) => {
 
               <Box
                 sx={{
-                  textAlign: "right",
+                  textAlign: "center",
                   display: {
                     xs: "none",
                     sm: "none",
@@ -1019,7 +1052,7 @@ const SingleOnewayFlight = ({ data, className }) => {
                     md: "block",
                     lg: "block",
                   },
-                  textAlign: "right",
+                  textAlign: "center",
                 }}
               >
                 <Button
@@ -1028,8 +1061,8 @@ const SingleOnewayFlight = ({ data, className }) => {
                     bgcolor: "var(--primary-button)",
                     color: "var(--white)",
                     width: {
-                      xs: "100px",
-                      sm: "80px",
+                      xs: "105px",
+                      sm: "84px",
                       // md: "100%",
                       // lg: "100%",
                     },
@@ -1037,9 +1070,14 @@ const SingleOnewayFlight = ({ data, className }) => {
                       bgcolor: "var(--primary-button)",
                       color: "var(--white)",
                     },
-                    py: 0.3,
+                    py: 0.33,
+                    minHeight: "34px",
                     textTransform: "capitalize",
                     fontSize: "12px",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    lineHeight: 1.2,
                   }}
                 >
                   Book Now

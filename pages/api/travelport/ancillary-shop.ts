@@ -1,0 +1,364 @@
+import type { NextApiRequest, NextApiResponse } from "next";
+import { getTravelportAccessToken } from "./_token-cache";
+
+type AncillaryShopBody = {
+  CatalogOfferingsQueryAncillaries?: unknown;
+  ancillaryRequest?: {
+    offerListIdentifier?: unknown;
+    offerIdentifier?: unknown;
+    productIdentifiers?: unknown;
+    reservationId?: unknown;
+    mode?: unknown;
+  };
+  offerListIdentifier?: unknown;
+  OfferListIdentifier?: unknown;
+  offerIdentifier?: unknown;
+  OfferIdentifier?: unknown;
+  productIdentifiers?: unknown;
+  ProductIdentifiers?: unknown;
+  productIdentifier?: unknown;
+  ProductIdentifier?: unknown;
+  reservationId?: unknown;
+  ReservationId?: unknown;
+  mode?: unknown;
+};
+
+type ErrorResponse = {
+  message: string;
+  details?: string;
+};
+
+function getRequiredEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || value.trim().length === 0) {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
+
+function getValueByKeys(
+  obj: Record<string, unknown> | null | undefined,
+  keys: string[]
+): unknown {
+  if (!obj || typeof obj !== "object") return undefined;
+  for (const key of keys) {
+    const value = (obj as Record<string, unknown>)[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return undefined;
+}
+
+function normalizeIdentifier(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const normalized = normalizeIdentifier(item);
+      if (normalized) return normalized;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    const source = value as Record<string, unknown>;
+    return (
+      normalizeIdentifier(source.value) ||
+      normalizeIdentifier(source.Value) ||
+      normalizeIdentifier(source.id) ||
+      normalizeIdentifier(source.ID) ||
+      normalizeIdentifier(source.identifier) ||
+      normalizeIdentifier(source.Identifier) ||
+      normalizeIdentifier(source.offerIdentifier) ||
+      normalizeIdentifier(source.OfferIdentifier) ||
+      ""
+    );
+  }
+  return "";
+}
+
+function normalizeIdentifierList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return Array.from(
+      new Set(
+        value
+          .map((item) => normalizeIdentifier(item))
+          .filter((item) => item.length > 0)
+      )
+    );
+  }
+  const single = normalizeIdentifier(value);
+  return single ? [single] : [];
+}
+
+type AncillaryShopMode = "offerList" | "offer" | "reservationWorkbench";
+
+function resolveAncillaryInput(body: AncillaryShopBody) {
+  const source =
+    body?.ancillaryRequest && typeof body.ancillaryRequest === "object"
+      ? (body.ancillaryRequest as Record<string, unknown>)
+      : (body as Record<string, unknown>);
+
+  const offerListIdentifier = normalizeIdentifier(
+    getValueByKeys(source, ["offerListIdentifier", "OfferListIdentifier"])
+  );
+  const offerIdentifier = normalizeIdentifier(
+    getValueByKeys(source, [
+      "offerIdentifier",
+      "OfferIdentifier",
+      "Identifier",
+      "identifier",
+      "ResultId",
+    ])
+  );
+  const productIdentifiers = normalizeIdentifierList(
+    getValueByKeys(source, [
+      "productIdentifiers",
+      "ProductIdentifiers",
+      "productIdentifier",
+      "ProductIdentifier",
+    ])
+  );
+  const reservationId = normalizeIdentifier(
+    getValueByKeys(source, ["reservationId", "ReservationId"])
+  );
+  const modeText = normalizeIdentifier(getValueByKeys(source, ["mode", "Mode"])).toLowerCase();
+  const mode: AncillaryShopMode =
+    modeText === "offer"
+      ? "offer"
+      : modeText === "reservationworkbench" || modeText === "reservation_workbench"
+        ? "reservationWorkbench"
+        : "offerList";
+
+  return {
+    offerListIdentifier,
+    offerIdentifier,
+    productIdentifiers,
+    reservationId,
+    mode,
+  };
+}
+
+function resolveDirectModeFromPayload(
+  body: Record<string, unknown>
+): AncillaryShopMode | null {
+  const root =
+    body?.CatalogOfferingsQueryAncillaries &&
+    typeof body.CatalogOfferingsQueryAncillaries === "object"
+      ? (body.CatalogOfferingsQueryAncillaries as Record<string, unknown>)
+      : null;
+  if (!root) return null;
+  const ancillaryOfferings =
+    root?.AncillaryOfferings && typeof root.AncillaryOfferings === "object"
+      ? (root.AncillaryOfferings as Record<string, unknown>)
+      : null;
+  if (!ancillaryOfferings) return null;
+  const typeText = normalizeIdentifier(
+    getValueByKeys(ancillaryOfferings, ["@type", "type"])
+  ).toLowerCase();
+  if (typeText.includes("buildfromreservationworkbench")) {
+    return "reservationWorkbench";
+  }
+  if (typeText.includes("buildfromofferlist")) {
+    return "offerList";
+  }
+  if (typeText.includes("buildfromoffer")) {
+    return "offer";
+  }
+  return null;
+}
+
+function resolveAncillaryShopUrl(version: string): string {
+  const directUrl = process.env.TRAVELPORT_ANCILLARY_SHOP_URL || "";
+  if (directUrl.trim()) {
+    return directUrl.trim();
+  }
+
+  const baseUrl = process.env.TRAVELPORT_BASE_URL || "https://api.pp.travelport.net";
+  const normalizedBase = baseUrl.replace(/\/+$/, "");
+
+  if (/\/\d+$/.test(normalizedBase)) {
+    return `${normalizedBase}/air/search/ancillaryshop/catalogofferingsancillaries`;
+  }
+
+  return `${normalizedBase}/${version}/air/search/ancillaryshop/catalogofferingsancillaries`;
+}
+
+async function createToken(): Promise<string> {
+  return getTravelportAccessToken();
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<Record<string, unknown> | ErrorResponse>
+) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return res.status(405).json({ message: "Method not allowed" });
+  }
+
+  try {
+    const body = (req.body || {}) as AncillaryShopBody;
+    const bodyObj =
+      body && typeof body === "object" ? (body as Record<string, unknown>) : {};
+    const directMode = resolveDirectModeFromPayload(bodyObj);
+    const { offerListIdentifier, offerIdentifier, productIdentifiers, reservationId, mode } =
+      resolveAncillaryInput(body);
+    const gdsOnly =
+      String(process.env.TRAVELPORT_GDS_ONLY || "").toLowerCase() === "true";
+    const effectiveMode: AncillaryShopMode =
+      gdsOnly && mode !== "reservationWorkbench" ? "offerList" : mode;
+
+    const explicitReservationMode = effectiveMode === "reservationWorkbench";
+    const explicitOfferMode = effectiveMode === "offer";
+    const explicitOfferListMode = effectiveMode === "offerList";
+
+    if (explicitReservationMode && !reservationId) {
+      return res.status(400).json({
+        message: "reservationId is required for reservationWorkbench mode",
+      });
+    }
+
+    const looksLikeOfferRowId = /^o\d+$/i.test(offerIdentifier);
+    const buildFromOfferIdentifierValue =
+      !looksLikeOfferRowId && offerIdentifier ? offerIdentifier : offerListIdentifier;
+    const canUseBuildFromOffer =
+      buildFromOfferIdentifierValue.length > 0 && productIdentifiers.length > 0;
+    const canUseBuildFromOfferList = offerListIdentifier.length > 0 && offerIdentifier.length > 0;
+
+    let requestPayload: Record<string, unknown> | null = null;
+    let resolvedMode: AncillaryShopMode | null = null;
+
+    if (directMode) {
+      requestPayload = bodyObj;
+      resolvedMode = directMode;
+    }
+
+    if (
+      !requestPayload &&
+      (explicitReservationMode || (!explicitOfferMode && !explicitOfferListMode && reservationId))
+    ) {
+      if (!reservationId) {
+        return res.status(400).json({
+          message: "reservationId is required for reservationWorkbench mode",
+        });
+      }
+      requestPayload = {
+        CatalogOfferingsQueryAncillaries: {
+          AncillaryOfferings: {
+            "@type": "AncillaryOfferingsBuildFromReservationWorkbench",
+            BuildFromReservationWorkbench: {
+              ReservationIdentifier: {
+                Identifier: {
+                  value: reservationId,
+                },
+              },
+            },
+          },
+        },
+      };
+      resolvedMode = "reservationWorkbench";
+    } else if (
+      !requestPayload &&
+      (explicitOfferMode || (!explicitOfferListMode && canUseBuildFromOffer))
+    ) {
+      if (!canUseBuildFromOffer) {
+        return res.status(400).json({
+          message:
+            "offer mode requires offerListIdentifier (or offerIdentifier with value form) and productIdentifiers",
+        });
+      }
+      requestPayload = {
+        CatalogOfferingsQueryAncillaries: {
+          AncillaryOfferings: {
+            "@type": "AncillaryOfferingsBuildFromOffer",
+            BuildFromOffer: {
+              "@type": "BuildFromOfferAir",
+              OfferIdentifier: {
+                Identifier: {
+                  value: buildFromOfferIdentifierValue,
+                },
+              },
+              ProductIdentifier: productIdentifiers.map((id) => ({
+                Identifier: { value: id },
+              })),
+            },
+          },
+        },
+      };
+      resolvedMode = "offer";
+    } else if (!requestPayload && canUseBuildFromOfferList) {
+      requestPayload = {
+        CatalogOfferingsQueryAncillaries: {
+          AncillaryOfferings: {
+            "@type": "AncillaryOfferingsBuildFromOfferList",
+            BuildFromOfferList: {
+              OfferListIdentifier: offerListIdentifier,
+              OfferIdentifier: [{ id: offerIdentifier }],
+            },
+          },
+        },
+      };
+      resolvedMode = "offerList";
+    }
+
+    if (!requestPayload || !resolvedMode) {
+      return res.status(400).json({
+        message:
+          "Unable to resolve ancillary shop mode. Send either: (1) offerListIdentifier + offerIdentifier, (2) offerListIdentifier/productIdentifiers for offer mode, or (3) reservationId.",
+      });
+    }
+
+    const accessToken = await createToken();
+    const accessGroup = getRequiredEnv("TRAVELPORT_ACCESS_GROUP");
+    const version = process.env.TRAVELPORT_VERSION || "11";
+    const ancillaryShopUrl = resolveAncillaryShopUrl(version);
+
+    const response = await fetch(ancillaryShopUrl, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+        "Accept-Version": version,
+        "Content-Version": version,
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify(requestPayload),
+    });
+
+    const responsePayload = (await response.json().catch(() => ({}))) as Record<
+      string,
+      unknown
+    >;
+    if (!response.ok) {
+      return res.status(502).json({
+        message: `Travelport ancillary shop failed (${response.status})`,
+        details:
+          normalizeIdentifier(
+            getValueByKeys(responsePayload, [
+              "message",
+              "Message",
+              "error_description",
+              "error",
+            ])
+          ) || "Unable to fetch ancillary offerings for this offer.",
+        travelportResponse: responsePayload,
+        mode: resolvedMode,
+        requestPayload,
+      });
+    }
+
+    return res.status(200).json({
+      ...responsePayload,
+      ancillaryShopMeta: {
+        mode: resolvedMode,
+      },
+    });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected server error";
+    return res.status(500).json({ message });
+  }
+}

@@ -31,7 +31,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import secureLocalStorage from "react-secure-storage";
 import { convertMinutesToHoursAndMinutes } from "../common/funcation";
-import ShowDetails from "../ShowDetails/ShowDetails";
+import ShowDetails from "../ShowDetails/FlightDetails";
 import FlightLayout from "./FlightLayout";
 import { config } from "../../config";
 import SignInWithGoogle from "../GoogleLogIn";
@@ -40,16 +40,19 @@ import WifiRoundedIcon from "@mui/icons-material/WifiRounded";
 import RestaurantRoundedIcon from "@mui/icons-material/RestaurantRounded";
 import AirlineSeatReclineNormalRoundedIcon from "@mui/icons-material/AirlineSeatReclineNormalRounded";
 import PowerRoundedIcon from "@mui/icons-material/PowerRounded";
+import UsbRoundedIcon from "@mui/icons-material/UsbRounded";
 import LiveTvRoundedIcon from "@mui/icons-material/LiveTvRounded";
 import LuggageRoundedIcon from "@mui/icons-material/LuggageRounded";
 import FlightRoundedIcon from "@mui/icons-material/FlightRounded";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import ExpandMoreRoundedIcon from "@mui/icons-material/ExpandMoreRounded";
+import LocalDrinkSharpIcon from "@mui/icons-material/LocalDrinkSharp";
 import {
   getCurrencySymbol,
   getFlightCurrencyCode,
 } from "../../utils/flightPolicyUtils";
 import { resolveAirportInfo } from "../../utils/travelLookup";
+import { getFareOptionKey } from "../../utils/fareOptionKey";
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
@@ -87,6 +90,50 @@ const extractAmenityItem = (item) => {
     text,
   };
 };
+
+const REQUIRED_FLIGHT_AMENITIES = [
+  {
+    type: "power",
+    label: "Power",
+    matcher: (searchText) =>
+      searchText.includes("power") && !searchText.includes("usb"),
+  },
+  {
+    type: "usb",
+    label: "USB Charger",
+    matcher: (searchText) =>
+      searchText.includes("usb") || searchText.includes("charger"),
+  },
+  {
+    type: "meal",
+    label: "Meal",
+    matcher: (searchText) =>
+      searchText.includes("meal") || searchText.includes("food"),
+  },
+  {
+    type: "entertainment",
+    label: "Entertainment",
+    matcher: (searchText) =>
+      searchText.includes("entertainment") ||
+      searchText.includes("video") ||
+      searchText.includes("movie") ||
+      searchText.includes("tv"),
+  },
+  {
+    type: "beverage",
+    label: "Beverage",
+    matcher: (searchText) =>
+      searchText.includes("beverage") ||
+      searchText.includes("drink") ||
+      searchText.includes("alcohol"),
+  },
+];
+
+const getAmenitySearchText = (amenity = {}) =>
+  `${amenity?.category || ""} ${amenity?.text || ""}`
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
 
 const getFlightAmenities = (flightData) => {
   const legs = Array.isArray(flightData?.AllLegsInfo) ? flightData.AllLegsInfo : [];
@@ -157,20 +204,73 @@ const getFlightAmenities = (flightData) => {
     )
   ).map((item) => JSON.parse(item));
 
-  return uniqueAmenities.slice(0, 10);
+  const normalizedAmenities = uniqueAmenities.map((item) => ({
+    ...item,
+    searchText: getAmenitySearchText(item),
+  }));
+
+  const usedIndexes = new Set();
+
+  return REQUIRED_FLIGHT_AMENITIES.map((requiredAmenity) => {
+    const matchedIndex = normalizedAmenities.findIndex(
+      (item, index) =>
+        !usedIndexes.has(index) && requiredAmenity.matcher(item.searchText)
+    );
+
+    if (matchedIndex >= 0) {
+      usedIndexes.add(matchedIndex);
+      const matchedAmenity = normalizedAmenities[matchedIndex];
+      return {
+        type: requiredAmenity.type,
+        label: requiredAmenity.label,
+        category: matchedAmenity.category || requiredAmenity.label,
+        text: matchedAmenity.text || "Not available",
+      };
+    }
+
+    return {
+      type: requiredAmenity.type,
+      label: requiredAmenity.label,
+      category: requiredAmenity.label,
+      text: "Not available",
+    };
+  });
 };
 
-const getAmenityIcon = (category = "") => {
-  const normalized = String(category).toLowerCase();
+const getAmenityIcon = (amenity = {}) => {
+  const amenityType = String(amenity?.type || "").toLowerCase();
+  const normalized = `${amenity?.category || ""} ${amenity?.text || ""}`.toLowerCase();
+
+  if (amenityType === "power") {
+    return <PowerRoundedIcon sx={{ fontSize: "18px" }} />;
+  }
+  if (amenityType === "usb") {
+    return <UsbRoundedIcon sx={{ fontSize: "18px" }} />;
+  }
+  if (amenityType === "meal") {
+    return <RestaurantRoundedIcon sx={{ fontSize: "18px" }} />;
+  }
+  if (amenityType === "entertainment") {
+    return <LiveTvRoundedIcon sx={{ fontSize: "18px" }} />;
+  }
+  if (amenityType === "beverage") {
+    return <LocalDrinkSharpIcon sx={{ fontSize: "18px" }} />;
+  }
 
   if (normalized.includes("wifi")) {
     return <WifiRoundedIcon sx={{ fontSize: "18px" }} />;
   }
-  if (normalized.includes("food") || normalized.includes("meal") || normalized.includes("beverage")) {
+  if (normalized.includes("beverage") || normalized.includes("drink") || normalized.includes("alcohol")) {
+    return <LocalDrinkSharpIcon sx={{ fontSize: "18px" }} />;
+  }
+  if (normalized.includes("food") || normalized.includes("meal")) {
     return <RestaurantRoundedIcon sx={{ fontSize: "18px" }} />;
   }
   if (normalized.includes("seat") || normalized.includes("layout")) {
     return <AirlineSeatReclineNormalRoundedIcon sx={{ fontSize: "18px" }} />;
+  }
+  if (normalized.includes("usb") || normalized.includes("charger")) {
+    return <UsbRoundedIcon sx={{ fontSize: "18px" }} />;
   }
   if (normalized.includes("power")) {
     return <PowerRoundedIcon sx={{ fontSize: "18px" }} />;
@@ -248,14 +348,6 @@ const getBrandFeatureSummary = (flightData) => {
   };
 };
 
-const getFareOptionKey = (option, index = 0) =>
-  String(
-    option?.ResultId ||
-      `${option?.SearchId || "search"}-${option?.Carrier || "carrier"}-${
-        option?.NetFare || 0
-      }-${index}`
-  );
-
 const getLayoverDetails = (segments = []) => {
   if (!Array.isArray(segments) || segments.length < 2) return [];
 
@@ -330,7 +422,8 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
       (option, index) => getFareOptionKey(option, index) === selectedFareKey
     ) || fareOptions[0] || data;
 
-  const flightAmenities = getFlightAmenities(data);
+  const displayOffer = selectedFareOption || data;
+  const flightAmenities = getFlightAmenities(displayOffer);
 
   const getCabinClass = (cabinCode) => {
     switch (cabinCode) {
@@ -358,6 +451,10 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
     if (!rawValue) {
       return "N/A";
     }
+    const normalizedValue = rawValue.toLowerCase().replace(/\s+/g, " ");
+    if (normalizedValue.includes("baggage charges data not available")) {
+      return "0";
+    }
 
     const mappings = {
       "1P": "23Kg",
@@ -373,8 +470,25 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
     );
   };
 
-  const handleBooking = (data) => {
-    navigate("/bookingdetails", { state: data });
+  const handleBooking = (selectedOffer) => {
+    const bookingState = {
+      selectedOffer: selectedOffer || data || {},
+      source: "search-results",
+      selectedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          "flyjatt:selected_offer",
+          JSON.stringify(bookingState)
+        );
+      }
+    } catch (storageError) {
+      console.warn("Unable to cache selected offer for booking flow", storageError);
+    }
+
+    navigate("/selectedflightdetails", { state: bookingState });
   };
   const [openPass, setOpenPass] = useState(false);
   const location = useLocation();
@@ -608,11 +722,11 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
   };
 
   const primaryLeg =
-    selectedFareOption?.AllLegsInfo?.[0] || data?.AllLegsInfo?.[0];
+    displayOffer?.AllLegsInfo?.[0] || data?.AllLegsInfo?.[0];
   const seatAvailability =
     primaryLeg?.Segments?.[0]?.SegmentCode?.seatsAvailable ?? null;
   const baggageAllowance = convertWeight(
-    selectedFareOption?.PriceBreakDown?.[0]?.Bag?.[0]?.Allowance ||
+    displayOffer?.PriceBreakDown?.[0]?.Bag?.[0]?.Allowance ||
       data?.PriceBreakDown?.[0]?.Bag?.[0]?.Allowance
   );
   const cabinClassLabel = getCabinClass(
@@ -761,19 +875,24 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
                 overflow: "hidden",
               }}
             >
-              {data?.AllLegsInfo?.map((alllegs, i, arr) => (
+              {displayOffer?.AllLegsInfo?.map((alllegs, i, arr) => (
                 <Box
                   key={i}
                   sx={{
                     px: { xs: 0.9, md: 1.15 },
                     py: { xs: 0.75, md: 0.95 },
                     borderBottom:
-                      i === (data?.AllLegsInfo?.length || 1) - 1
+                      i === (displayOffer?.AllLegsInfo?.length || 1) - 1
                         ? "none"
                         : "1px dashed rgba(0,154,214,0.18)",
                   }}
                 >
-                  <FlightLayout data={data} alllegs={alllegs} arr={arr} i={i} />
+                  <FlightLayout
+                    data={displayOffer}
+                    alllegs={alllegs}
+                    arr={arr}
+                    i={i}
+                  />
                 </Box>
               ))}
             </Box>
@@ -906,20 +1025,30 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
                   bgcolor: "var(--primary-button)",
                   color: "var(--white)",
                 },
-                py: 0.9,
+                py: 1,
+                minHeight: "40px",
                 borderRadius: "11px",
                 textTransform: "capitalize",
                 fontWeight: 700,
                 fontSize: "13px",
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 0.55,
+                lineHeight: 1.2,
                 boxShadow: "0 8px 18px rgba(0,154,214,0.24)",
               }}
             >
-              Book Now • {netFareLabel}
+              <Box component="span">Book Now</Box>
+              <Box component="span" aria-hidden>
+                •
+              </Box>
+              <Box component="span">{netFareLabel}</Box>
             </Button>
           </Box>
         </Grid>
       </Grid>
-      {fareOptions.length > 1 && (
+      {fareOptions.length > 1 ? (
         <Accordion
           expanded={isBrandedFareExpanded}
           onChange={(_, expanded) => setIsBrandedFareExpanded(expanded)}
@@ -964,7 +1093,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
                 fontWeight: 700,
               }}
             >
-              Selected: {getBrandName(selectedFareOption)} • {netFareLabel}
+              Selected Brand: {getBrandName(selectedFareOption)}
             </Typography>
           </AccordionSummary>
           <AccordionDetails sx={{ px: { xs: 1.1, md: 1.35 }, pb: 1.2, pt: 0 }}>
@@ -1124,55 +1253,59 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
             </Typography>
           </AccordionDetails>
         </Accordion>
-      )}
-      {flightAmenities.length > 0 && (
-        <Box
+      ) : (
+        <Accordion
+          expanded={isBrandedFareExpanded}
+          onChange={(_, expanded) => setIsBrandedFareExpanded(expanded)}
+          disableGutters
           sx={{
-            px: { xs: 1.1, md: 1.35 },
-            pt: 1,
-            pb: 0.75,
             borderTop: "1px dashed #DCE4EF",
+            backgroundColor: "#FBFDFF",
+            boxShadow: "none",
+            "&:before": {
+              display: "none",
+            },
           }}
         >
-          <Box
+          <AccordionSummary
+            expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#2E597D" }} />}
             sx={{
-              display: "flex",
-              flexWrap: "wrap",
-              gap: 0.8,
+              px: { xs: 1.1, md: 1.35 },
+              minHeight: "unset",
+              "& .MuiAccordionSummary-content": {
+                my: 1.05,
+                display: "flex",
+                alignItems: { xs: "flex-start", md: "center" },
+                justifyContent: "space-between",
+                flexDirection: { xs: "column", md: "row" },
+                gap: 0.6,
+              },
             }}
           >
-            {flightAmenities.map((amenity, index) => (
-              <Tooltip
-                key={`${amenity?.category}-${amenity?.text}-${index}`}
-                title={`${amenity?.category}: ${amenity?.text}`}
-                arrow
-                placement="top"
-              >
-                <Box
-                  sx={{
-                    width: "30px",
-                    height: "30px",
-                    borderRadius: "50%",
-                    border: "1px solid #D9E5F5",
-                    backgroundColor: "#F7FAFF",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    color: "#1F4D78",
-                    cursor: "pointer",
-                    "&:hover": {
-                      backgroundColor: "#EEF5FF",
-                    },
-                  }}
-                >
-                  {getAmenityIcon(amenity?.category)}
-                </Box>
-              </Tooltip>
-            ))}
-          </Box>
-        </Box>
+            <Box
+              sx={{
+                color: "#27496A",
+                fontSize: { xs: "11px", md: "12px" },
+                fontWeight: 700,
+              }}
+            >
+              Branded Fare Options (0)
+            </Box>
+            <Typography
+              sx={{
+                fontSize: "12px",
+                color: "#4C657F",
+                fontWeight: 700,
+              }}
+            >
+              Regular fare: {netFareLabel}
+            </Typography>
+          </AccordionSummary>
+          <AccordionDetails sx={{ px: { xs: 1.1, md: 1.35 }, pb: 1.2, pt: 0 }}>
+            <Box sx={{ minHeight: "2px" }} />
+          </AccordionDetails>
+        </Accordion>
       )}
-
       <Box
         sx={{
           px: { xs: 1.1, md: 1.35 },
@@ -1185,52 +1318,35 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
           gap: 1,
         }}
       >
-        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.9 }}>
-          <Box
-            sx={{
-              px: 1,
-              py: 0.45,
-              borderRadius: "999px",
-              fontSize: "11px",
-              fontWeight: 700,
-              bgcolor: "rgba(15,35,60,0.08)",
-              color: "var(--meta-black)",
-            }}
-          >
-            {cabinClassLabel}
-          </Box>
-          <Box
-            sx={{
-              px: 1,
-              py: 0.45,
-              borderRadius: "999px",
-              fontSize: "11px",
-              fontWeight: 700,
-              bgcolor: "rgba(0,154,214,0.12)",
-              color: "var(--primary-color)",
-            }}
-          >
-            Baggage {baggageAllowance}
-          </Box>
-          {seatAvailability !== null && (
-            <Box
-              sx={{
-                px: 1,
-                py: 0.45,
-                borderRadius: "999px",
-                fontSize: "11px",
-                fontWeight: 700,
-                bgcolor: "rgba(15,35,60,0.08)",
-                color: "var(--meta-black)",
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 0.4,
-              }}
+        <Box sx={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 0.7 }}>
+          {flightAmenities.map((amenity, index) => (
+            <Tooltip
+              key={`footer-${amenity?.category}-${amenity?.text}-${index}`}
+              title={`${amenity?.label || amenity?.category}: ${amenity?.text}`}
+              arrow
+              placement="top"
             >
-              {seatAvailability}
-              <EventSeatIcon sx={{ fontSize: "14px", color: "var(--primary-button)" }} />
-            </Box>
-          )}
+              <Box
+                sx={{
+                  width: "30px",
+                  height: "30px",
+                  borderRadius: "50%",
+                  border: "1px solid #D9E5F5",
+                  backgroundColor: "#F7FAFF",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "#1F4D78",
+                  cursor: "pointer",
+                  "&:hover": {
+                    backgroundColor: "#EEF5FF",
+                  },
+                }}
+              >
+                {getAmenityIcon(amenity)}
+              </Box>
+            </Tooltip>
+          ))}
         </Box>
 
         <Button
@@ -1255,7 +1371,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
       </Box>
       {flightDetails && (
         <ShowDetails
-          data={data}
+          data={displayOffer}
           flightDetails={flightDetails}
           value={value}
           handleChange={handleChange}

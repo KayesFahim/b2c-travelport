@@ -8,7 +8,7 @@ import {
   Stack,
   Tooltip,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import DepartureIcons from "../../asstes/img/HomeImage/flightIcons/deapature.svg?react";
 import ArribalIcons from "../../asstes/img/HomeImage/flightIcons/arrival.svg?react";
 import SwitchBtnIcons from "../../asstes/img/HomeImage/flightIcons/switchbtn.svg?react";
@@ -142,6 +142,7 @@ const MultiCity = ({
   modifySearch,
   onSearchCommitted,
 }) => {
+  const MAX_MULTI_CITY_SEGMENTS = 4;
   const data = flightData;
 
   const initialData = [
@@ -253,13 +254,39 @@ const MultiCity = ({
 
   const [errorMessage, setErrorMessage] = useState("");
 
+  useEffect(() => {
+    if (!Array.isArray(searchData?.segments)) {
+      return;
+    }
+
+    if (searchData.segments.length <= MAX_MULTI_CITY_SEGMENTS) {
+      return;
+    }
+
+    setSearchData((prevData) => ({
+      ...prevData,
+      segments: Array.isArray(prevData?.segments)
+        ? prevData.segments.slice(0, MAX_MULTI_CITY_SEGMENTS)
+        : [],
+    }));
+    setErrorMessage(
+      `Multi-city supports up to ${MAX_MULTI_CITY_SEGMENTS} destinations.`
+    );
+  }, [searchData?.segments?.length, setSearchData, MAX_MULTI_CITY_SEGMENTS]);
+
   const addCity = () => {
-    if (searchData.segments.length >= 5) {
-      setErrorMessage("You can only add a maximum of 6 cities.");
+    const currentSegments = Array.isArray(searchData?.segments)
+      ? searchData.segments
+      : [];
+
+    if (currentSegments.length >= MAX_MULTI_CITY_SEGMENTS) {
+      setErrorMessage(
+        `You can only add up to ${MAX_MULTI_CITY_SEGMENTS} destinations.`
+      );
       return;
     }
     setErrorMessage("");
-    const lastSegment = searchData.segments[searchData.segments.length - 1];
+    const lastSegment = currentSegments[currentSegments.length - 1];
     const lastDate = lastSegment ? new Date(lastSegment.Date) : new Date();
     const nextDate = new Date(
       lastDate.setDate(lastDate.getDate() + 3)
@@ -267,21 +294,31 @@ const MultiCity = ({
 
     setSearchData((prevData) => ({
       ...prevData,
-      segments: [
-        ...prevData.segments,
-        {
-          id: prevData.segments.length,
-          openFrom: false,
-          DepFrom: toSendData.trim(),
-          depFromText: toSearchText,
-          ArrTo: "DXB",
-          arrToText: "Dubai Intl Airport (DXB)",
-          openTo: false,
-          Date: nextDate,
-          openDate: false,
-          open: false,
-        },
-      ],
+      segments: (() => {
+        const previousSegments = Array.isArray(prevData?.segments)
+          ? prevData.segments.slice(0, MAX_MULTI_CITY_SEGMENTS)
+          : [];
+
+        if (previousSegments.length >= MAX_MULTI_CITY_SEGMENTS) {
+          return previousSegments;
+        }
+
+        return [
+          ...previousSegments,
+          {
+            id: previousSegments.length,
+            openFrom: false,
+            DepFrom: toSendData.trim(),
+            depFromText: toSearchText,
+            ArrTo: "DXB",
+            arrToText: "Dubai Intl Airport (DXB)",
+            openTo: false,
+            Date: nextDate,
+            openDate: false,
+            open: false,
+          },
+        ];
+      })(),
     }));
   };
 
@@ -753,26 +790,30 @@ const MultiCity = ({
     e.preventDefault();
     handleClose(); // Use handleClose to close all popups
     setChangeState((prev) => !prev);
-    const { segments } = searchData;
-    const normalizedSegments = Array.isArray(segments)
-      ? segments
-          .map((segment) => {
-            const depfrom = String(segment?.DepFrom ?? "").trim().toUpperCase();
-            const arrto = String(segment?.ArrTo ?? "").trim().toUpperCase();
-            if (!depfrom || !arrto) {
-              return null;
-            }
-
-            return {
-              depfrom,
-              arrto,
-              depdate: format(new Date(segment?.Date), "yyyy-MM-dd"),
-              depFromText: String(segment?.depFromText ?? depfrom),
-              arrToText: String(segment?.arrToText ?? arrto),
-            };
-          })
-          .filter(Boolean)
+    const segments = Array.isArray(searchData?.segments)
+      ? searchData.segments.slice(0, MAX_MULTI_CITY_SEGMENTS)
       : [];
+    const normalizedSegments = segments
+      .map((segment) => {
+        const depfrom = String(segment?.DepFrom ?? "").trim().toUpperCase();
+        const arrto = String(segment?.ArrTo ?? "").trim().toUpperCase();
+        if (!depfrom || !arrto) {
+          return null;
+        }
+
+        return {
+          depfrom,
+          arrto,
+          depdate: format(new Date(segment?.Date), "yyyy-MM-dd"),
+          depFromText: String(segment?.depFromText ?? depfrom),
+          arrToText: String(segment?.arrToText ?? arrto),
+        };
+      })
+      .filter(Boolean);
+    const limitedSearchData = {
+      ...searchData,
+      segments,
+    };
 
     if (normalizedSegments.length > 0) {
       const firstSegment = normalizedSegments[0];
@@ -801,9 +842,9 @@ const MultiCity = ({
       }
     }
 
-    navigate("/multicitysearchresult", {
+    navigate("/offers", {
       state: {
-        searchData,
+        searchData: limitedSearchData,
         segments,
         faddress,
         toAddress,

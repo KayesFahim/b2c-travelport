@@ -375,6 +375,17 @@ const RoundwayFilters = ({
   const uniqueBagsArr = [...new Set(bagsArr)].sort((a, b) =>
     a.localeCompare(b)
   );
+  const formatBaggageLabel = (value) => {
+    const rawValue = String(value ?? "").trim();
+    if (!rawValue) {
+      return "0";
+    }
+    const normalizedValue = rawValue.toLowerCase().replace(/\s+/g, " ");
+    if (normalizedValue.includes("baggage charges data not available")) {
+      return "0";
+    }
+    return rawValue;
+  };
 
   //////  Reset filter   //////
   const handleResetBtn = () => {
@@ -956,7 +967,7 @@ const RoundwayFilters = ({
                       fontSize: "16px",
                     },
                   }}
-                  label={`${item}`}
+                  label={formatBaggageLabel(item)}
                 />
               ))}
             </FormGroup>

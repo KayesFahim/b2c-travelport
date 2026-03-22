@@ -592,7 +592,24 @@ const OneWay = ({
     const departureDateIso = format(new Date(from), "yyyy-MM-dd");
     const formattedDepartureDate = format(new Date(from), "dd MMM yy");
     const formattedArrivalDate = format(new Date(to), "dd MMM yy");
-    const { segments } = searchData;
+    const nextSegments = [
+      {
+        depfrom: fromSendData,
+        arrto: toSendData,
+        depdate: departureDateIso,
+        depFromText: fromSearchText,
+        arrToText: toSearchText,
+      },
+    ];
+    const nextSearchData =
+      searchData && typeof searchData === "object"
+        ? {
+            ...searchData,
+            segments: nextSegments,
+          }
+        : {
+            segments: nextSegments,
+          };
 
     saveRecentSearch({
       tripType: valueBox || "oneway",
@@ -623,7 +640,7 @@ const OneWay = ({
       onSearchCommitted();
     }
 
-    navigate("/onewaysearchresult", {
+    navigate("/offers", {
       state: {
         faddress,
         toAddress,
@@ -642,8 +659,8 @@ const OneWay = ({
         valueBox,
         value,
         changeState,
-        searchData,
-        segments,
+        searchData: nextSearchData,
+        segments: nextSegments,
       },
     });
     if (modifySearch && window.innerWidth <= 768) {

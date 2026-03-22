@@ -13,6 +13,7 @@ import React, { memo, useState } from "react";
 import TimeSesation from "../BookingDetaills/TimeSesation/TimeSesation";
 import Slider from "@mui/material/Slider";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
+import { resolveAirlineName } from "../../utils/travelLookup";
 
 const stops = [
   { label: "Direct", value: 1 },
@@ -38,19 +39,19 @@ const connectionDurations = [
 ];
 
 const sectionTitleSx = {
-  color: "#1E2A3B",
-  fontSize: 13,
-  fontWeight: 700,
+  color: "#16324F",
+  fontSize: 12,
+  fontWeight: 800,
+  letterSpacing: "0.01em",
 };
 
 const sectionSx = {
-  px: 0,
-  py: 0,
-  borderBottom: "1px solid #EDF1F7",
+  px: 0.9,
+  py: 0.7,
 };
 
 const sectionContentSx = {
-  mt: 1.1,
+  mt: 0.6,
 };
 
 const chipButtonSx = (active) => ({
@@ -71,26 +72,31 @@ const FilterSection = ({ title, children, borderBottom = true }) => (
     defaultExpanded
     sx={{
       ...sectionSx,
-      boxShadow: "none",
+      boxShadow: "0 6px 18px rgba(15,39,69,0.06)",
+      border: "1px solid #E4EDF8",
+      borderRadius: "12px !important",
+      mb: 1.1,
+      background:
+        "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(249,252,255,0.96) 100%)",
       "&:before": {
         display: "none",
       },
-      borderBottom: borderBottom ? sectionSx.borderBottom : "none",
+      borderBottom: borderBottom ? "1px solid #E9F0FB" : "none",
     }}
   >
     <AccordionSummary
       expandIcon={<ExpandMoreIcon />}
       sx={{
-        px: 1.5,
+        px: 1.1,
         minHeight: "unset",
         "& .MuiAccordionSummary-content": {
-          my: 1.4,
+          my: 0.9,
         },
       }}
     >
       <Typography sx={sectionTitleSx}>{title}</Typography>
     </AccordionSummary>
-    <AccordionDetails sx={{ px: 1.5, pb: 1.4, pt: 0 }}>
+    <AccordionDetails sx={{ px: 1.1, pb: 1.1, pt: 0 }}>
       <Box sx={sectionContentSx}>{children}</Box>
     </AccordionDetails>
   </Accordion>
@@ -136,10 +142,13 @@ const Filter = memo(
     return (
       <Box
         sx={{
-          border: "1px solid #E6EDF7",
-          borderRadius: "14px",
+          border: "1px solid #DDE8F6",
+          borderRadius: "16px",
           overflow: "hidden",
-          backgroundColor: "#FFFFFF",
+          background:
+            "linear-gradient(180deg, rgba(253,255,255,1) 0%, rgba(246,250,255,0.98) 100%)",
+          boxShadow: "0 14px 30px rgba(15,39,69,0.09)",
+          p: 1.1,
         }}
       >
         <Stack
@@ -147,11 +156,13 @@ const Filter = memo(
           justifyContent="space-between"
           alignItems="center"
           sx={{
-            px: 1.5,
-            py: 1.2,
-            borderBottom: "1px solid #E8EEF8",
+            px: 1.2,
+            py: 1,
+            border: "1px solid #DCE8F8",
+            borderRadius: "12px",
+            mb: 1.1,
             background:
-              "linear-gradient(180deg, rgba(243,248,255,0.9) 0%, rgba(255,255,255,1) 100%)",
+              "linear-gradient(125deg, rgba(14,116,144,0.08), rgba(8,85,136,0.03))",
           }}
         >
           <Box>
@@ -206,14 +217,51 @@ const Filter = memo(
             valueLabelDisplay="auto"
             min={minPrice}
             max={maxPrice}
-            sx={{ color: "var(--primary-color)" }}
+            sx={{
+              color: "var(--primary-color)",
+              "& .MuiSlider-thumb": {
+                height: 16,
+                width: 16,
+                border: "2px solid #fff",
+                boxShadow: "0 4px 12px rgba(0,154,214,0.35)",
+              },
+              "& .MuiSlider-track": {
+                border: "none",
+                height: 6,
+              },
+              "& .MuiSlider-rail": {
+                height: 6,
+                opacity: 1,
+                backgroundColor: "#D8E5F5",
+              },
+            }}
           />
           <Stack direction="row" justifyContent="space-between">
-            <Typography sx={{ fontSize: 12, color: "#64748B" }}>
-              {minPrice}
+            <Typography
+              sx={{
+                fontSize: 11,
+                color: "#4E647A",
+                fontWeight: 700,
+                px: 0.9,
+                py: 0.3,
+                borderRadius: "999px",
+                bgcolor: "#EFF5FD",
+              }}
+            >
+              Min {minPrice}
             </Typography>
-            <Typography sx={{ fontSize: 12, color: "#64748B" }}>
-              {maxPrice}
+            <Typography
+              sx={{
+                fontSize: 11,
+                color: "#4E647A",
+                fontWeight: 700,
+                px: 0.9,
+                py: 0.3,
+                borderRadius: "999px",
+                bgcolor: "#EFF5FD",
+              }}
+            >
+              Max {maxPrice}
             </Typography>
           </Stack>
         </FilterSection>
@@ -336,47 +384,55 @@ const Filter = memo(
         </FilterSection>
 
         <FilterSection title="Airlines">
-          {visibleAirlines.map((airline) => (
-            <Box
-              key={airline.code}
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                py: 0.4,
-              }}
-            >
-              <Stack direction="row" alignItems="center" spacing={0.6}>
-                <Checkbox
-                  size="small"
-                  checked={selectedAirlins.includes(airline.code)}
-                  onChange={() => handleAirLine(airline.code)}
-                  sx={{
-                    color: "#A4B4CB",
-                    "&.Mui-checked": {
-                      color: "var(--primary-color)",
-                    },
-                  }}
-                />
-                <img
-                  src={`https://tbbd-flight.s3.ap-southeast-1.amazonaws.com/airlines-logo/${airline.code}.png`}
-                  alt={airline.name}
-                  style={{
-                    width: "22px",
-                    height: "22px",
-                    borderRadius: "50%",
-                    objectFit: "cover",
-                  }}
-                />
-                <Typography sx={{ fontSize: 13, color: "#334155" }}>
-                  {airline.name}
+          {visibleAirlines.map((airline) => {
+            const airlineLabel = resolveAirlineName(airline.code, airline.name);
+            return (
+              <Box
+                key={airline.code}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  py: 0.55,
+                  px: 0.4,
+                  borderRadius: "10px",
+                  "&:hover": {
+                    bgcolor: "#F3F8FF",
+                  },
+                }}
+              >
+                <Stack direction="row" alignItems="center" spacing={0.6}>
+                  <Checkbox
+                    size="small"
+                    checked={selectedAirlins.includes(airline.code)}
+                    onChange={() => handleAirLine(airline.code)}
+                    sx={{
+                      color: "#A4B4CB",
+                      "&.Mui-checked": {
+                        color: "var(--primary-color)",
+                      },
+                    }}
+                  />
+                  <img
+                    src={`https://tbbd-flight.s3.ap-southeast-1.amazonaws.com/airlines-logo/${airline.code}.png`}
+                    alt={airlineLabel}
+                    style={{
+                      width: "22px",
+                      height: "22px",
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                    }}
+                  />
+                  <Typography sx={{ fontSize: 13, color: "#334155" }}>
+                    {airlineLabel}
+                  </Typography>
+                </Stack>
+                <Typography sx={{ fontSize: 11, color: "#6B7C93" }}>
+                  {airline.price}
                 </Typography>
-              </Stack>
-              <Typography sx={{ fontSize: 11, color: "#6B7C93" }}>
-                {airline.price}
-              </Typography>
-            </Box>
-          ))}
+              </Box>
+            );
+          })}
           {uniqueCarriers.length > 6 && (
             <Button
               onClick={() => setShowAllAirlines((prev) => !prev)}
@@ -453,9 +509,16 @@ const Filter = memo(
               <Stack
                 key={layover.code}
                 direction="row"
-                alignItems="center"
+                alignItems="flex-start"
                 spacing={0.6}
-                sx={{ py: 0.2 }}
+                sx={{
+                  py: 0.45,
+                  px: 0.4,
+                  borderRadius: "10px",
+                  "&:hover": {
+                    bgcolor: "#F4F9FF",
+                  },
+                }}
               >
                 <Checkbox
                   size="small"
@@ -468,9 +531,17 @@ const Filter = memo(
                     },
                   }}
                 />
-                <Typography sx={{ fontSize: 13, color: "#334155" }} noWrap>
-                  {layover.name}
-                </Typography>
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    sx={{ fontSize: 13, color: "#334155", fontWeight: 600 }}
+                  >
+                    {layover.name}
+                  </Typography>
+                  <Typography sx={{ fontSize: 11, color: "#6B7C93" }}>
+                    {layover.code}
+                    {layover.address ? ` • ${layover.address}` : ""}
+                  </Typography>
+                </Box>
               </Stack>
             ))}
             {uniqueLayover.length > 6 && (

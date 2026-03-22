@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import {
   TextField,
   Grid,
@@ -19,15 +19,14 @@ import {
 import DatePicker from "react-datepicker";
 import { addMonths, format } from "date-fns"; // Assuming you're using date-fns for formatting dates
 import secureLocalStorage from "react-secure-storage";
-import Swal from "sweetalert2";
 import { useNavigate } from "react-router-dom";
 import moment from "moment";
 import CountryList from "../../fakeData/CountryList";
-import SearchableDropDown from "../SearchableDropDown/SearchableDropDown";
 import { config } from "../../../config";
 import DateofBairthDatePicker from "./DateofBairthDatePicker";
 import { FaPassport } from "react-icons/fa";
 import { FaCcVisa } from "react-icons/fa";
+import { FaCamera } from "react-icons/fa";
 import { FaIdCard } from "react-icons/fa"; // Add this import statement
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 const createPassenger = (
@@ -44,11 +43,12 @@ const createPassenger = (
   DateOfBirth: moment(passenger?.dob).format("YYYY-MM-DDT00:00:00.000[Z]"), // corrction this line
   // DateOfBirth:passenger?.dob,
   Gender: passenger?.gender,
-  PassportNumber: domestic ? passenger?.passNo : null,
-  PassportExpiryDate: domestic
+  PassportNumber: passenger?.passNo || null,
+  PassportExpiryDate: passenger?.passEx
     ? moment(passenger?.passEx).format("YYYY-MM-DDT00:00:00.000[Z]")
     : null,
   PassportNationality: passenger?.passNation,
+  PassportIssuingCountry: passenger?.passIssueCountry || null,
   passport: passenger?.PassCopy || "",
   visa: passenger?.VisaCopy || "",
   CountryCode: passenger?.passNation,
@@ -70,6 +70,7 @@ const generatePassengerData = (type, date) => ({
   // dob: format(new Date(), "dd MMM yyyy"),
   dob: "",
   passNation: "BD",
+  passIssueCountry: "BD",
   passNo: "",
   passEx: "",
   PassCopy: null,
@@ -85,9 +86,393 @@ const getArrayByKeys = (obj, keys = []) => {
   return [];
 };
 
-const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
+const getStringValue = (value) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number") {
+    return String(value).trim();
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const parsed = getStringValue(item);
+      if (parsed) return parsed;
+    }
+    return "";
+  }
+  if (typeof value === "object") {
+    const possibleKeys = ["value", "text", "name", "code", "number", "id"];
+    for (const key of possibleKeys) {
+      if (value?.[key] !== undefined) {
+        const parsed = getStringValue(value[key]);
+        if (parsed) return parsed;
+      }
+    }
+  }
+  return "";
+};
+
+const pickFirstValue = (source, keys = []) => {
+  if (!source || typeof source !== "object") return "";
+  for (const key of keys) {
+    if (source?.[key] !== undefined) {
+      const parsed = getStringValue(source[key]);
+      if (parsed) return parsed;
+    }
+  }
+  return "";
+};
+
+const normalizeGender = (rawGender) => {
+  const value = getStringValue(rawGender).toLowerCase();
+  if (!value) return "";
+  if (["m", "male", "man"].includes(value)) return "Male";
+  if (["f", "female", "woman"].includes(value)) return "Female";
+  return "";
+};
+
+const normalizeTitle = (rawTitle, gender, paxType) => {
+  const title = getStringValue(rawTitle);
+  const allowedTitles = ["Mr", "Mrs", "Ms", "Mstr", "Miss"];
+  if (allowedTitles.includes(title)) return title;
+
+  const isChildPax = ["Child", "Infant"].includes(paxType);
+  if (gender === "Male") return isChildPax ? "Mstr" : "Mr";
+  if (gender === "Female") return isChildPax ? "Miss" : "Ms";
+  return "";
+};
+
+const normalizeCountryCode = (rawValue, fallbackValue = "") => {
+  const value = getStringValue(rawValue);
+  if (!value) return fallbackValue || "";
+
+  const upper = value.toUpperCase();
+  if (upper.length === 2) {
+    const directCode = CountryList.find((item) => item.code === upper);
+    if (directCode) return directCode.code;
+  }
+  if (upper.length === 3) {
+    const directAlpha3 = CountryList.find((item) => item.alpha3 === upper);
+    if (directAlpha3) return directAlpha3.code;
+  }
+
+  const lower = value.toLowerCase();
+  const byNameExact = CountryList.find(
+    (item) => item.name.toLowerCase() === lower
+  );
+  if (byNameExact) return byNameExact.code;
+
+  const byNameIncludes = CountryList.find((item) =>
+    item.name.toLowerCase().includes(lower)
+  );
+  if (byNameIncludes) return byNameIncludes.code;
+
+  return fallbackValue || "";
+};
+
+const getCountryDisplayLabel = (country) =>
+  `${country.name} (${country.alpha3 || country.code})`;
+
+const parseDateValue = (rawDate) => {
+  const value = getStringValue(rawDate);
+  if (!value) return null;
+
+  const strictFormats = [
+    "YYYY-MM-DD",
+    "DD/MM/YYYY",
+    "MM/DD/YYYY",
+    "DD-MM-YYYY",
+    "YYYY/MM/DD",
+    "DD MMM YYYY",
+    "DD MMMM YYYY",
+    "YYMMDD",
+    "YYYYMMDD",
+  ];
+
+  const strictDate = moment(value, strictFormats, true);
+  if (strictDate.isValid()) return strictDate.toDate();
+
+  const looseDate = moment(value);
+  if (looseDate.isValid()) return looseDate.toDate();
+
+  return null;
+};
+
+const collectTextValues = (value, bucket = []) => {
+  if (value === null || value === undefined) return bucket;
+  if (typeof value === "string" || typeof value === "number") {
+    bucket.push(String(value));
+    return bucket;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTextValues(item, bucket));
+    return bucket;
+  }
+  if (typeof value === "object") {
+    Object.values(value).forEach((item) => collectTextValues(item, bucket));
+  }
+  return bucket;
+};
+
+const parseMrzDate = (rawValue, type = "generic") => {
+  const value = getStringValue(rawValue).replace(/[^0-9]/g, "");
+  if (!/^\d{6}$/.test(value)) return null;
+
+  const yy = Number(value.slice(0, 2));
+  const mm = Number(value.slice(2, 4));
+  const dd = Number(value.slice(4, 6));
+  if (mm < 1 || mm > 12 || dd < 1 || dd > 31) return null;
+
+  const currentYear = new Date().getFullYear();
+  let fullYear = 2000 + yy;
+
+  if (type === "dob" && fullYear > currentYear) {
+    fullYear -= 100;
+  }
+  if (type === "expiry" && fullYear < currentYear - 1) {
+    fullYear += 100;
+  }
+
+  const date = new Date(fullYear, mm - 1, dd);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+};
+
+const parseMrzLines = (line1 = "", line2 = "") => {
+  const l1 = getStringValue(line1).replace(/\s+/g, "");
+  const l2 = getStringValue(line2).replace(/\s+/g, "");
+  if (
+    l1.length !== 44 ||
+    l2.length !== 44 ||
+    !/^P<[A-Z0-9<]{42}$/.test(l1) ||
+    !/^[A-Z0-9<]{44}$/.test(l2)
+  ) {
+    return null;
+  }
+
+  const issuer = l1.slice(2, 5).replace(/</g, "").trim();
+  const namesField = l1.slice(5);
+  const [surnamePart = "", givenPart = ""] = namesField.split("<<");
+  const surname = surnamePart.replace(/</g, " ").replace(/\s+/g, " ").trim();
+  const givenNames = givenPart.replace(/</g, " ").replace(/\s+/g, " ").trim();
+  const firstName = givenNames || "";
+  const lastName = surname || "";
+
+  const passportNo = l2.slice(0, 9).replace(/</g, "").trim();
+  const nationality = l2.slice(10, 13).replace(/</g, "").trim();
+  const dob = parseMrzDate(l2.slice(13, 19), "dob");
+  const genderChar = l2.slice(20, 21);
+  const expiryDate = parseMrzDate(l2.slice(21, 27), "expiry");
+
+  return {
+    fName: firstName,
+    lName: lastName,
+    passNo: passportNo,
+    dob,
+    passEx: expiryDate,
+    rawGender: genderChar === "F" ? "Female" : genderChar === "M" ? "Male" : "",
+    passNationRaw: nationality,
+    passIssueCountryRaw: issuer || nationality,
+  };
+};
+
+const extractMrzFromPayload = (payload = {}) => {
+  const directMrz = pickFirstValue(payload, [
+    "mrz",
+    "mrzText",
+    "machineReadableZone",
+    "rawMrz",
+  ]);
+  const directLinesRaw = Array.isArray(payload?.mrzLines)
+    ? payload.mrzLines
+    : Array.isArray(payload?.machineReadableLines)
+    ? payload.machineReadableLines
+    : [];
+
+  const allText = [
+    ...collectTextValues(payload),
+    directMrz,
+    ...directLinesRaw,
+  ]
+    .filter(Boolean)
+    .flatMap((value) =>
+      String(value)
+        .split(/\r?\n/)
+        .map((line) => line.trim().replace(/\s+/g, ""))
+    )
+    .filter(Boolean);
+
+  for (let i = 0; i < allText.length; i += 1) {
+    const line = allText[i];
+    const next = allText[i + 1] || "";
+    const parsedPair = parseMrzLines(line, next);
+    if (parsedPair) return parsedPair;
+
+    if (/^P<[A-Z0-9<]{42}[A-Z0-9<]{44}$/.test(line)) {
+      const parsedCombined = parseMrzLines(line.slice(0, 44), line.slice(44, 88));
+      if (parsedCombined) return parsedCombined;
+    }
+  }
+
+  return null;
+};
+
+const parsePassportExtractionPayload = (payload = {}) => {
+  const mrzData = extractMrzFromPayload(payload);
+  const candidates = [
+    payload,
+    payload?.data,
+    payload?.result,
+    payload?.payload,
+    payload?.document,
+    payload?.passport,
+    payload?.extractedData,
+    payload?.data?.data,
+    payload?.data?.result,
+  ].filter(Boolean);
+
+  const hasExtractionLikeFields = (item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const keys = [
+      "firstName",
+      "firstname",
+      "givenNames",
+      "givenName",
+      "lastName",
+      "surname",
+      "passportNumber",
+      "passportNo",
+      "passport",
+      "dateOfBirth",
+      "dob",
+      "passportExpiryDate",
+      "passportexp",
+      "nationality",
+      "passportIssuingCountry",
+      "issuingCountry",
+    ];
+    return keys.some((key) => {
+      const value = item?.[key];
+      return value !== undefined && value !== null && String(value).trim() !== "";
+    });
+  };
+
+  let source =
+    candidates.find((item) => hasExtractionLikeFields(item)) ||
+    candidates.find((item) => typeof item === "object") ||
+    {};
+  if (Array.isArray(source)) {
+    source = source.find((item) => item && typeof item === "object") || {};
+  }
+
+  const firstNameRaw = pickFirstValue(source, [
+    "givenNames",
+    "given_name",
+    "givenName",
+    "firstName",
+    "firstname",
+    "first_name",
+  ]);
+  const lastNameRaw = pickFirstValue(source, [
+    "lastName",
+    "lastname",
+    "last_name",
+    "surname",
+    "familyName",
+    "family_name",
+  ]);
+  const fullNameRaw = pickFirstValue(source, ["fullName", "name"]);
+  const fullNameParts = fullNameRaw ? fullNameRaw.split(/\s+/).filter(Boolean) : [];
+
+  const firstName =
+    firstNameRaw ||
+    mrzData?.fName ||
+    (fullNameParts.length > 1 ? fullNameParts[0] : "");
+  const lastName =
+    lastNameRaw ||
+    mrzData?.lName ||
+    (fullNameParts.length > 1 ? fullNameParts.slice(1).join(" ") : "");
+
+  const passNo =
+    pickFirstValue(source, [
+      "passportNumber",
+      "passportNo",
+      "passport",
+      "documentNumber",
+      "documentNo",
+      "number",
+    ]) || mrzData?.passNo;
+
+  const passEx =
+    parseDateValue(
+      pickFirstValue(source, [
+        "passportExpiryDate",
+        "passportexp",
+        "expiryDate",
+        "expiry",
+        "expirationDate",
+        "dateOfExpiry",
+      ])
+    ) || mrzData?.passEx;
+
+  const dob =
+    parseDateValue(
+      pickFirstValue(source, ["dateOfBirth", "dob", "birthDate", "birthdate"])
+    ) || mrzData?.dob;
+
+  return {
+    fName: firstName,
+    lName: lastName,
+    passNo,
+    passEx,
+    dob,
+    rawGender: pickFirstValue(source, ["gender", "sex"]) || mrzData?.rawGender,
+    rawTitle: pickFirstValue(source, ["title"]),
+    passNationRaw:
+      pickFirstValue(source, [
+        "nationality",
+        "nationalityCode",
+        "citizenship",
+        "countryCode",
+      ]) || mrzData?.passNationRaw,
+    passIssueCountryRaw:
+      pickFirstValue(source, [
+        "passportIssuingCountry",
+        "issuingCountry",
+        "issuer",
+        "issuingState",
+        "issuingAuthority",
+        "countryOfIssue",
+      ]) || mrzData?.passIssueCountryRaw,
+  };
+};
+
+const hasExtractedPassportFields = (extracted = {}) =>
+  Boolean(
+    extracted?.passNo ||
+      extracted?.fName ||
+      extracted?.lName ||
+      extracted?.passEx ||
+      extracted?.dob ||
+      extracted?.passNationRaw ||
+      extracted?.passIssueCountryRaw
+  );
+
+const parseStoredUserData = (value) => {
+  if (!value) return {};
+  if (typeof value === "object") return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+};
+
+const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] }) => {
   const token = secureLocalStorage.getItem("access_token");
-  const userData = secureLocalStorage.getItem("userData");
+  const userData = parseStoredUserData(secureLocalStorage.getItem("userData"));
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const navigate = useNavigate();
   const activeAirPrice = selectedAirPrice || airPriceData?.[0] || {};
@@ -161,6 +546,19 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
     email: false,
     phone: false,
   });
+  const [passportScanState, setPassportScanState] = useState({});
+
+  const getScanKey = (type, index) => `${type}-${index}`;
+  const setScanStatus = (type, index, nextState) => {
+    const key = getScanKey(type, index);
+    setPassportScanState((prevState) => ({
+      ...prevState,
+      [key]: {
+        ...(prevState[key] || {}),
+        ...nextState,
+      },
+    }));
+  };
 
   // Handle input changes for text and select fields
   const handleInputChange = (e, type, index, field) => {
@@ -215,9 +613,11 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
           !passenger.fName ||
           !passenger.lName ||
           !passenger.passNation ||
+          !passenger.passIssueCountry ||
           !passenger.title ||
           !passenger.gender ||
-          (domestic && (!passenger.passNo || !passenger.passEx)) ||
+          !passenger.passNo ||
+          !passenger.passEx ||
           (domestic && (!passenger.PassCopy || !passenger.VisaCopy))
         );
       });
@@ -246,126 +646,6 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
 
     return isValid;
   };
-
-  const [travellers, setTravellers] = useState([]);
-
-  useEffect(() => {
-    let url = `${config.baseUrl}/user/findAllTravelBuddy`;
-
-    fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! Status: ${res.status}`);
-        }
-        return res.json();
-      })
-      .then((data) => {
-        let uniqueTravelers = [
-          ...new Map(
-            data?.travelBuddies?.map((item) => [item["passport"], item])
-          ).values(),
-        ];
-        setTravellers(uniqueTravelers);
-      })
-      .catch((error) => {
-        console.error("Error fetching data:", error);
-      });
-  }, []);
-  console.log("passenger", travellers);
-  const handleAutoFill = (obj, index, category) => {
-    const {
-      dob,
-      firstName,
-      gender,
-      lastName,
-      nationality,
-      passport,
-      passportexp,
-      paxtype,
-      title,
-    } = obj;
-
-    const updatedPassengerData = { ...flightPassengerData };
-
-    if (updatedPassengerData[category]) {
-      updatedPassengerData[category] = updatedPassengerData[category].map(
-        (passenger, idx) => {
-          if (idx === index) {
-            return {
-              ...passenger,
-              fName: firstName || passenger.fName,
-              title: title || passenger.title,
-              lName: lastName || passenger.lName,
-              gender: gender || passenger.gender,
-              dob: moment(dob?.split("Z")[0]) || passenger.dob, // corrction this line
-              passNation: nationality || passenger.passNation,
-              passNo: passport || passenger.passNo,
-              passEx: moment(passportexp?.split("Z")[0]) || passenger.passEx, // corrction this line
-              PassCopy: passenger.PassCopy,
-              VisaCopy: passenger.VisaCopy,
-              FFNumber: passenger.FFNumber,
-            };
-          }
-          return passenger;
-        }
-      );
-    }
-
-    // Update email and phone if provided in the autofill object
-    if (obj.email) updatedPassengerData.email = obj.email;
-    if (obj.phone) updatedPassengerData.phone = obj.phone;
-
-    // Update the state with the new passenger data
-    setFlightPassengerData(updatedPassengerData);
-  };
-  //Adult Traveler
-  const adultTravelers = travellers.filter((item) => item.paxtype === "Adult");
-
-  const optionAdults = adultTravelers.map((x, index) => {
-    if (x.paxtype === "Adult") {
-      return {
-        value: x,
-        label: `Name:${x.title} ${x.firstName} ${x.lastName} Gender:${
-          x.gender
-        }  Dob:${moment(x.dob?.split("Z")[0]).format("YYYY-MM-DD")}`, // corrction this line
-      };
-    }
-  });
-  //Child Traveler
-  const childTravelers = travellers.filter((item) => item.paxtype === "Child");
-
-  const optionChilds = childTravelers.map((x, index) => {
-    if (x.paxtype === "Child") {
-      return {
-        value: x,
-        label: `Name:${x.title} ${x.firstName} ${x.lastName} Gender:${
-          x.gender
-        }  Dob:${moment(x.dob?.split("Z")[0]).format("YYYY-MM-DD")}`, // corrction this line
-      };
-    }
-  });
-  //Infant Traveler
-  const infantTravelers = travellers.filter(
-    (item) => item.paxtype === "Infant"
-  );
-
-  const optionInfants = infantTravelers.map((x, index) => {
-    if (x.paxtype === "Infant") {
-      return {
-        value: x,
-        label: `Name:${x.title} ${x.firstName} ${x.lastName} Gender:${
-          x.gender
-        }  Dob:${moment(x.dob?.split("Z")[0]).format("YYYY-MM-DD")}`, // corrction this line
-      };
-    }
-  });
 
   const counts = [
     { category: "adult", count: adultCount },
@@ -412,72 +692,43 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
       ];
 
       const body = { ResultId, SearchId, Passengers: passengers };
-      const confirmResult = await Swal.fire({
-        title: "Are you sure?",
-        text: "Do you want to book this flight?",
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonText: "Yes, book it!",
-        cancelButtonText: "No, cancel!",
-      });
+      const previewPayload = {
+        bookingBody: body,
+        passengers,
+        selectedAirPrice: activeAirPrice,
+        selectedOffer: data,
+        seatSelections: Array.isArray(seatSelections) && seatSelections.length
+          ? seatSelections
+          : Array.isArray(data?.seatSelections)
+          ? data.seatSelections
+          : Array.isArray(activeAirPrice?.seatSelections)
+          ? activeAirPrice.seatSelections
+          : [],
+      };
 
-      if (confirmResult.isConfirmed) {
-        Swal.fire({
-          title: "Booking in progress...",
-          text: "Please wait while we process your booking.",
-          allowOutsideClick: false, // Prevent closing the modal by clicking outside
-          allowEscapeKey: false, // Prevent closing the modal with the Escape key
-          allowEnterKey: false, // Prevent submitting or closing with the Enter key
-          showConfirmButton: false, // Hide the confirm button
-          showCancelButton: false, // Hide the cancel button
-          didOpen: () => {
-            Swal.showLoading(); // Show a loading spinner
-          },
-        });
-
-        try {
-          const response = await fetch(
-            `${config.baseUrl}/booking/api2/booking`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-              },
-              body: JSON.stringify(body),
-            }
+      try {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(
+            "flyjatt:preview_booking",
+            JSON.stringify(previewPayload)
           );
-
-          const data = await response.json();
-
-          if (response.ok) {
-            Swal.fire(
-              "Booked!",
-              "Your flight has been booked.",
-              "success"
-            ).then(() => {
-              navigate("/paymentgateway", {
-                state: { paymentData: data },
-              });
-            });
-          } else {
-            Swal.fire("Error!", `Booking failed: ${data.message}`, "error");
-          }
-        } catch (error) {
-          Swal.fire(
-            "Error!",
-            "There was an error booking your flight.",
-            "error"
-          );
-          console.error("Error:", error);
         }
+      } catch (storageError) {
+        console.warn("Unable to cache preview booking payload", storageError);
       }
+
+      navigate("/previewbooking", {
+        state: previewPayload,
+      });
     } else {
       console.log("Form has errors");
     }
   };
 
   const handleAutoPassVisaCopy = async (file, index, type, category) => {
+    if (!file) return null;
+    let uploadedLink = null;
+
     const formData = new FormData();
     formData.append("file", file);
 
@@ -492,10 +743,11 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
 
       if (!response.ok) {
         console.error("File upload failed", response.statusText);
-        return;
+        return null;
       }
 
       const data = await response.json();
+      uploadedLink = data?.link || data?.url || null;
 
       // Update the passenger data with the uploaded file link
       setFlightPassengerData((prevState) => {
@@ -506,27 +758,212 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
           updatedPassengers[category] = updatedPassengers[category].map(
             (passenger, i) =>
               i === index
-                ? { ...passenger, PassCopy: data.link } // For PassCopy
+                ? { ...passenger, PassCopy: uploadedLink } // For PassCopy
                 : passenger
           );
         } else if (type === "visa") {
           updatedPassengers[category] = updatedPassengers[category].map(
             (passenger, i) =>
               i === index
-                ? { ...passenger, VisaCopy: data.link } // For VisaCopy
+                ? { ...passenger, VisaCopy: uploadedLink } // For VisaCopy
                 : passenger
           );
         }
 
         return updatedPassengers;
       });
+      return {
+        link: uploadedLink,
+        payload: data,
+      };
     } catch (error) {
       console.error("Error uploading file:", error);
+      return null;
+    }
+  };
+
+  const fileToDataUrl = (file) =>
+    new Promise((resolve, reject) => {
+      try {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Could not read image file."));
+        reader.readAsDataURL(file);
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+  const requestTesseractMrzExtraction = async (file, uploadedPassportUrl = "") => {
+    try {
+      const imageBase64 = await fileToDataUrl(file);
+      const response = await fetch("/api/passport/extract-local", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          imageBase64,
+          fileUrl: uploadedPassportUrl || "",
+        }),
+      });
+
+      if (!response.ok) return null;
+      const payload = await response.json();
+      const parsed = parsePassportExtractionPayload(payload);
+      return hasExtractedPassportFields(parsed) ? parsed : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const applyExtractedPassportData = (
+    category,
+    index,
+    extracted = {},
+    uploadedPassportUrl = ""
+  ) => {
+    setFlightPassengerData((prevState) => {
+      const updatedPassengers = { ...prevState };
+      const currentPassenger = updatedPassengers?.[category]?.[index];
+      if (!currentPassenger) return prevState;
+
+      const gender = normalizeGender(extracted.rawGender) || currentPassenger.gender;
+      const passNation = normalizeCountryCode(
+        extracted.passNationRaw,
+        currentPassenger.passNation
+      );
+      const passIssueCountry = normalizeCountryCode(
+        extracted.passIssueCountryRaw,
+        currentPassenger.passIssueCountry || passNation
+      );
+      const title = normalizeTitle(
+        extracted.rawTitle || currentPassenger.title,
+        gender,
+        currentPassenger.type
+      );
+
+      const nextPassenger = {
+        ...currentPassenger,
+        PassCopy: uploadedPassportUrl || currentPassenger.PassCopy,
+        fName: extracted.fName || currentPassenger.fName,
+        lName: extracted.lName || currentPassenger.lName,
+        passNo: extracted.passNo || currentPassenger.passNo,
+        passEx: extracted.passEx || currentPassenger.passEx,
+        dob: extracted.dob || currentPassenger.dob,
+        passNation,
+        passIssueCountry,
+        gender,
+        title: title || currentPassenger.title,
+      };
+
+      updatedPassengers[category] = updatedPassengers[category].map(
+        (passenger, passengerIndex) =>
+          passengerIndex === index ? nextPassenger : passenger
+      );
+
+      return updatedPassengers;
+    });
+  };
+
+  const handlePassportScanAndAutofill = async (event, category, index) => {
+    const file = event?.target?.files?.[0];
+    if (!file) return;
+
+    const key = getScanKey(category, index);
+    setScanStatus(category, index, {
+      loading: true,
+      error: "",
+      success: "",
+    });
+
+    try {
+      const uploadResult = await handleAutoPassVisaCopy(
+        file,
+        index,
+        "passport",
+        category
+      );
+      const uploadedPassportUrl =
+        (typeof uploadResult === "string"
+          ? uploadResult
+          : uploadResult?.link) || "";
+
+      // Prefer local Tesseract MRZ extraction first for consistent passport parsing.
+      let extractedData = await requestTesseractMrzExtraction(
+        file,
+        uploadedPassportUrl || ""
+      );
+      if (!hasExtractedPassportFields(extractedData)) {
+        extractedData = parsePassportExtractionPayload(
+          uploadResult?.payload || uploadResult || {}
+        );
+      }
+
+      if (hasExtractedPassportFields(extractedData || {})) {
+        applyExtractedPassportData(
+          category,
+          index,
+          extractedData,
+          uploadedPassportUrl || ""
+        );
+        setScanStatus(category, index, {
+          loading: false,
+          error: "",
+          success: "Passport scanned and fields auto-filled.",
+        });
+      } else {
+        setScanStatus(category, index, {
+          loading: false,
+          error: "",
+          success: "Passport uploaded. Tesseract MRZ could not extract fields.",
+        });
+      }
+    } catch (error) {
+      setScanStatus(category, index, {
+        loading: false,
+        success: "",
+        error:
+          "Could not extract passport fields. You can still fill details manually.",
+      });
+    } finally {
+      if (event?.target) {
+        event.target.value = "";
+      }
+      setTimeout(() => {
+        setPassportScanState((prevState) => ({
+          ...prevState,
+          [key]: {
+            ...(prevState[key] || {}),
+            success: "",
+          },
+        }));
+      }, 4000);
     }
   };
 
   return (
-    <Box>
+    <Box
+      sx={{
+        "& .MuiTypography-subtitle1": {
+          fontSize: "12px",
+          color: "#5a6b85",
+          fontWeight: 600,
+        },
+        "& .MuiInputBase-root": {
+          minHeight: 36,
+          borderRadius: "10px",
+        },
+        "& .MuiInputBase-input": {
+          fontSize: "12px",
+          py: "8px",
+        },
+        "& .MuiFormHelperText-root": {
+          fontSize: "11px",
+          mt: "3px",
+        },
+      }}
+    >
       <form onSubmit={handleSubmit}>
         {counts
           .filter(({ count }) => count > 0)
@@ -534,23 +971,28 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
             <Box
               key={category}
               sx={{
-                mb: 2,
+                mb: 2.5,
+                p: { xs: 1.2, md: 1.6 },
+                borderRadius: "14px",
+                border: "1px solid #E3EBF7",
+                background:
+                  "linear-gradient(180deg, #FBFDFF 0%, #FFFFFF 100%)",
                 "& .MuiOutlinedInput-root": {
                   "& fieldset": {
-                    borderColor: "var(--border)", // Border color
+                    borderColor: "#D4DFEF",
                   },
                   "&:hover fieldset": {
-                    borderColor: "var(--primary-button)", // Border color on hover
+                    borderColor: "var(--primary-button)",
                   },
                   "&.Mui-focused fieldset": {
-                    borderColor: "var(--border)", // Border color when focused
+                    borderColor: "var(--primary-button)",
                   },
                 },
                 "& .MuiInputLabel-root": {
-                  color: "var(--border)", // Label color
+                  color: "#5a6b85",
                 },
                 "& .MuiInputLabel-root.Mui-focused": {
-                  color: "var(--border)", // Label color when focused
+                  color: "var(--primary-button)",
                 },
                 ".react-datepicker-wrapper": {
                   width: "100%",
@@ -560,12 +1002,12 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
               <Box
                 key={category}
                 sx={{
-                  fontSize: { xs: 16, md: 20 },
-                  borderBottom: "1px solid #ccc", // Add border bottom
-                  pb: 1, // Add padding bottom for spacing
-                  mb: 2, // Add margin bottom for spacing
-                  color: "var(--primary-button)", // Change color to primary-button
-                  fontWeight: "600", // Make font weight bold
+                  fontSize: { xs: 14, md: 16 },
+                  borderBottom: "1px solid #E3EBF7",
+                  pb: 0.8,
+                  mb: 1.4,
+                  color: "#123d66",
+                  fontWeight: 700,
                 }}
               >
                 {category.charAt(0).toUpperCase() + category.slice(1)}s
@@ -579,7 +1021,11 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                   spacing={{ xs: 1, md: 2 }}
                   key={index}
                   sx={{
-                    mb: 2,
+                    mb: 1.6,
+                    p: { xs: 1.1, md: 1.4 },
+                    borderRadius: "12px",
+                    border: "1px solid #E8EEF8",
+                    backgroundColor: "#FDFEFF",
                   }}
                 >
                   <Grid
@@ -588,45 +1034,23 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                     container
                     sx={{
                       position: "relative",
+                      alignItems: "center",
+                      mb: 0.5,
+                      minHeight: 24,
                     }}
                   >
-                    <Grid item xs={8.5} md={3.8}>
-                      <Typography
-                        sx={{
-                          fontSize: {
-                            xs: "11px",
-                            md: "13px",
-                          },
-                          // color: "#444542",
-                          color: "var(--primary-button)",
-                        }}
-                      >
-                        Search From your Favorite Traveler List
-                      </Typography>
-                      <SearchableDropDown
-                        index={index}
-                        handler={handleAutoFill}
-                        options={
-                          category === "adult"
-                            ? optionAdults
-                            : category === "infant"
-                            ? optionInfants
-                            : optionChilds
-                        }
-                        placeholder="Select Traveller"
-                        type={category}
-                      />
-                    </Grid>
                     <Box
                       sx={{
                         bgcolor: "var(--primary-button)",
                         color: "var(--white)",
-                        py: 1,
-                        px: 2,
-                        borderRadius: 1,
+                        py: 0.45,
+                        px: 1.2,
+                        borderRadius: "999px",
                         position: "absolute",
                         right: 0,
-                        top: { xs: "45%", md: "50%" },
+                        top: { xs: "42%", md: "48%" },
+                        fontSize: "11px",
+                        fontWeight: 700,
                       }}
                     >
                       {category.charAt(0).toUpperCase() + category.slice(1)}{" "}
@@ -637,13 +1061,61 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                   <Grid item xs={12} md={12}>
                     <Box
                       sx={{
-                        fontSize: { xs: 16, md: 20 },
-                        color: "var(--primary-button)",
-                        fontWeight: "600",
+                        display: "flex",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        flexWrap: "wrap",
+                        gap: 1,
                         mb: 1,
                       }}
                     >
-                      Personal Details
+                      <Box
+                        sx={{
+                          fontSize: { xs: 14, md: 15 },
+                          color: "#123d66",
+                          fontWeight: 700,
+                        }}
+                      >
+                        Personal Details
+                      </Box>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        <Button
+                          component="label"
+                          variant="outlined"
+                          size="small"
+                          startIcon={<FaCamera />}
+                          sx={{
+                            borderColor: "var(--primary-button)",
+                            color: "var(--primary-button)",
+                            textTransform: "none",
+                            borderRadius: "9px",
+                            fontWeight: 600,
+                            fontSize: "11px",
+                            px: 1.2,
+                            py: 0.2,
+                            ":hover": {
+                              borderColor: "var(--primary-button)",
+                              backgroundColor: "rgba(0,0,0,0.03)",
+                            },
+                          }}
+                        >
+                          {passportScanState[getScanKey(category, index)]?.loading
+                            ? "Scanning..."
+                            : "Scan Passport"}
+                          <input
+                            type="file"
+                            hidden
+                            accept="image/*"
+                            capture="environment"
+                            onChange={(event) =>
+                              handlePassportScanAndAutofill(event, category, index)
+                            }
+                            disabled={
+                              passportScanState[getScanKey(category, index)]?.loading
+                            }
+                          />
+                        </Button>
+                      </Box>
                     </Box>
                     <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
                       <ErrorOutlineIcon
@@ -662,6 +1134,30 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                         As Mentioned on Your Passport or government Approved IDs
                       </Typography>
                     </Box>
+                    {passportScanState[getScanKey(category, index)]?.error ? (
+                      <Typography
+                        sx={{
+                          mb: 1,
+                          fontSize: 11,
+                          color: "#d32f2f",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {passportScanState[getScanKey(category, index)]?.error}
+                      </Typography>
+                    ) : null}
+                    {passportScanState[getScanKey(category, index)]?.success ? (
+                      <Typography
+                        sx={{
+                          mb: 1,
+                          fontSize: 11,
+                          color: "#2e7d32",
+                          fontWeight: 500,
+                        }}
+                      >
+                        {passportScanState[getScanKey(category, index)]?.success}
+                      </Typography>
+                    ) : null}
                     <FormControl fullWidth>
                       <Typography
                         variant="subtitle1"
@@ -696,8 +1192,12 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                                 passenger.title === option
                                   ? "white"
                                   : "var(--primary-button)",
-                              borderRadius: 2, // Add border radius
-                              fontWeight: "600", // Make text weight bolder
+                              borderRadius: "8px",
+                              fontWeight: 600,
+                              fontSize: "11px",
+                              minHeight: 30,
+                              px: 1.1,
+                              py: 0.1,
                             }}
                           >
                             {option}
@@ -829,7 +1329,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                             label={option}
                             sx={{
                               "& .MuiFormControlLabel-label": {
-                                fontSize: "14px", // Adjust font size if needed
+                                fontSize: "12px",
                               },
                             }}
                           />
@@ -843,49 +1343,12 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                     </FormControl>
                   </Grid>
 
-                  <Grid tem xs={12} md={6} sx={{ p: { xs: 1, md: 2 }, my: 2 }}>
-                    <Box
-                      sx={{
-                        fontSize: { xs: 16, md: 20 },
-                        color: "var(--primary-button)",
-                        fontWeight: "600",
-                        mb: 1,
-                      }}
-                    >
-                      Frequent Flyer
-                    </Box>
-                    <FormControl fullWidth>
-                      <Typography
-                        variant="subtitle1"
-                        gutterBottom
-                        sx={{ fontSize: "14px", color: "gray" }}
-                      >
-                        Frequent Flyer Number (If Any)
-                      </Typography>
-                      <TextField
-                        value={passenger.FFNumber}
-                        onChange={(e) =>
-                          handleInputChange(e, category, index, "FFNumber")
-                        }
-                        fullWidth
-                        InputProps={{
-                          sx: {
-                            height: 40, // Reduce field height
-                            borderRadius: 2, // Add border radius
-                            borderColor: "lightgray", // Set border color to light gray
-                            fontSize: "12px", // Set font size to 12px
-                          },
-                        }}
-                      />
-                    </FormControl>
-                  </Grid>
                   <Grid item xs={12} md={12}>
                     <Box
                       sx={{
-                        fontSize: { xs: 16, md: 20 },
-                        color: "var(--primary-button)",
-                        fontWeight: "600",
-                        // mb: 1,
+                        fontSize: { xs: 14, md: 15 },
+                        color: "#123d66",
+                        fontWeight: 700,
                       }}
                     >
                       Passport Information
@@ -899,7 +1362,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                         gutterBottom
                         sx={{ fontSize: "14px", color: "gray" }}
                       >
-                        Select Country *
+                        Nationality *
                       </Typography>
                       <Select
                         value={passenger.passNation || ""}
@@ -929,7 +1392,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                         }}
                       >
                         <MenuItem value="" disabled>
-                          Select Country
+                          Select Nationality
                         </MenuItem>
                         {CountryList.map((country) => (
                           <MenuItem key={country.code} value={country.code}>
@@ -939,105 +1402,185 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                       </Select>
                       {errors[category][index] && !passenger.passNation && (
                         <FormHelperText error>
-                          Country is required
+                          Nationality is required
                         </FormHelperText>
                       )}
                     </FormControl>
                   </Grid>
 
-                  {/* Passport Number (conditionally required) */}
-                  {domestic && (
-                    <Grid item xs={12} md={6}>
-                      <FormControl fullWidth>
-                        <Typography
-                          variant="subtitle1"
-                          gutterBottom
-                          sx={{ fontSize: "14px", color: "gray" }}
-                        >
-                          Passport Number *
-                        </Typography>
-                        <TextField
-                          value={passenger.passNo}
-                          onChange={(e) =>
-                            handleInputChange(e, category, index, "passNo")
-                          }
-                          fullWidth
-                          error={errors[category][index] && !passenger.passNo}
-                          helperText={
-                            errors[category][index] && !passenger.passNo
-                              ? "Passport Number is required"
-                              : ""
-                          }
-                          InputProps={{
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <Typography
+                        variant="subtitle1"
+                        gutterBottom
+                        sx={{ fontSize: "14px", color: "gray" }}
+                      >
+                        Passport Issuing Country *
+                      </Typography>
+                      <Select
+                        value={passenger.passIssueCountry || ""}
+                        onChange={(event) =>
+                          handleInputChange(
+                            { target: { value: event.target.value } },
+                            category,
+                            index,
+                            "passIssueCountry"
+                          )
+                        }
+                        displayEmpty
+                        inputProps={{ "aria-label": "Without label" }}
+                        sx={{
+                          height: 40,
+                          borderRadius: 2,
+                          borderColor: "lightgray",
+                          fontSize: "11px",
+                        }}
+                        MenuProps={{
+                          PaperProps: {
                             sx: {
-                              height: 40, // Reduce field height
-                              borderRadius: 2, // Add border radius
-                              borderColor: "lightgray", // Set border color to light gray
-                              fontSize: "12px", // Set font size to 12px
+                              maxHeight: 200,
+                              border: "1px solid lightgray",
                             },
-                          }}
-                        />
-                      </FormControl>
-                    </Grid>
-                  )}
+                          },
+                        }}
+                      >
+                        <MenuItem value="" disabled>
+                          Select Issuing Country
+                        </MenuItem>
+                        {CountryList.map((country) => (
+                          <MenuItem key={country.code} value={country.code}>
+                            {getCountryDisplayLabel(country)}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors[category][index] &&
+                        !passenger.passIssueCountry && (
+                          <FormHelperText error>
+                            Passport issuing country is required
+                          </FormHelperText>
+                        )}
+                    </FormControl>
+                  </Grid>
 
-                  {/* Passport Expiry Date (conditionally required) */}
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <Typography
+                        variant="subtitle1"
+                        gutterBottom
+                        sx={{ fontSize: "14px", color: "gray" }}
+                      >
+                        Passport Number *
+                      </Typography>
+                      <TextField
+                        value={passenger.passNo}
+                        onChange={(e) =>
+                          handleInputChange(e, category, index, "passNo")
+                        }
+                        fullWidth
+                        error={errors[category][index] && !passenger.passNo}
+                        helperText={
+                          errors[category][index] && !passenger.passNo
+                            ? "Passport Number is required"
+                            : ""
+                        }
+                        InputProps={{
+                          sx: {
+                            height: 40,
+                            borderRadius: 2,
+                            borderColor: "lightgray",
+                            fontSize: "12px",
+                          },
+                        }}
+                      />
+                    </FormControl>
+                  </Grid>
 
-                  {domestic && (
-                    <Grid item xs={12} md={6}>
-                      <FormControl fullWidth>
-                        <Typography
-                          variant="subtitle1"
-                          gutterBottom
-                          sx={{ fontSize: "14px", color: "gray" }}
-                        >
-                          Passport Expiry Date *
-                        </Typography>
-                        <DatePicker
-                          selected={
-                            passenger?.passEx
-                              ? new Date(passenger.passEx)
-                              : null
-                          }
-                          onChange={(date) =>
-                            handleDateChange(date, category, index, "passEx")
-                          }
-                          showMonthDropdown
-                          showYearDropdown
-                          dropdownMode="select"
-                          dateFormat="dd MMM yyyy"
-                          customInput={
-                            <TextField
-                              variant="outlined"
-                              fullWidth
-                              error={
-                                errors[category][index] && !passenger?.passEx
-                              }
-                              helperText={
-                                errors[category][index] && !passenger?.passEx
-                                  ? "Passport Expiry Date is required"
-                                  : ""
-                              }
-                              InputProps={{
-                                sx: {
-                                  height: 40, // Reduce field height
-                                  borderRadius: 2, // Add border radius
-                                  borderColor: "lightgray", // Set border color to light gray
-                                  fontSize: "12px", // Set font size to 12px
-                                },
-                              }}
-                            />
-                          }
-                          minDate={new Date()}
-                          popperPlacement={"bottom-start"}
-                        />
-                      </FormControl>
-                    </Grid>
-                  )}
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <Typography
+                        variant="subtitle1"
+                        gutterBottom
+                        sx={{ fontSize: "14px", color: "gray" }}
+                      >
+                        Passport Expiry Date *
+                      </Typography>
+                      <DatePicker
+                        selected={
+                          passenger?.passEx ? new Date(passenger.passEx) : null
+                        }
+                        onChange={(date) =>
+                          handleDateChange(date, category, index, "passEx")
+                        }
+                        showMonthDropdown
+                        showYearDropdown
+                        dropdownMode="select"
+                        dateFormat="dd MMM yyyy"
+                        customInput={
+                          <TextField
+                            variant="outlined"
+                            fullWidth
+                            error={errors[category][index] && !passenger?.passEx}
+                            helperText={
+                              errors[category][index] && !passenger?.passEx
+                                ? "Passport Expiry Date is required"
+                                : ""
+                            }
+                            InputProps={{
+                              sx: {
+                                height: 40,
+                                borderRadius: 2,
+                                borderColor: "lightgray",
+                                fontSize: "12px",
+                              },
+                            }}
+                          />
+                        }
+                        minDate={new Date()}
+                        popperPlacement={"bottom-start"}
+                      />
+                    </FormControl>
+                  </Grid>
 
-                  <Grid container spacing={{ xs: 1, md: 2 }} p={2}>
+                  <Grid item xs={12} md={6} sx={{ p: { xs: 0.5, md: 1 }, my: 1 }}>
+                    <Box
+                      sx={{
+                        fontSize: { xs: 14, md: 15 },
+                        color: "#123d66",
+                        fontWeight: 700,
+                        mb: 0.6,
+                      }}
+                    >
+                      Frequent Flyer
+                    </Box>
+                    <FormControl fullWidth>
+                      <Typography
+                        variant="subtitle1"
+                        gutterBottom
+                        sx={{ fontSize: "14px", color: "gray" }}
+                      >
+                        Frequent Flyer Number (If Any)
+                      </Typography>
+                      <TextField
+                        value={passenger.FFNumber}
+                        onChange={(e) =>
+                          handleInputChange(e, category, index, "FFNumber")
+                        }
+                        fullWidth
+                        InputProps={{
+                          sx: {
+                            height: 40, // Reduce field height
+                            borderRadius: 2, // Add border radius
+                            borderColor: "lightgray", // Set border color to light gray
+                            fontSize: "12px", // Set font size to 12px
+                          },
+                        }}
+                      />
+                    </FormControl>
+                  </Grid>
+
+                  <Grid container spacing={{ xs: 1, md: 1.4 }} p={1}>
                     {domestic && (
-                      <Grid item xs={6} md={6}>
+                      <Grid item xs={12} sm={6} md={6}>
                         <Box sx={{ mx: "auto" }}>
                           <Typography
                             variant="subtitle1"
@@ -1052,8 +1595,8 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                               border: "1px dashed var(--border)",
                               textAlign: "center",
                               p: 1,
-                              borderRadius: 1,
-                              width: { xs: "90%", md: "60%" },
+                              borderRadius: "10px",
+                              width: { xs: "100%", md: "78%" },
                             }}
                           >
                             <Box>
@@ -1082,7 +1625,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                               ) : (
                                 <FaPassport
                                   style={{
-                                    fontSize: 64,
+                                    fontSize: 52,
                                     color: "var(--primary-button)",
                                     mb: 2,
                                     mt: 2,
@@ -1144,7 +1687,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                       </Grid>
                     )}
                     {domestic && (
-                      <Grid item xs={6} md={6}>
+                      <Grid item xs={12} sm={6} md={6}>
                         <Box sx={{ mx: "auto" }}>
                           <Typography
                             variant="subtitle1"
@@ -1159,8 +1702,8 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                               border: "1px dashed var(--border)",
                               textAlign: "center",
                               p: 1,
-                              borderRadius: 1,
-                              width: { xs: "90%", md: "60%" },
+                              borderRadius: "10px",
+                              width: { xs: "100%", md: "78%" },
                             }}
                           >
                             <Box>
@@ -1189,7 +1732,7 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
                               ) : (
                                 <FaCcVisa
                                   style={{
-                                    fontSize: 64,
+                                    fontSize: 52,
                                     color: "var(--primary-button)",
                                     mb: 2,
                                     mt: 2,
@@ -1257,7 +1800,15 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
           ))}
 
         {/* Email and Phone */}
-        <Grid container spacing={2} mt={2}>
+        <Grid
+          container
+          spacing={1.4}
+          mt={1.8}
+          sx={{
+            borderTop: "1px solid #E3EBF7",
+            pt: 1.5,
+          }}
+        >
           <Grid item xs={12} md={6}>
             <FormControl fullWidth>
               <Typography
@@ -1333,14 +1884,9 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
             label={
               <Typography
                 sx={{
-                  fontSize: {
-                    xs: "12px",
-                    sm: "12px",
-                    md: "13px",
-                    lg: "13px",
-                  },
-                  color: "var(--primary-button)",
-                  fontWeight: "600",
+                  fontSize: "12px",
+                  color: "#36577b",
+                  fontWeight: 600,
                 }}
               >
                 By completing this booking, you agree to our Terms & Conditions
@@ -1351,38 +1897,25 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice }) => {
         <Button
           variant="contained"
           type="submit"
-          // sx={{
-          //   bgcolor: "var(--primary-button)",
-          //   my: 3,
-          //   width: "100%",
-          // }}
           sx={{
-            bgcolor: "var(--primary-color)",
+            bgcolor: "var(--primary-button)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            borderRadius: "5px",
-            py: "6px",
-            width: { xs: "95%", sm: "100%" },
+            borderRadius: "10px",
+            py: "9px",
+            width: "100%",
             fontSize: "13px",
-
-            color: "var(--meta-black)",
+            letterSpacing: 0.2,
+            color: "#ffffff",
             fontWeight: 600,
             ":hover": {
-              bgcolor: "var(--primary-color)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: "5px",
-              py: "6px",
-              width: "100%",
-              fontSize: "13px",
-              color: "var(--meta-black)",
-              fontWeight: 600,
+              bgcolor: "var(--primary-button)",
+              color: "#ffffff",
             },
           }}
         >
-          Book & Hold
+          Preview Booking
         </Button>
       </form>
     </Box>

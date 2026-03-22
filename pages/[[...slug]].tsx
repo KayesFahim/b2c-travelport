@@ -1,9 +1,5 @@
-import dynamic from "next/dynamic";
-
-const ClientApp = dynamic(() => import("../src/App"), {
-  ssr: false,
-});
+import ClientAppPage from "../src/next/ClientAppPage";
 
 export default function CatchAllPage() {
-  return <ClientApp />;
+  return <ClientAppPage />;
 }

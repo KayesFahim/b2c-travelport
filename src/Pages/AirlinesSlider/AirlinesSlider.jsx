@@ -1,14 +1,20 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Slider from "react-slick";
-import { Box, Stack } from "@mui/material";
+import { Box, Chip, IconButton, Stack, Typography } from "@mui/material";
 import ArrowForwardIosRoundedIcon from "@mui/icons-material/ArrowForwardIosRounded";
+import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import commaNumber from "comma-number";
 
 const AirlinesSlider = ({ uniqueCarriers, selectedAirlins, handleAirLine }) => {
   const carriers = Array.isArray(uniqueCarriers) ? uniqueCarriers : [];
+  const selectedAirlineCodes = Array.isArray(selectedAirlins)
+    ? selectedAirlins
+    : [];
+  const [failedLogos, setFailedLogos] = useState({});
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth : 1280
   );
+  const sliderRef = useRef(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -19,10 +25,9 @@ const AirlinesSlider = ({ uniqueCarriers, selectedAirlins, handleAirLine }) => {
 
   const resolveSlidesToShow = (width, count) => {
     const safeCount = Math.max(1, count || 0);
-    if (width <= 480) return Math.min(2, safeCount);
-    if (width <= 600) return Math.min(2, safeCount);
-    if (width <= 1000) return Math.min(3, safeCount);
-    if (width <= 1200) return Math.min(4, safeCount);
+    if (width <= 520) return Math.min(1, safeCount);
+    if (width <= 760) return Math.min(2, safeCount);
+    if (width <= 1080) return Math.min(3, safeCount);
     return Math.min(4, safeCount);
   };
 
@@ -31,6 +36,15 @@ const AirlinesSlider = ({ uniqueCarriers, selectedAirlins, handleAirLine }) => {
     [viewportWidth, carriers.length]
   );
   const canSlide = carriers.length > slidesToShow;
+
+  useEffect(() => {
+    if (!sliderRef.current) return;
+    sliderRef.current.slickGoTo(0, true);
+  }, [carriers.length, slidesToShow]);
+
+  useEffect(() => {
+    setFailedLogos({});
+  }, [carriers]);
 
   const formatCarrierPrice = (item) => {
     const priceText = commaNumber(Number(item?.price || 0));
@@ -44,292 +58,287 @@ const AirlinesSlider = ({ uniqueCarriers, selectedAirlins, handleAirLine }) => {
     }
     return priceText;
   };
+
+  const getCarrierBadgeText = (displayName, code) => {
+    const cleanedCode = String(code || "")
+      .replace(/[^A-Za-z0-9]/g, "")
+      .toUpperCase();
+    if (cleanedCode.length >= 2) {
+      return cleanedCode.slice(0, 2);
+    }
+
+    const words = String(displayName || "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    if (words.length >= 2) {
+      return `${words[0][0]}${words[1][0]}`.toUpperCase();
+    }
+    if (words.length === 1 && words[0].length > 0) {
+      return words[0].slice(0, 2).toUpperCase();
+    }
+    return "AR";
+  };
+
   const settings = {
     dots: false,
     infinite: canSlide,
-    speed: 500,
+    speed: 450,
     slidesToShow,
     slidesToScroll: 1,
     swipeToSlide: true,
-    draggable: true,
     arrows: false,
-    initialSlide: 0,
     responsive: [
       {
-        breakpoint: 1200,
-        settings: {
-          slidesToShow: Math.min(4, Math.max(1, carriers.length)),
-          slidesToScroll: 1,
-        },
-      },
-      {
-        breakpoint: 1100,
+        breakpoint: 1080,
         settings: {
           slidesToShow: Math.min(3, Math.max(1, carriers.length)),
-          slidesToScroll: 1,
         },
       },
       {
-        breakpoint: 1000,
-        settings: {
-          slidesToShow: Math.min(3, Math.max(1, carriers.length)),
-          slidesToScroll: 1,
-        },
-      },
-      {
-        breakpoint: 600,
+        breakpoint: 760,
         settings: {
           slidesToShow: Math.min(2, Math.max(1, carriers.length)),
-          slidesToScroll: 1,
         },
       },
       {
-        breakpoint: 480,
+        breakpoint: 520,
         settings: {
-          slidesToShow: Math.min(2, Math.max(1, carriers.length)),
-          slidesToScroll: 1,
+          slidesToShow: 1,
         },
       },
     ],
   };
-  const sliderRef = React.useRef(null);
-
-  useEffect(() => {
-    if (!sliderRef.current) return;
-    sliderRef.current.slickGoTo(0, true);
-  }, [carriers.length, slidesToShow]);
-
-  const goToNext = () => {
-    sliderRef.current?.slickNext();
-  };
-
-  const goToPrev = () => {
-    sliderRef.current?.slickPrev();
-  };
 
   return (
     <Box
-      className="airlines-slider"
       sx={{
-        width: { xs: "90vw", sm: "90vw", md: "100%", lg: "100%" },
-        button: {
-          border: "none",
-          outline: "none",
-          backgroundColor: "var(--primary-color)",
-          color: "var(--primary-button)",
-          cursor: "pointer",
-          borderRadius: "50%",
-          height: "25px",
-          width: "25px",
-          margin: "auto",
-          marginLeft: "5px",
-          marginRight: { xs: "1px", md: "1px" },
-          overflow: "hidden",
-          paddingTop: "4px",
-          "@media (max-width:600px)": {
-            backgroundColor: "transparent",
-          },
-          "&:hover": {
-            color: "var(--black)",
-            backgroundColor: "var(--bgcolor)",
-          },
-        },
-        ".slick-next": {
-          display: "none !important",
-        },
-        ".slick-prev": {
-          display: "none !important",
-        },
-
-        ".slick-track": {
-          marginLeft: 0,
-        },
+        width: "100%",
+        position: "relative",
         ".slick-slide > div": {
-          margin: "1px 5px",
-          width: "auto",
+          margin: "0 7px",
         },
         ".slick-list": {
-          margin: "0px -10px",
+          margin: "0 -7px",
+          py: 0.5,
         },
-        px: 0,
-        pb: .5,
       }}
-      position="relative"
     >
       <Box
-       
         sx={{
-          background: "#FFFFFF",
-          boxShadow: "rgba(0, 0, 0, 0.1) 0px 4px 12px",
-          borderRadius: "10px",
-          px: "10px",
-          overflow: "hidden",
+          border: "1px solid rgba(0,154,214,0.18)",
+          borderRadius: "14px",
+          background:
+            "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,250,255,0.98) 100%)",
+          boxShadow: "0 10px 24px rgba(15, 39, 69, 0.09)",
+          px: 1,
+          py: 0.6,
         }}
       >
-        <Slider
-          key={`${carriers.length}-${slidesToShow}`}
-          ref={sliderRef}
-          {...settings}
-        >
-          {carriers.map((item, i) => {
-            const isEven = i % 2 === 0;
-            const boxColor = isEven ? "even-color" : "odd-color";
-            const inputId = `airline-slider-${String(item.code || i)}`;
+        <Slider key={`${carriers.length}-${slidesToShow}`} ref={sliderRef} {...settings}>
+          {carriers.map((item, index) => {
+            const rawCode = String(item?.code || "").trim();
+            const normalizedCode = rawCode.toUpperCase();
+            const selectionCode = normalizedCode || rawCode;
+            const isSelected =
+              selectedAirlineCodes.includes(selectionCode) ||
+              selectedAirlineCodes.includes(rawCode);
+            const logoUrl = normalizedCode
+              ? `https://tbbd-flight.s3.ap-southeast-1.amazonaws.com/airlines-logo/${normalizedCode}.png`
+              : "";
+            const displayName = String(
+              item?.name || selectionCode || `Airline ${index + 1}`
+            ).trim();
+            const isLogoFailed = Boolean(failedLogos[selectionCode]);
+            const badgeText = getCarrierBadgeText(displayName, selectionCode);
+
             return (
-              <Box
-                key={String(item.code || i)}
-                sx={{ borderRadius: "6px" }}
-                className={`${boxColor}`}
-              >
-                <input
-                  type="checkbox"
-                  id={inputId}
-                  checked={selectedAirlins.includes(item.code)}
-                  onChange={() => handleAirLine(item.code)}
-                  style={{
-                    position: "absolute",
-                    zIndex: "-1",
-                    visibility: "hidden",
+              <Box key={`${selectionCode || "air"}-${index}`}>
+                <Box
+                  component="button"
+                  type="button"
+                  onClick={() => {
+                    if (selectionCode) {
+                      handleAirLine(selectionCode);
+                    }
                   }}
-                />
-                <label htmlFor={inputId}>
-                  <div>
-                      <Stack
-                        direction="row"
-                        spacing={1}
-                        sx={{
-                          zIndex: 2,
-                          cursor: "pointer",
-                          justifyContent: "center",
-                          alignItems: "center",
-                          borderRadius: "6px",
-                          p: 1,
-                          backgroundColor: selectedAirlins.includes(item.code)
-                            ? "var(--primary-color)"
-                            : "initial",
-                          color: selectedAirlins.includes(item.code)
-                            ? "var(--white)"
-                            : "var(--secondary-color)",
-                        }}
-                      >
-                        <Box
+                  sx={{
+                    width: "100%",
+                    border: isSelected
+                      ? "1px solid var(--primary-button)"
+                      : "1px solid #DCE6F3",
+                    borderRadius: "12px",
+                    background: isSelected
+                      ? "linear-gradient(135deg, rgba(0,154,214,0.14), rgba(0,154,214,0.05))"
+                      : "#FFFFFF",
+                    px: 1.1,
+                    py: 0.9,
+                    textAlign: "left",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1,
+                    cursor: "pointer",
+                    transition: "all 0.2s ease",
+                    boxShadow: isSelected
+                      ? "0 10px 20px rgba(0,154,214,0.18)"
+                      : "0 4px 12px rgba(15,39,69,0.06)",
+                    "&:hover": {
+                      borderColor: "var(--primary-button)",
+                      transform: "translateY(-1px)",
+                    },
+                  }}
+                >
+                  <Stack direction="row" spacing={1} alignItems="center" sx={{ minWidth: 0 }}>
+                    <Box
+                      sx={{
+                        width: 38,
+                        height: 38,
+                        borderRadius: "50%",
+                        border: "1px solid #D4E2F2",
+                        backgroundColor: "#FFFFFF",
+                        p: "3px",
+                        flexShrink: 0,
+                        display: "grid",
+                        placeItems: "center",
+                      }}
+                    >
+                      {logoUrl && !isLogoFailed ? (
+                        <img
+                          src={logoUrl}
+                          alt={`${displayName} logo`}
+                          onError={() =>
+                            setFailedLogos((prev) => ({ ...prev, [selectionCode]: true }))
+                          }
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            borderRadius: "50%",
+                            objectFit: "contain",
+                          }}
+                        />
+                      ) : (
+                        <Typography
                           sx={{
-                            fontSize: { xs: 11, md: 14 },
+                            fontSize: 12,
+                            fontWeight: 800,
+                            color: "#48617D",
+                            letterSpacing: "0.04em",
                           }}
                         >
-                          {item.code}
-                        </Box>
-                        <Box sx={{ width: "25px" }}>
-                          <img
-                            src={`https://tbbd-flight.s3.ap-southeast-1.amazonaws.com/airlines-logo/${item.code}.png`}
-                            alt=""
-                            style={{
-                              width: "100%",
-                              height: "100%",
-                              border: "1px solid var(--text-color)",
-                              borderRadius: "50%",
-                              padding: "2px",
-                            }}
-                          />
-                        </Box>
-                        <Stack direction="column">
-                          <Box
-                            sx={{
-                              fontSize: 12,
-                              fontWeight: 500,
-                            }}
-                          >
-                            {formatCarrierPrice(item)}
-                          </Box>
-                        </Stack>
-                        </Stack>
-                  </div>
-                </label>
+                          {badgeText}
+                        </Typography>
+                      )}
+                    </Box>
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography
+                        sx={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: "#1B3350",
+                          lineHeight: 1.2,
+                        }}
+                        noWrap
+                      >
+                        {displayName}
+                      </Typography>
+                      <Typography
+                        sx={{
+                          mt: 0.25,
+                          fontSize: 11,
+                          color: "#587089",
+                          fontWeight: 600,
+                          lineHeight: 1.1,
+                        }}
+                        noWrap
+                      >
+                        {formatCarrierPrice(item)}
+                      </Typography>
+                    </Box>
+                  </Stack>
+
+                  <Chip
+                    size="small"
+                    icon={
+                      isSelected ? (
+                        <CheckCircleRoundedIcon sx={{ fontSize: "14px !important" }} />
+                      ) : undefined
+                    }
+                    label={isSelected ? "Selected" : selectionCode || "Airline"}
+                    sx={{
+                      height: "24px",
+                      borderRadius: "999px",
+                      backgroundColor: isSelected ? "var(--primary-button)" : "#EEF4FC",
+                      color: isSelected ? "#FFFFFF" : "#37506B",
+                      fontWeight: 700,
+                      fontSize: "10px",
+                      flexShrink: 0,
+                      "& .MuiChip-icon": {
+                        color: "#FFFFFF",
+                      },
+                    }}
+                  />
+                </Box>
               </Box>
             );
           })}
         </Slider>
       </Box>
-      <Box
-        sx={{
-          position: "absolute",
-          left: { xs: -2, md: -1 },
-          top: "50%",
-          transform: "translateY(-50%)",
-          display: canSlide ? "flex" : "none",
-          height: "100%",
-        }}
-      >
-        <button onClick={goToPrev} aria-label="Previous airlines">
-          <ArrowForwardIosRoundedIcon
-            sx={{ transform: "rotate(180deg)", fontSize: 16, py: 0.1 }}
-          />
-        </button>
-      </Box>
-      <Box
-        sx={{
-          position: "absolute",
-          right: { xs: -3, md: -2 },
-          top: "50%",
-          transform: "translateY(-50%)",
-          display: canSlide ? "flex" : "none",
-          height: "100%",
-        }}
-      >
-        <button onClick={goToNext} aria-label="Next airlines">
-          <ArrowForwardIosRoundedIcon sx={{ fontSize: 16, py: 0.1 }} />
-        </button>
-      </Box>
+
+      {canSlide && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            pointerEvents: "none",
+          }}
+        >
+          <IconButton
+            onClick={() => sliderRef.current?.slickPrev()}
+            aria-label="Previous airlines"
+            sx={{
+              pointerEvents: "auto",
+              position: "absolute",
+              left: -12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 30,
+              height: 30,
+              bgcolor: "#FFFFFF",
+              border: "1px solid #D7E4F4",
+              boxShadow: "0 8px 18px rgba(15,39,69,0.14)",
+              "&:hover": {
+                bgcolor: "#FFFFFF",
+              },
+            }}
+          >
+            <ArrowForwardIosRoundedIcon sx={{ transform: "rotate(180deg)", fontSize: 14 }} />
+          </IconButton>
+
+          <IconButton
+            onClick={() => sliderRef.current?.slickNext()}
+            aria-label="Next airlines"
+            sx={{
+              pointerEvents: "auto",
+              position: "absolute",
+              right: -12,
+              top: "50%",
+              transform: "translateY(-50%)",
+              width: 30,
+              height: 30,
+              bgcolor: "#FFFFFF",
+              border: "1px solid #D7E4F4",
+              boxShadow: "0 8px 18px rgba(15,39,69,0.14)",
+              "&:hover": {
+                bgcolor: "#FFFFFF",
+              },
+            }}
+          >
+            <ArrowForwardIosRoundedIcon sx={{ fontSize: 14 }} />
+          </IconButton>
+        </Box>
+      )}
     </Box>
-    // <Box
-    //   sx={{
-    //     background: "#FFFFFF",
-    //     boxShadow: "rgba(0, 0, 0, 0.1) 0px 4px 12px",
-    //     borderRadius: "10px",
-    //     px: "30px",
-    //     overflow: "hidden",
-    //   }}
-    // >
-    //   <div className="slider-container">
-    //     <Slider {...settings}>
-    //       {airlineNames?.map((flight, index) => (
-    //         <div key={index}>
-    //           <Box
-    //             sx={{
-    //               display: "flex",
-    //               alignItems: "center",
-    //               msLineBreak: "30px",
-    //               // width: "90%",
-    //               p: "5px",
-    //               // mx: "30px",
-    //               gap: "10px",
-    //               ":hover": {
-    //                 background: "#FFE9BD",
-    //                 cursor: "pointer",
-    //                 width: "100%",
-    //               },
-    //             }}
-    //             onClick={() => onAirlineClick(flight?.career)}
-    //           >
-    //             <img
-    //               src={`https://tbbd-flight.s3.ap-southeast-1.amazonaws.com/airlines-logo/${flight?.career}.png`}
-    //               alt={flight?.careerName}
-    //               style={{ width: "40px", height: "40px" }}
-    //             />
-    //             <Box>
-    //               <Typography sx={{ color: "#B6B6CC", fontSize: "12px" }}>
-    //                 {flight?.career}
-    //               </Typography>
-    //               <Typography sx={{ color: "#3C4258", fontSize: "15px" }}>
-    //                 ৳ {flight?.clientPrice}
-    //               </Typography>
-    //             </Box>
-    //           </Box>
-    //         </div>
-    //       ))}
-    //     </Slider>
-    //   </div>
-    // </Box>
   );
 };
 

@@ -19,6 +19,7 @@
     "comma-number": "^2.1.0",
     "date-fns": "^3.6.0",
     "framer-motion": "^11.11.17",
+    "i18n-iso-countries": "^7.14.0",
     "jwt-decode": "^4.0.0",
     "lodash": "^4.17.21",
     "lucide-react": "^0.577.0",
@@ -38,10 +39,12 @@
     "react-spinners": "^0.14.1",
     "react-toastify": "^11.0.2",
     "reactjs-social-login": "^2.6.3",
+    "sharp": "^0.34.5",
     "slick-carousel": "^1.8.1",
     "sweetalert2": "^11.15.10",
     "sweetalert2-react-content": "^5.0.7",
     "tailwind-merge": "^3.5.0",
+    "tesseract.js": "^7.0.0",
     "to-words": "^4.1.0"
   },
   "devDependencies": {
@@ -61,6 +64,7 @@
     "vite-plugin-svgr": "^4.5.0"
   },
   "scripts": {
+    "predev": "node scripts/predev.cjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

@@ -15,7 +15,7 @@ import Swal from "sweetalert2";
 import HoldLoader from "../../Shared/Loader/HoldLoader";
 import FlightLayout from "../SingleFlight/FlightLayout";
 import { config } from "../../config";
-import FlightDetails from "../ShowDetails/FlightDetails";
+import FlightDetails from "../ShowDetails/FlightDetailsContent";
 import FlightDetailsLayout from "./FlightDetailsLayout";
 import FlightDetailsSkeleton from "./FlightDetailsSkeleton";
 

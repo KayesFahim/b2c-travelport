@@ -28,8 +28,16 @@ import SingleRoundWayFlightsSilkton from "../RoundWay/SingleRoundWayFlightsSilkt
 import Slider from "@mui/material/Slider";
 import { searchTravelportFlights } from "../../utils/travelportSearch";
 import { groupFlightsBySchedule } from "../common/flightGrouping";
+import {
+  getCurrencySymbol,
+  getFlightCurrencyCode,
+} from "../../utils/flightPolicyUtils";
+import { resolveAirportInfo } from "../../utils/travelLookup";
+import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
 
 const MultiCitySearchResult = () => {
+  const MAX_MULTI_CITY_SEGMENTS = 4;
+  const MAX_COMBINATIONS_PER_GROUP = 4;
   const location = useLocation();
   const {
     searchData,
@@ -49,6 +57,14 @@ const MultiCitySearchResult = () => {
     departureDate,
     arrivalDate,
   } = location.state || {};
+  const effectiveSegments = Array.isArray(segments)
+    ? segments.slice(0, MAX_MULTI_CITY_SEGMENTS)
+    : [];
+  const safeAdultCount = Math.max(1, Number(adultCount || 1));
+  const safeChildCount = Math.max(0, Number(childCount || 0));
+  const safeInfantCount = Math.max(0, Number(infant || 0));
+  const safeCabinClass = String(className || "Economy");
+  const safeTravelerCount = safeAdultCount + safeChildCount + safeInfantCount;
   const [flights, setFlights] = useState([]);
   const [filteredFlights, setFilteredFlights] = useState([]);
   const [initialFetchData, setInitialFetchData] = useState([]);
@@ -106,11 +122,13 @@ const MultiCitySearchResult = () => {
     const fetchData = async () => {
       setLoading(true);
 
-      const safeSegments = Array.isArray(segments) ? segments : [];
+      const safeSegments = Array.isArray(segments)
+        ? segments.slice(0, MAX_MULTI_CITY_SEGMENTS)
+        : [];
       const formattedSegments = safeSegments.map((segment) => ({
-        depfrom: segment.DepFrom,
-        arrto: segment.ArrTo,
-        depdate: moment(segment.Date).format("YYYY-MM-DD"),
+        depfrom: segment?.DepFrom || segment?.depfrom,
+        arrto: segment?.ArrTo || segment?.arrto,
+        depdate: moment(segment?.Date || segment?.depdate).format("YYYY-MM-DD"),
       }));
 
       if (formattedSegments.length === 0) {
@@ -123,10 +141,10 @@ const MultiCitySearchResult = () => {
       try {
         const data = await searchTravelportFlights(
           {
-            adultcount: parseInt(adultCount),
-            childcount: parseInt(childCount),
-            infantcount: parseInt(infant),
-            cabinclass: className,
+            adultcount: safeAdultCount,
+            childcount: safeChildCount,
+            infantcount: safeInfantCount,
+            cabinclass: safeCabinClass,
             segments: formattedSegments,
           },
           token
@@ -149,15 +167,16 @@ const MultiCitySearchResult = () => {
 
     fetchData();
   }, [
-    adultCount,
-    childCount,
-    infant,
+    safeAdultCount,
+    safeChildCount,
+    safeInfantCount,
     fromSendData,
     toSendData,
     departureDate,
     arrivalDate,
-    className,
+    safeCabinClass,
     segments,
+    MAX_MULTI_CITY_SEGMENTS,
   ]);
 
   // const handleAirlineClick = (career) => {
@@ -180,7 +199,22 @@ const MultiCitySearchResult = () => {
     setCurrentPage(1); // Reset pagination
   };
 
-  const groupedFlights = groupFlightsBySchedule(filteredFlights || []);
+  const groupedFlights = groupFlightsBySchedule(filteredFlights || []).map(
+    (group) => {
+      const options = Array.isArray(group?.options)
+        ? group.options.slice(0, MAX_COMBINATIONS_PER_GROUP)
+        : [];
+      const normalizedOptions =
+        options.length > 0 ? options : [group?.primary].filter(Boolean);
+
+      return {
+        ...group,
+        options: normalizedOptions,
+        primary: normalizedOptions[0] || group?.primary || null,
+        count: normalizedOptions.length,
+      };
+    }
+  );
   const totalPages = Math.ceil(groupedFlights?.length / itemsPerPage);
 
   const paginatedFlightGroups = groupedFlights?.slice(
@@ -251,22 +285,33 @@ const MultiCitySearchResult = () => {
   // ----------------Functionality start ----------------
   // uniqueLayover
   const uniqueLayover = Array.from(
-    new Set(
-      flights
-        ?.filter((item) => item.AllLegsInfo[0].Segments.length > 1)
-        .map((item) => ({
-          name:
-            item.AllLegsInfo[0].Segments.length > 2
-              ? item.AllLegsInfo[0].Segments[2].DepAirPort
-              : item.AllLegsInfo[0].Segments[1].DepAirPort,
-          code:
-            item.AllLegsInfo[0].Segments.length > 2
-              ? item.AllLegsInfo[0].Segments[2].DepFrom
-              : item.AllLegsInfo[0].Segments[1].DepFrom,
-        }))
-        .map((entry) => JSON.stringify(entry))
-    )
-  ).map((str) => JSON.parse(str));
+    new Map(
+      (Array.isArray(flights) ? flights : [])
+        .filter((item) => item?.AllLegsInfo?.[0]?.Segments?.length > 1)
+        .map((item) => {
+          const segments = item?.AllLegsInfo?.[0]?.Segments || [];
+          const layoverSegment =
+            segments.length > 2 ? segments[2] : segments[1];
+          if (!layoverSegment) return null;
+
+          const resolvedAirport = resolveAirportInfo(
+            layoverSegment?.DepFrom,
+            layoverSegment?.DepAirPort,
+            layoverSegment?.DepLocation
+          );
+
+          return [
+            resolvedAirport.code,
+            {
+              code: resolvedAirport.code,
+              name: resolvedAirport.name,
+              address: resolvedAirport.address,
+            },
+          ];
+        })
+        .filter(Boolean)
+    ).values()
+  );
 
   const handleSelection = (name, setSelected) => {
     setSelected((prevSelected) => {
@@ -603,11 +648,15 @@ const MultiCitySearchResult = () => {
       ...filteredData.map((item) => parseInt(item.NetFare))
     );
     const carrierName = filteredData[0].CarrierName;
+    const currencyCode = getFlightCurrencyCode(filteredData?.[0] || {});
+    const currencySymbol = getCurrencySymbol(currencyCode);
     // change this property after add
     return {
       code: carrier,
       name: carrierName,
       price: minPrice.toString(),
+      currencyCode,
+      currencySymbol,
     };
   });
   //Baggage Filter
@@ -623,10 +672,14 @@ const MultiCitySearchResult = () => {
     "40k": "40kg",
     "45k": "45kg",
     "35k": "35kg",
+    "baggagechargesdatanotavailable": "0",
   };
 
   const normalizeAndMapBaggageName = (name) => {
     const normalized = name?.toLowerCase().replace(/\s+/g, "") || "";
+    if (normalized.includes("baggagechargesdatanotavailable")) {
+      return "0";
+    }
     return baggageMapping[normalized] || normalized; // Map using baggageMapping, fallback to normalized
   };
   const uniqueBaggage = Array.from(
@@ -671,9 +724,22 @@ const MultiCitySearchResult = () => {
   const toggleBanner = () => {
     setShowBanner(!showBanner);
   };
+  const showDebugBadge = String(location?.pathname || "") === "/offers";
+  const debugSegmentCount =
+    (Array.isArray(effectiveSegments) ? effectiveSegments.length : 0) ||
+    (Array.isArray(searchData?.segments) ? searchData.segments.length : 0) ||
+    1;
   console.log("flightdataa", paginatedFlightGroups);
   return (
     <Box className="relative bg-transparent" sx={{ bgcolor: "transparent", height: "100%" }}>
+      <SearchContextDebugBadge
+        visible={showDebugBadge}
+        tripType={valueBox || tripType || "multicity"}
+        adultCount={safeAdultCount}
+        childCount={safeChildCount}
+        infantCount={safeInfantCount}
+        segmentCount={debugSegmentCount}
+      />
       {showBanner ? (
         ""
       ) : (
@@ -704,14 +770,14 @@ const MultiCitySearchResult = () => {
             arrDate={arrivalDate}
             fromSend={fromSendData}
             toSend={toSendData}
-            adult={adultCount}
-            child={childCount}
-            infantCount={infant}
-            classNa={className}
-            paxResult={result}
+            adult={safeAdultCount}
+            child={safeChildCount}
+            infantCount={safeInfantCount}
+            classNa={safeCabinClass}
+            paxResult={safeTravelerCount}
             // value={value}
             valueBoxs={valueBox}
-            segments={segments}
+            segments={effectiveSegments}
             searchDatas={searchData}
             toggleBanner={toggleBanner}
           />
@@ -744,14 +810,14 @@ const MultiCitySearchResult = () => {
           arrDate={arrivalDate}
           fromSend={fromSendData}
           toSend={toSendData}
-          adult={adultCount}
-          child={childCount}
-          infantCount={infant}
-          classNa={className}
-          paxResult={result}
+          adult={safeAdultCount}
+          child={safeChildCount}
+          infantCount={safeInfantCount}
+          classNa={safeCabinClass}
+          paxResult={safeTravelerCount}
           // value={value}
           valueBoxs={valueBox}
-          segments={segments}
+          segments={effectiveSegments}
           searchDatas={searchData}
         />
       </Box>

@@ -6,6 +6,26 @@ const toCode = (value) =>
     .trim()
     .toUpperCase();
 
+const normalizeAirlineFallbackName = (value) => {
+  const text = String(value || "").trim();
+  if (!text) return "";
+
+  const compact = text.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (
+    compact === "NA" ||
+    compact === "NAN" ||
+    compact === "NONE" ||
+    compact === "NULL" ||
+    compact === "UNKNOWN" ||
+    compact === "UNAVAILABLE" ||
+    compact === "AIRLINE"
+  ) {
+    return "";
+  }
+
+  return text;
+};
+
 const isLikelyCodeName = (value) => {
   const normalized = String(value || "").trim();
   if (!normalized) return true;
@@ -53,7 +73,7 @@ export const resolveAirportInfo = (
 export const resolveAirlineName = (code, fallbackName = "") => {
   const normalizedCode = toCode(code);
   const mapped = airlineByCode.get(normalizedCode);
-  const normalizedFallback = String(fallbackName || "").trim();
+  const normalizedFallback = normalizeAirlineFallbackName(fallbackName);
   const fallbackIsCode = isLikelyCodeName(normalizedFallback);
 
   if (mapped?.name) return mapped.name;

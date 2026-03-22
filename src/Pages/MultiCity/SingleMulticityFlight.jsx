@@ -56,7 +56,7 @@ import secureLocalStorage from "react-secure-storage";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import axios from "axios";
-import ShowDetails from "../ShowDetails/ShowDetails";
+import ShowDetails from "../ShowDetails/FlightDetails";
 import { config } from "../../config";
 import BrandWordmark from "../../Shared/BrandWordmark/BrandWordmark";
 const Transition = React.forwardRef(function Transition(props, ref) {
@@ -467,6 +467,15 @@ const SingleMulticityFlight = ({ data }) => {
   };
 
   const convertWeight = (data) => {
+    const rawValue = String(data ?? "").trim();
+    if (!rawValue) {
+      return "0";
+    }
+    const normalizedValue = rawValue.toLowerCase().replace(/\s+/g, " ");
+    if (normalizedValue.includes("baggage charges data not available")) {
+      return "0";
+    }
+
     const mappings = {
       "1P": "23Kg",
       "2P": "46Kg",
@@ -474,11 +483,29 @@ const SingleMulticityFlight = ({ data }) => {
       "2 N": "46 Kg",
     };
     return (
-      mappings[data] || (data.endsWith("Kg") ? data : data.replace("K", "Kg"))
+      mappings[rawValue] ||
+      (rawValue.endsWith("Kg") ? rawValue : rawValue.replace("K", "Kg"))
     );
   };
-  const handleBooking = (data) => {
-    navigate("/bookingdetails", { state: data });
+  const handleBooking = (selectedOffer) => {
+    const bookingState = {
+      selectedOffer: selectedOffer || data || {},
+      source: "search-results",
+      selectedAt: new Date().toISOString(),
+    };
+
+    try {
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(
+          "flyjatt:selected_offer",
+          JSON.stringify(bookingState)
+        );
+      }
+    } catch (storageError) {
+      console.warn("Unable to cache selected offer for booking flow", storageError);
+    }
+
+    navigate("/selectedflightdetails", { state: bookingState });
   };
   return (
     <Box
@@ -999,7 +1026,7 @@ const SingleMulticityFlight = ({ data }) => {
                 </Box>
                 <Box
                   sx={{
-                    textAlign: "right",
+                    textAlign: "center",
                     display: {
                       xs: "none",
                       sm: "none",
@@ -1037,15 +1064,15 @@ const SingleMulticityFlight = ({ data }) => {
                     <del>{commaNumber(data?.GrossFare)}৳</del>
                   </Typography>
                 </Box>
-                <Box sx={{ width: "100%", textAlign: "right" }}>
+                <Box sx={{ width: "100%", textAlign: "center" }}>
                   <Button
                     onClick={() => handleBooking(data || [])}
                     sx={{
                       bgcolor: "var(--primary-button)",
                       color: "var(--white)",
                       width: {
-                        xs: "100px",
-                        sm: "100px",
+                        xs: "105px",
+                        sm: "105px",
                         // md: "100%",
                         // lg: "100%",
                       },
@@ -1053,8 +1080,13 @@ const SingleMulticityFlight = ({ data }) => {
                         bgcolor: "var(--primary-button)",
                         color: "var(--white)",
                       },
-                      py: 0.5,
+                      py: 0.55,
+                      minHeight: "36px",
                       textTransform: "capitalize",
+                      display: "inline-flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      lineHeight: 1.2,
                     }}
                   >
                     Book Now
