@@ -3,6 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20.9.0"
+  },
   "dependencies": {
     "@emotion/cache": "^11.13.1",
     "@emotion/react": "^11.13.0",
@@ -59,17 +62,15 @@
     "@types/node": "^20.12.12",
     "@types/react": "^18.3.11",
     "@types/react-dom": "^18.3.1",
-    "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.2",
     "tailwindcss-animate": "^1.0.7",
     "terser": "^5.46.1",
-    "typescript": "^5.4.5",
-    "vite": "^8.0.1",
-    "vite-plugin-svgr": "^4.5.0"
+    "typescript": "^5.4.5"
   },
   "scripts": {
+    "postinstall": "prisma generate",
     "predev": "node scripts/predev.cjs",
     "dev": "next dev --webpack",
     "build": "next build --webpack",
