@@ -2,8 +2,12 @@ import { Box, Container, Grid, Typography } from "@mui/material";
 import React from "react";
 import expert1 from "../../../asstes/img/tour/Expert/Expert1.png";
 import expert2 from "../../../asstes/img/tour/Expert/Expert2.png";
-import DepPlane from "../../../asstes/img/tour/Expert/plan1.svg?react";
-import ArrPlane from "../../../asstes/img/tour/Expert/palne2.svg?react";
+import reactSvg from "../../../utils/reactSvg";
+import _DepPlane from "../../../asstes/img/tour/Expert/plan1.svg?react";
+import _ArrPlane from "../../../asstes/img/tour/Expert/palne2.svg?react";
+
+const DepPlane = reactSvg(_DepPlane);
+const ArrPlane = reactSvg(_ArrPlane);
 
 const TourExpert = () => {
   return (

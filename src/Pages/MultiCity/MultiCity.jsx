@@ -9,11 +9,12 @@ import {
   Tooltip,
 } from "@mui/material";
 import React, { useEffect, useState } from "react";
-import DepartureIcons from "../../asstes/img/HomeImage/flightIcons/deapature.svg?react";
-import ArribalIcons from "../../asstes/img/HomeImage/flightIcons/arrival.svg?react";
-import SwitchBtnIcons from "../../asstes/img/HomeImage/flightIcons/switchbtn.svg?react";
-import DateIcons from "../../asstes/img/HomeImage/flightIcons/dateIcons.svg?react";
-import TravlerIcons from "../../asstes/img/HomeImage/flightIcons/travlericons.svg?react";
+import reactSvg from "../../utils/reactSvg";
+import _DepartureIcons from "../../asstes/img/HomeImage/flightIcons/deapature.svg?react";
+import _ArribalIcons from "../../asstes/img/HomeImage/flightIcons/arrival.svg?react";
+import _SwitchBtnIcons from "../../asstes/img/HomeImage/flightIcons/switchbtn.svg?react";
+import _DateIcons from "../../asstes/img/HomeImage/flightIcons/dateIcons.svg?react";
+import _TravlerIcons from "../../asstes/img/HomeImage/flightIcons/travlericons.svg?react";
 import flightData from "../../../src/Pages/flightData";
 import Alert from "@mui/material/Alert";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
@@ -30,6 +31,13 @@ import { styled } from "@mui/material/styles";
 import GroupsIcon from "@mui/icons-material/Groups";
 import { Link, useNavigate } from "react-router-dom";
 import { saveRecentSearch } from "../../utils/recentSearches";
+
+const DepartureIcons = reactSvg(_DepartureIcons);
+const ArribalIcons = reactSvg(_ArribalIcons);
+const SwitchBtnIcons = reactSvg(_SwitchBtnIcons);
+const DateIcons = reactSvg(_DateIcons);
+const TravlerIcons = reactSvg(_TravlerIcons);
+
 const BpIcon = styled("span")(({ theme }) => ({
   borderRadius: "50%",
   width: 16,

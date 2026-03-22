@@ -16,9 +16,10 @@ import TabContext from "@mui/lab/TabContext";
 import TabList from "@mui/lab/TabList";
 import { useState } from "react";
 import { styled } from "@mui/material/styles";
-import CardIcons from "../../../asstes/img/paument/card.svg?react";
-import BkashIcons from "../../../asstes/img/paument/bkash.svg?react";
-import NogodICons from "../../../asstes/img/paument/nogod.svg?react";
+import reactSvg from "../../../utils/reactSvg";
+import _CardIcons from "../../../asstes/img/paument/card.svg?react";
+import _BkashIcons from "../../../asstes/img/paument/bkash.svg?react";
+import _NogodICons from "../../../asstes/img/paument/nogod.svg?react";
 import { useLocation } from "react-router-dom";
 import commaNumber from "comma-number";
 import secureLocalStorage from "react-secure-storage";
@@ -29,6 +30,10 @@ import moment from "moment";
 import { Calendar } from "react-date-range";
 import banksData from "../../../Pages/fakeData/Banks";
 import { config } from "../../../config";
+
+const CardIcons = reactSvg(_CardIcons);
+const BkashIcons = reactSvg(_BkashIcons);
+const NogodICons = reactSvg(_NogodICons);
 
 const CustomButton = styled(Box)(({ theme }) => ({
   backgroundColor: "#0F3D6A",

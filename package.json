@@ -71,7 +71,7 @@
   },
   "scripts": {
     "predev": "node scripts/predev.cjs",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
     "preview": "next start",

@@ -1,7 +1,11 @@
 import { Box, Typography } from "@mui/material";
 import React from "react";
-import HeadPhoneIcons from "../../../asstes/img/hedpone.svg?react";
-import MsgIcons from "../../../asstes/img/msg.svg?react";
+import reactSvg from "../../../utils/reactSvg";
+import _HeadPhoneIcons from "../../../asstes/img/hedpone.svg?react";
+import _MsgIcons from "../../../asstes/img/msg.svg?react";
+
+const HeadPhoneIcons = reactSvg(_HeadPhoneIcons);
+const MsgIcons = reactSvg(_MsgIcons);
 
 const Support = () => {
   return (

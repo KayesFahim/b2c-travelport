@@ -1,9 +1,12 @@
 import { Box, Button, Grid, Typography, Collapse } from "@mui/material";
 import React, { useState } from "react";
-import DepartureIcons from "../../../asstes/img/HomeImage/flightIcons/deapature.svg?react";
+import reactSvg from "../../../utils/reactSvg";
+import _DepartureIcons from "../../../asstes/img/HomeImage/flightIcons/deapature.svg?react";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import { Link, useNavigate } from "react-router-dom";
 import { Calendar } from "react-date-range";
+
+const DepartureIcons = reactSvg(_DepartureIcons);
 
 const TourSearchBox = () => {
   const [date, setDate] = useState("2025-01-01");

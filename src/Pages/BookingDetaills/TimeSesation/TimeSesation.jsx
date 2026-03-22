@@ -1,10 +1,12 @@
 import { Box, Typography } from "@mui/material";
-import TimimngIcons from "../../../asstes/img/timing.svg?react";
 import React, { useState, useEffect } from "react";
+import reactSvg from "../../../utils/reactSvg";
+import _TimimngIcons from "../../../asstes/img/timing.svg?react";
 import Swal from "sweetalert2";
 import withReactContent from "sweetalert2-react-content";
 import { useNavigate } from "react-router-dom";
 
+const TimimngIcons = reactSvg(_TimimngIcons);
 const MySwal = withReactContent(Swal);
 
 const TimeSesation = (searchlimit) => {

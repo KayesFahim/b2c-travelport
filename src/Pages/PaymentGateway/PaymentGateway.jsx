@@ -1,10 +1,11 @@
 import { Box, Container, Grid, Typography } from "@mui/material";
 import React, { useState } from "react";
 import NavBar from "../../Shared/NavBar/NavBar";
-import CardIcons from "../../asstes/img/paument/card.svg?react";
-import BkashIcons from "../../asstes/img/paument/bkash.svg?react";
-import NogodICons from "../../asstes/img/paument/nogod.svg?react";
-import FsIocns from "../../asstes/img/paument/fs.svg?react";
+import reactSvg from "../../utils/reactSvg";
+import _CardIcons from "../../asstes/img/paument/card.svg?react";
+import _BkashIcons from "../../asstes/img/paument/bkash.svg?react";
+import _NogodICons from "../../asstes/img/paument/nogod.svg?react";
+import _FsIocns from "../../asstes/img/paument/fs.svg?react";
 import shurjopayLogo from "../../asstes/img/paument/shurjopay.png";
 import { useLocation } from "react-router-dom";
 import commaNumber from "comma-number";
@@ -12,6 +13,11 @@ import secureLocalStorage from "react-secure-storage";
 import Swal from "sweetalert2";
 import { config } from "../../config";
 import FareBreakdown from "../BookingDetaills/FareBreakdown/FareBreakdown";
+
+const CardIcons = reactSvg(_CardIcons);
+const BkashIcons = reactSvg(_BkashIcons);
+const NogodICons = reactSvg(_NogodICons);
+const FsIocns = reactSvg(_FsIocns);
 
 const PaymentGateway = () => {
   const location = useLocation();
