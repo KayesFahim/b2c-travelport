@@ -806,6 +806,20 @@ const BookingDetaills = () => {
     () => resolveSeatAvailabilityRequestFromOffer(postBuildOfferForAncillaries || {}),
     [postBuildOfferForAncillaries]
   );
+  const isSelectedFareBookable = useMemo(() => {
+    if (!selectedAirPrice || typeof selectedAirPrice !== "object") return true;
+    const isBookableRaw = selectedAirPrice?.IsBookable ?? selectedAirPrice?.isBookable;
+    if (typeof isBookableRaw === "boolean") return isBookableRaw;
+    const repricedStatus = String(selectedAirPrice?.RePriceStatus || "").trim().toLowerCase();
+    if (
+      ["classunavailable", "unavailable", "notavailable", "failed", "error"].includes(
+        repricedStatus
+      )
+    ) {
+      return false;
+    }
+    return true;
+  }, [selectedAirPrice]);
 
   useEffect(() => {
     setSeatSelections([]);
@@ -823,13 +837,24 @@ const BookingDetaills = () => {
         selectedAirPrice?.NetFare ?? selectedAirPrice?.netFare ?? 0
       );
       Swal.fire({
-        html: `Selected option is available with the updated fare. <br>
-               New Fare: ${currency} <span style="color: red;">${symbol}${commaNumber(
-                 netFare
-               )}</span>`,
+        icon: "info",
+        title: "Fare Revalidated",
+        html: `Selected option is available with updated fare.<br/>New Fare: <b>${currency} ${symbol}${commaNumber(
+          netFare
+        )}</b>`,
+        confirmButtonText: "Continue",
       });
     }
   }, [loading, selectedAirPrice]);
+
+  useEffect(() => {
+    if (loading || isSelectedFareBookable) return;
+    Swal.fire({
+      icon: "warning",
+      title: "Class/Fare Not Available",
+      text: "Selected fare class is not available anymore. Please choose another brand/fare option.",
+    });
+  }, [loading, isSelectedFareBookable]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1070,7 +1095,12 @@ const BookingDetaills = () => {
                     <Button
                       variant="outlined"
                       onClick={handleContinueWithAddonClick}
-                      disabled={loading || ancillaryLoading || !buildProductsReady}
+                      disabled={
+                        loading ||
+                        ancillaryLoading ||
+                        !buildProductsReady ||
+                        !isSelectedFareBookable
+                      }
                       sx={{
                         textTransform: "none",
                         fontWeight: 700,
@@ -1097,6 +1127,7 @@ const BookingDetaills = () => {
                     <Button
                       variant="contained"
                       onClick={handleAddTravellerClick}
+                      disabled={!isSelectedFareBookable}
                       sx={{
                         textTransform: "none",
                         fontWeight: 700,
@@ -1107,10 +1138,19 @@ const BookingDetaills = () => {
                         ":hover": {
                           bgcolor: "var(--primary-button)",
                         },
+                        ":disabled": {
+                          bgcolor: "#9CB5C7",
+                          color: "#F4F7FA",
+                        },
                       }}
                     >
                       Add Traveller to Continue Booking
                     </Button>
+                    {!isSelectedFareBookable ? (
+                      <Typography sx={{ fontSize: 12, color: "#B42318", mt: 0.5 }}>
+                        Selected class is unavailable after revalidation. Choose another fare.
+                      </Typography>
+                    ) : null}
                   </Box>
                 </Grid>
               )}

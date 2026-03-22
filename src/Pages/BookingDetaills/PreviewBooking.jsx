@@ -15,6 +15,7 @@ import {
   MenuItem,
   Paper,
   Select,
+  TextField,
   Typography,
 } from "@mui/material";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -27,6 +28,11 @@ import {
   prepareTravelportBookHold,
 } from "../../utils/travelportBookHold";
 import { addTravelportSpecialServices } from "../../utils/travelportSpecialServices";
+import {
+  fetchBookingAuthMe,
+  loginBookingUser,
+  registerBookingUser,
+} from "../../utils/bookingAuth";
 import FlightDetailsContent from "../ShowDetails/FlightDetailsContent";
 
 const getArrayByKeys = (obj, keys = []) => {
@@ -318,6 +324,17 @@ const PreviewBooking = () => {
   const [specialRequestDialogOpen, setSpecialRequestDialogOpen] = useState(false);
   const [specialRequestSelections, setSpecialRequestSelections] = useState({});
   const [specialRequestResponse, setSpecialRequestResponse] = useState(null);
+  const [authDialogOpen, setAuthDialogOpen] = useState(false);
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+  const [authMode, setAuthMode] = useState("login");
+  const [authError, setAuthError] = useState("");
+  const [authUser, setAuthUser] = useState(null);
+  const [pendingAuthAction, setPendingAuthAction] = useState(null);
+  const [authForm, setAuthForm] = useState({
+    name: "",
+    email: "",
+    password: "",
+  });
   const previewSessionKey = useMemo(
     () => buildPreviewSessionKey(previewPayload),
     [previewPayload]
@@ -491,6 +508,76 @@ const PreviewBooking = () => {
     }, 30000);
     return () => window.clearInterval(timer);
   }, [flowContext]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadSession = async () => {
+      try {
+        const user = await fetchBookingAuthMe();
+        if (!cancelled) {
+          setAuthUser(user || null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setAuthUser(null);
+        }
+        console.warn("Unable to load booking auth session", error);
+      }
+    };
+    loadSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const openAuthDialogForAction = (actionKey) => {
+    setPendingAuthAction(actionKey);
+    setAuthError("");
+    setAuthDialogOpen(true);
+  };
+
+  const handleAuthInputChange = (field, value) => {
+    setAuthForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleAuthSubmit = async () => {
+    const email = String(authForm.email || "").trim();
+    const password = String(authForm.password || "");
+    const name = String(authForm.name || "").trim();
+
+    if (!email || !password) {
+      setAuthError("Email and password are required.");
+      return;
+    }
+    if (authMode === "register" && !name) {
+      setAuthError("Name is required for registration.");
+      return;
+    }
+
+    setAuthSubmitting(true);
+    setAuthError("");
+    try {
+      const user =
+        authMode === "register"
+          ? await registerBookingUser({ name, email, password })
+          : await loginBookingUser({ email, password });
+      setAuthUser(user || null);
+      setAuthDialogOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: authMode === "register" ? "Registration successful" : "Login successful",
+        timer: 1200,
+        showConfirmButton: false,
+      });
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "Authentication failed.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
 
   const bookingBody = previewPayload?.bookingBody || {};
   const passengers = Array.isArray(previewPayload?.passengers)
@@ -689,6 +776,11 @@ const PreviewBooking = () => {
   };
 
   const handlePrepareBooking = async () => {
+    if (!authUser?.id) {
+      openAuthDialogForAction("prepare");
+      return;
+    }
+
     const baseInput = getBookHoldBaseInput();
     if (!baseInput) {
       Swal.fire("Missing data", "Preview booking payload is incomplete.", "error");
@@ -765,6 +857,11 @@ const PreviewBooking = () => {
         html: `Reservation ID: <b>${reservationId}</b><br/>Offer ID: <b>${offerId}</b><br/>Now click <b>Confirm Booking</b> to get locator.`,
       });
     } catch (error) {
+      if (error?.requiresLogin || error?.status === 401) {
+        Swal.close();
+        openAuthDialogForAction("prepare");
+        return;
+      }
       destroyFlowContext();
       Swal.fire(
         "Preview failed",
@@ -874,6 +971,11 @@ const PreviewBooking = () => {
   };
 
   const handleFinalCommit = async () => {
+    if (!authUser?.id) {
+      openAuthDialogForAction("commit");
+      return;
+    }
+
     const activeContext = ensureActiveFlowContext(false);
     if (!activeContext) {
       Swal.fire(
@@ -960,6 +1062,30 @@ const PreviewBooking = () => {
         },
       });
     } catch (error) {
+      if (error?.requiresLogin || error?.status === 401) {
+        Swal.close();
+        openAuthDialogForAction("commit");
+        return;
+      }
+      if (error?.status === 409 && error?.payload?.previousBooking) {
+        const previous = error.payload.previousBooking || {};
+        await Swal.fire({
+          icon: "info",
+          title: "Duplicate Booking Blocked",
+          html: `Previous booking found for same flight/date.<br/>Locator: <b>${
+            previous?.locator || "N/A"
+          }</b><br/>Reservation: <b>${previous?.reservationId || "N/A"}</b>`,
+        });
+        return;
+      }
+      if (error?.status === 429) {
+        await Swal.fire({
+          icon: "warning",
+          title: "Daily Booking Limit Reached",
+          text: error instanceof Error ? error.message : "Maximum 10 bookings allowed per day.",
+        });
+        return;
+      }
       Swal.fire(
         "Booking failed",
         error instanceof Error
@@ -971,6 +1097,17 @@ const PreviewBooking = () => {
       setSubmitting(false);
     }
   };
+
+  useEffect(() => {
+    if (!authUser?.id || !pendingAuthAction) return;
+    const action = pendingAuthAction;
+    setPendingAuthAction(null);
+    if (action === "prepare") {
+      handlePrepareBooking();
+    } else if (action === "commit") {
+      handleFinalCommit();
+    }
+  }, [authUser, pendingAuthAction]);
 
   if (!passengers.length || !Object.keys(flightInfoSource || {}).length) {
     return (
@@ -1020,6 +1157,34 @@ const PreviewBooking = () => {
               </Box>
             ))}
           </Box>
+        </Paper>
+
+        <Paper
+          elevation={0}
+          sx={{
+            p: 1.5,
+            border: "1px solid #E3EBF7",
+            mb: 2,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1,
+          }}
+        >
+          <Typography sx={{ fontSize: 12, color: "#56718D", fontWeight: 600 }}>
+            {authUser?.email
+              ? `Logged in as ${authUser.email}`
+              : "Login required before preview/confirm booking"}
+          </Typography>
+          {!authUser?.email ? (
+            <Button
+              variant="outlined"
+              onClick={() => openAuthDialogForAction("prepare")}
+              sx={{ textTransform: "none", borderRadius: "10px", fontWeight: 700 }}
+            >
+              Login / Register
+            </Button>
+          ) : null}
         </Paper>
 
         <Paper
@@ -1385,6 +1550,111 @@ const PreviewBooking = () => {
               }}
             >
               Save Special Request
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={authDialogOpen}
+          onClose={() => {
+            if (!authSubmitting) setAuthDialogOpen(false);
+          }}
+          fullWidth
+          maxWidth="xs"
+        >
+          <DialogTitle sx={{ fontWeight: 800, color: "#123d66" }}>
+            {authMode === "register" ? "Register to Continue Booking" : "Login to Continue Booking"}
+          </DialogTitle>
+          <DialogContent dividers>
+            <Box sx={{ display: "flex", gap: 1, mb: 1.5 }}>
+              <Button
+                variant={authMode === "login" ? "contained" : "outlined"}
+                onClick={() => setAuthMode("login")}
+                sx={{
+                  textTransform: "none",
+                  borderRadius: "8px",
+                  bgcolor: authMode === "login" ? "var(--primary-button)" : undefined,
+                  ":hover": {
+                    bgcolor: authMode === "login" ? "var(--primary-button)" : undefined,
+                  },
+                }}
+              >
+                Login
+              </Button>
+              <Button
+                variant={authMode === "register" ? "contained" : "outlined"}
+                onClick={() => setAuthMode("register")}
+                sx={{
+                  textTransform: "none",
+                  borderRadius: "8px",
+                  bgcolor: authMode === "register" ? "var(--primary-button)" : undefined,
+                  ":hover": {
+                    bgcolor: authMode === "register" ? "var(--primary-button)" : undefined,
+                  },
+                }}
+              >
+                Register
+              </Button>
+            </Box>
+
+            {authMode === "register" ? (
+              <TextField
+                label="Full Name"
+                fullWidth
+                size="small"
+                value={authForm.name}
+                onChange={(event) => handleAuthInputChange("name", event.target.value)}
+                sx={{ mb: 1.2 }}
+              />
+            ) : null}
+
+            <TextField
+              label="Email"
+              fullWidth
+              size="small"
+              type="email"
+              value={authForm.email}
+              onChange={(event) => handleAuthInputChange("email", event.target.value)}
+              sx={{ mb: 1.2 }}
+            />
+            <TextField
+              label="Password"
+              fullWidth
+              size="small"
+              type="password"
+              value={authForm.password}
+              onChange={(event) => handleAuthInputChange("password", event.target.value)}
+            />
+
+            {authError ? (
+              <Alert severity="error" sx={{ mt: 1.2 }}>
+                {authError}
+              </Alert>
+            ) : null}
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setAuthDialogOpen(false)}
+              disabled={authSubmitting}
+              sx={{ textTransform: "none" }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleAuthSubmit}
+              disabled={authSubmitting}
+              sx={{
+                textTransform: "none",
+                bgcolor: "var(--primary-button)",
+                ":hover": { bgcolor: "var(--primary-button)" },
+              }}
+            >
+              {authSubmitting
+                ? "Please wait..."
+                : authMode === "register"
+                ? "Register & Continue"
+                : "Login & Continue"}
             </Button>
           </DialogActions>
         </Dialog>

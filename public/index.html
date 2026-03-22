@@ -5,7 +5,7 @@
     <link rel="icon" href="/logo2.jpg" />
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"
+      content="width=device-width, initial-scale=1"
     />
     <meta
       name="facebook-domain-verification"
@@ -14,7 +14,7 @@
     <meta name="theme-color" content="#000000" />
     <meta
       name="description"
-      content="Book your Flight, Hotels and Desire Holiday Packages with Fly It Search"
+      content="Book your Flight, Hotels and Desire Holiday Packages with FlyJatt Search"
     />
 
     <link rel="apple-touch-icon" href="/logo2.jpg" />
@@ -74,8 +74,14 @@
         style="display: none"
         src="https://www.facebook.com/tr?id=1109483667670158&ev=PageView&noscript=1"
     /></noscript>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <noscript>
+      This app runs on Next.js. Open the site root URL (for example
+      <a href="/">/</a> or <a href="/homepage">/homepage</a>).
+    </noscript>
+    <script>
+      // Legacy static file: there is no Vite/CRA entry at /src/main.tsx.
+      // This project is served by Next.js; send users to the real app.
+      window.location.replace("/");
+    </script>
   </body>
 </html>

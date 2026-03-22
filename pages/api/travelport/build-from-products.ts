@@ -1423,6 +1423,8 @@ export default async function handler(
       {
         ...selectedOffer,
         ResultId: fallbackResultId || "BFP_1",
+        IsBookable: false,
+        isBookable: false,
         offerIdentifier:
           toText(
             getValueByKeys(selectedOffer, [
@@ -1434,7 +1436,7 @@ export default async function handler(
             ])
           ) || fallbackResultId,
         SearchId: fallbackSearchId || "TRAVELPORT-BFP",
-        RePriceStatus: "Success",
+        RePriceStatus: "ClassUnavailable",
         sourceBuildFromProducts: true,
         sourceBuildFromProductsFallback: true,
       },

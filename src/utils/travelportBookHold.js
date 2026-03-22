@@ -45,19 +45,26 @@ function getCandidateBookHoldUrls() {
   );
 }
 
-async function getResponseErrorMessage(response) {
+async function getResponseErrorPayload(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     const payload = await response.json().catch(() => ({}));
-    return (
-      payload?.message ||
-      payload?.details ||
-      `Travelport book-hold failed (${response.status})`
-    );
+    return {
+      message:
+        payload?.message ||
+        payload?.details ||
+        `Travelport book-hold failed (${response.status})`,
+      payload,
+      requiresLogin: Boolean(payload?.requiresLogin),
+    };
   }
 
   const text = await response.text().catch(() => "");
-  return text || `Travelport book-hold failed (${response.status})`;
+  return {
+    message: text || `Travelport book-hold failed (${response.status})`,
+    payload: {},
+    requiresLogin: false,
+  };
 }
 
 export async function createTravelportBookHold({
@@ -99,6 +106,7 @@ export async function createTravelportBookHold({
     try {
       const response = await fetch(url, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -110,8 +118,12 @@ export async function createTravelportBookHold({
         return response.json();
       }
 
-      const message = await getResponseErrorMessage(response);
-      const currentError = new Error(message);
+      const errorPayload = await getResponseErrorPayload(response);
+      const currentError = new Error(errorPayload.message);
+      currentError.status = response.status;
+      currentError.requiresLogin =
+        errorPayload.requiresLogin || response.status === 401;
+      currentError.payload = errorPayload.payload;
       if (response.status === 404) {
         lastError = currentError;
         continue;

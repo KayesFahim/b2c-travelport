@@ -2,6 +2,8 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { appendFile } from "fs/promises";
 import path from "path";
 import { getTravelportAccessToken } from "./_token-cache";
+import { assertDatabaseConfigured, prisma } from "@/server/prisma";
+import { getSessionUser } from "@/server/auth-session";
 
 type BookHoldBody = {
   selectedAirPrice?: Record<string, unknown>;
@@ -31,6 +33,9 @@ type ErrorResponse = {
   message: string;
   details?: string;
   warnings?: string[];
+  requiresLogin?: boolean;
+  previousBooking?: Record<string, unknown>;
+  dailyCommittedCount?: number;
 };
 
 type SuccessResponse = {
@@ -327,6 +332,142 @@ function resolveSelectedOffer(body: BookHoldBody): Record<string, unknown> {
     }
   }
   return {};
+}
+
+type BookingFingerprint = {
+  routeKey: string;
+  airlineCode: string;
+  travelDate: Date;
+  flightSignature: string;
+  departureCode: string;
+  arrivalCode: string;
+  totalFare: number;
+  currencyCode: string;
+};
+
+function resolveBookingFingerprint(offer: Record<string, unknown>): BookingFingerprint {
+  const legs = getArrayByKeys(offer, ["AllLegsInfo", "allLegsInfo", "legs", "Legs"]);
+  const allSegments = legs
+    .map((leg) => normalizeSegments((leg ?? {}) as Record<string, unknown>))
+    .flat();
+
+  const firstSegment =
+    (allSegments[0] as Record<string, unknown> | undefined) || ({} as Record<string, unknown>);
+  const lastSegment =
+    (allSegments[allSegments.length - 1] as Record<string, unknown> | undefined) ||
+    ({} as Record<string, unknown>);
+
+  const depFrom =
+    toText(getValueByKeys(firstSegment, ["DepFrom", "depFrom", "from", "From"])) ||
+    toText(getValueByKeys(offer, ["DepFrom", "depFrom"])) ||
+    "NA";
+  const arrTo =
+    toText(getValueByKeys(lastSegment, ["ArrTo", "arrTo", "to", "To"])) ||
+    toText(getValueByKeys(offer, ["ArrTo", "arrTo"])) ||
+    "NA";
+  const firstDepDate = splitDateTime(
+    getValueByKeys(firstSegment, ["DepTime", "depTime", "departureDateTime"])
+  ).date;
+
+  const travelDate = firstDepDate
+    ? new Date(`${firstDepDate}T00:00:00.000Z`)
+    : new Date(Date.now());
+  const airlineCode =
+    toText(
+      getValueByKeys(firstSegment, [
+        "MarketingCarrier",
+        "marketingCarrier",
+        "carrier",
+        "Carrier",
+      ])
+    ) || toText(getValueByKeys(offer, ["Carrier", "carrier"])) || "NA";
+
+  const signatureRows = allSegments.map((segmentRaw) => {
+    const segment = (segmentRaw ?? {}) as Record<string, unknown>;
+    const dep = splitDateTime(getValueByKeys(segment, ["DepTime", "depTime"]));
+    return [
+      toText(
+        getValueByKeys(segment, [
+          "MarketingCarrier",
+          "marketingCarrier",
+          "carrier",
+          "Carrier",
+        ])
+      ) || "NA",
+      toText(
+        getValueByKeys(segment, [
+          "MarketingFlightNumber",
+          "marketingFlightNumber",
+          "flightNumber",
+        ])
+      ) || "NA",
+      dep.date || "NA",
+      toText(getValueByKeys(segment, ["DepFrom", "depFrom", "from"])) || "NA",
+      toText(getValueByKeys(segment, ["ArrTo", "arrTo", "to"])) || "NA",
+    ].join("_");
+  });
+
+  const fallbackSignature = [
+    airlineCode || "NA",
+    depFrom || "NA",
+    arrTo || "NA",
+    firstDepDate || "NA",
+  ].join("_");
+
+  return {
+    routeKey: `${depFrom}-${arrTo}`,
+    airlineCode,
+    travelDate,
+    flightSignature: signatureRows.length ? signatureRows.join("|") : fallbackSignature,
+    departureCode: depFrom,
+    arrivalCode: arrTo,
+    totalFare: toNumber(
+      getValueByKeys(offer, [
+        "NetFare",
+        "netFare",
+        "GrossFare",
+        "grossFare",
+        "TotalPrice",
+        "totalPrice",
+      ]),
+      0
+    ),
+    currencyCode:
+      toText(getValueByKeys(offer, ["CurrencyCode", "currencyCode"])) || "USD",
+  };
+}
+
+function normalizePassengerRows(body: BookHoldBody): Array<Record<string, unknown>> {
+  if (!Array.isArray(body?.passengers)) return [];
+  return (body.passengers as Array<Record<string, unknown>>).filter(
+    (passenger) => passenger && typeof passenger === "object"
+  );
+}
+
+function toUtcDayBounds(date = new Date()): { start: Date; end: Date } {
+  const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
+function getBookingSummaryRow(booking: {
+  id: number;
+  locator: string | null;
+  reservationId: string | null;
+  routeKey: string;
+  airlineCode: string;
+  travelDate: Date;
+  createdAt: Date;
+}) {
+  return {
+    id: booking.id,
+    locator: booking.locator,
+    reservationId: booking.reservationId,
+    routeKey: booking.routeKey,
+    airlineCode: booking.airlineCode,
+    travelDate: booking.travelDate.toISOString().slice(0, 10),
+    createdAt: booking.createdAt.toISOString(),
+  };
 }
 
 function countPassengersFromList(passengers: Array<Record<string, unknown>>) {
@@ -1767,6 +1908,143 @@ async function commitReservation(params: {
   };
 }
 
+async function persistPreparedBooking(params: {
+  userId: number;
+  body: BookHoldBody;
+  bookingFlowKey: string;
+  bookingOfferKey: string;
+  reservationId: string;
+  selectedOffer: Record<string, unknown>;
+  preCommitResponse: Record<string, unknown>;
+}) {
+  const fingerprint = resolveBookingFingerprint(params.selectedOffer);
+  const booking = await prisma.booking.upsert({
+    where: {
+      bookingFlowKey: params.bookingFlowKey,
+    },
+    update: {
+      bookingOfferKey: params.bookingOfferKey || null,
+      reservationId: params.reservationId || null,
+      status: "PREPARED",
+      routeKey: fingerprint.routeKey,
+      airlineCode: fingerprint.airlineCode,
+      travelDate: fingerprint.travelDate,
+      flightSignature: fingerprint.flightSignature,
+      departureCode: fingerprint.departureCode || null,
+      arrivalCode: fingerprint.arrivalCode || null,
+      totalFare: fingerprint.totalFare || null,
+      currencyCode: fingerprint.currencyCode || null,
+      payloadSnapshot: params.selectedOffer as unknown as object,
+      rawPreview: params.preCommitResponse as unknown as object,
+    },
+    create: {
+      userId: params.userId,
+      bookingFlowKey: params.bookingFlowKey || null,
+      bookingOfferKey: params.bookingOfferKey || null,
+      reservationId: params.reservationId || null,
+      status: "PREPARED",
+      routeKey: fingerprint.routeKey,
+      airlineCode: fingerprint.airlineCode,
+      travelDate: fingerprint.travelDate,
+      flightSignature: fingerprint.flightSignature,
+      departureCode: fingerprint.departureCode || null,
+      arrivalCode: fingerprint.arrivalCode || null,
+      totalFare: fingerprint.totalFare || null,
+      currencyCode: fingerprint.currencyCode || null,
+      payloadSnapshot: params.selectedOffer as unknown as object,
+      rawPreview: params.preCommitResponse as unknown as object,
+    },
+  });
+
+  const passengers = normalizePassengerRows(params.body).map((passenger) => ({
+    paxType: normalizePaxTypeCode(
+      getValueByKeys(passenger, [
+        "PaxType",
+        "paxType",
+        "type",
+        "passengerTypeCode",
+        "PassengerTypeCode",
+      ])
+    ),
+    firstName:
+      toText(
+        getValueByKeys(passenger, [
+          "FirstName",
+          "firstName",
+          "fName",
+          "Given",
+          "given",
+        ])
+      ) || null,
+    lastName:
+      toText(
+        getValueByKeys(passenger, [
+          "LastName",
+          "lastName",
+          "lName",
+          "Surname",
+          "surname",
+        ])
+      ) || null,
+    birthDate:
+      (() => {
+        const dateOnly = toDateOnly(
+          getValueByKeys(passenger, ["DateOfBirth", "dateOfBirth", "dob", "birthDate"])
+        );
+        return dateOnly ? new Date(`${dateOnly}T00:00:00.000Z`) : null;
+      })() || null,
+    passportNumber:
+      toText(
+        getValueByKeys(passenger, ["PassportNumber", "passportNumber", "passNo"])
+      ) || null,
+  }));
+
+  await prisma.bookingPassenger.deleteMany({
+    where: { bookingId: booking.id },
+  });
+
+  if (passengers.length > 0) {
+    await prisma.bookingPassenger.createMany({
+      data: passengers.map((passenger) => ({
+        bookingId: booking.id,
+        paxType: passenger.paxType || "ADT",
+        firstName: passenger.firstName,
+        lastName: passenger.lastName,
+        birthDate: passenger.birthDate,
+        passportNumber: passenger.passportNumber,
+      })),
+    });
+  }
+
+  return booking;
+}
+
+async function getPreparedBookingForCommit(params: {
+  userId: number;
+  bookingFlowKey: string;
+  reservationId: string;
+}) {
+  if (params.bookingFlowKey) {
+    const row = await prisma.booking.findFirst({
+      where: {
+        userId: params.userId,
+        bookingFlowKey: params.bookingFlowKey,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    if (row) return row;
+  }
+
+  if (!params.reservationId) return null;
+  return prisma.booking.findFirst({
+    where: {
+      userId: params.userId,
+      reservationId: params.reservationId,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
@@ -1777,7 +2055,17 @@ export default async function handler(
   }
 
   try {
+    assertDatabaseConfigured();
+
     const body = (req.body ?? {}) as BookHoldBody;
+    const sessionUser = await getSessionUser(req);
+    if (!sessionUser) {
+      return res.status(401).json({
+        message: "Login is required before booking. Please sign in or register.",
+        requiresLogin: true,
+      });
+    }
+
     const commitRequested = parseBooleanFlag(body.commit, true);
     const commitOnlyRequested = parseBooleanFlag(body.commitOnly, false);
     const explicitReservationId = toText(body.reservationId);
@@ -1915,12 +2203,78 @@ export default async function handler(
         });
       }
 
+      const preparedBooking = await getPreparedBookingForCommit({
+        userId: sessionUser.id,
+        bookingFlowKey: activeBookingFlowKey,
+        reservationId: commitReservationId,
+      });
+
+      if (!preparedBooking || preparedBooking.status !== "PREPARED") {
+        return logAndRespondError({
+          status: 409,
+          message:
+            "Booking preview is missing in database. Run Preview Booking again before final commit.",
+          stage: "commit_only_missing_prepared_booking",
+          reservationId: commitReservationId,
+          destroyFlowKey: true,
+        });
+      }
+
+      const { start: dayStart, end: dayEnd } = toUtcDayBounds(new Date());
+      const committedTodayCount = await prisma.booking.count({
+        where: {
+          userId: sessionUser.id,
+          status: "COMMITTED",
+          createdAt: {
+            gte: dayStart,
+            lt: dayEnd,
+          },
+        },
+      });
+
+      if (committedTodayCount >= 10) {
+        return res.status(429).json({
+          message: "Daily booking limit reached. Maximum 10 committed bookings per day.",
+          details: "Try again tomorrow or contact support for exception handling.",
+          dailyCommittedCount: committedTodayCount,
+        });
+      }
+
+      const duplicateBooking = await prisma.booking.findFirst({
+        where: {
+          userId: sessionUser.id,
+          status: "COMMITTED",
+          flightSignature: preparedBooking.flightSignature,
+          routeKey: preparedBooking.routeKey,
+          airlineCode: preparedBooking.airlineCode,
+          travelDate: preparedBooking.travelDate,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (duplicateBooking) {
+        return res.status(409).json({
+          message:
+            "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
+          details: "Previous booking returned instead of creating a duplicate booking.",
+          previousBooking: getBookingSummaryRow(duplicateBooking),
+          dailyCommittedCount: committedTodayCount,
+        });
+      }
+
       const commitResult = await commitReservation({
         bookingBaseUrl,
         reservationId: commitReservationId,
         headers: commonHeaders,
       });
       if (!commitResult.ok) {
+        await prisma.booking.update({
+          where: { id: preparedBooking.id },
+          data: {
+            status: "FAILED",
+            rawCommit: commitResult.payload as unknown as object,
+          },
+        });
         return logAndRespondError({
           status: 502,
           message: `Travelport commit reservation failed (${commitResult.status})`,
@@ -1929,6 +2283,16 @@ export default async function handler(
           reservationId: commitReservationId,
         });
       }
+
+      await prisma.booking.update({
+        where: { id: preparedBooking.id },
+        data: {
+          status: "COMMITTED",
+          reservationId: commitReservationId,
+          locator: commitResult.locator || null,
+          rawCommit: commitResult.payload as unknown as object,
+        },
+      });
 
       const locatorWarnings: string[] = [];
       if (commitResult.locator) {
@@ -2364,6 +2728,48 @@ export default async function handler(
       }
     }
 
+    let preparedBookingRecord:
+      | {
+          id: number;
+          routeKey: string;
+          airlineCode: string;
+          travelDate: Date;
+          flightSignature: string;
+        }
+      | null = null;
+
+    try {
+      preparedBookingRecord = await persistPreparedBooking({
+        userId: sessionUser.id,
+        body,
+        bookingFlowKey: activeBookingFlowKey,
+        bookingOfferKey: activeBookingOfferKey,
+        reservationId,
+        selectedOffer,
+        preCommitResponse: {
+          reservationId,
+          offerIdentifiers: activeOfferIdentifiers,
+          addOfferResponse: addOfferPayloadResponse,
+          travelerResponse: travelerPayloadResponse,
+          seatOfferResponse: seatOfferPayloadResponse,
+          primaryContactResponse: primaryContactPayloadResponse,
+          warnings,
+        },
+      });
+    } catch (persistError) {
+      return logAndRespondError({
+        status: 500,
+        message: "Unable to save booking preview data in database.",
+        details:
+          persistError instanceof Error
+            ? persistError.message
+            : "Database persistence failed during pre-commit stage.",
+        warnings,
+        stage: "precommit_db_persist",
+        destroyFlowKey: true,
+      });
+    }
+
     if (!commitRequested) {
       if (activeBookingFlowKey) {
         ensureBookingFlow({
@@ -2396,6 +2802,50 @@ export default async function handler(
       });
     }
 
+    const { start: dayStart, end: dayEnd } = toUtcDayBounds(new Date());
+    const committedTodayCount = await prisma.booking.count({
+      where: {
+        userId: sessionUser.id,
+        status: "COMMITTED",
+        createdAt: {
+          gte: dayStart,
+          lt: dayEnd,
+        },
+      },
+    });
+
+    if (committedTodayCount >= 10) {
+      return res.status(429).json({
+        message: "Daily booking limit reached. Maximum 10 committed bookings per day.",
+        details: "Try again tomorrow or contact support for exception handling.",
+        dailyCommittedCount: committedTodayCount,
+      });
+    }
+
+    if (preparedBookingRecord) {
+      const duplicateBooking = await prisma.booking.findFirst({
+        where: {
+          userId: sessionUser.id,
+          status: "COMMITTED",
+          flightSignature: preparedBookingRecord.flightSignature,
+          routeKey: preparedBookingRecord.routeKey,
+          airlineCode: preparedBookingRecord.airlineCode,
+          travelDate: preparedBookingRecord.travelDate,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (duplicateBooking) {
+        return res.status(409).json({
+          message:
+            "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
+          details: "Previous booking returned instead of creating a duplicate booking.",
+          previousBooking: getBookingSummaryRow(duplicateBooking),
+          dailyCommittedCount: committedTodayCount,
+        });
+      }
+    }
+
     const commitResult = await commitReservation({
       bookingBaseUrl,
       reservationId,
@@ -2408,6 +2858,18 @@ export default async function handler(
         details: commitResult.errorMessage,
         warnings,
         stage: "commit",
+      });
+    }
+
+    if (preparedBookingRecord) {
+      await prisma.booking.update({
+        where: { id: preparedBookingRecord.id },
+        data: {
+          status: "COMMITTED",
+          locator: commitResult.locator || null,
+          reservationId,
+          rawCommit: commitResult.payload as unknown as object,
+        },
       });
     }
 

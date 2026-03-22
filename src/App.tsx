@@ -55,6 +55,8 @@ const App: FC = () => {
         <div className="relative z-10">
         <Routes>
           <Route path="/" element={<Home />} />
+          {/* Next.js serves /homepage as a dedicated route; keep Router in sync */}
+          <Route path="/homepage" element={<Home />} />
 
           <Route path="/offers" element={<FlightsResult />} />
           <Route path="/flightsresult" element={<FlightsResult />} />

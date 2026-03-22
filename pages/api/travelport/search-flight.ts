@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import path from "path";
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { getTravelportAccessToken } from "./_token-cache";
+import { cacheGetJson, cacheSetJson } from "@/server/redis-cache";
 
 export type LegacySegment = {
   depfrom: string;
@@ -25,6 +26,40 @@ type ErrorResponse = {
   message: string;
   details?: string;
 };
+
+function buildSearchCacheKey(body: LegacySearchBody): string {
+  const segments = Array.isArray(body?.segments) ? body.segments : [];
+  const segmentSignature = segments
+    .map((segment) =>
+      [
+        String(segment?.depfrom || "").trim().toUpperCase(),
+        String(segment?.arrto || "").trim().toUpperCase(),
+        String(segment?.depdate || "").trim(),
+      ].join("-")
+    )
+    .join("|");
+
+  const tripType = segments.length > 1 ? "ROUND_OR_MULTI" : "ONEWAY";
+  const pax = [
+    Number(body?.adultcount || 0) || 0,
+    Number(body?.childcount || 0) || 0,
+    Number(body?.infantcount || 0) || 0,
+  ].join("-");
+
+  const contentSources = Array.isArray(body?.contentSourceList)
+    ? body.contentSourceList.map((item) => String(item || "").trim().toUpperCase()).join(",")
+    : String(body?.contentSource || "").trim().toUpperCase();
+
+  return [
+    "travelport",
+    "search",
+    tripType,
+    String(body?.cabinclass || "").trim().toUpperCase() || "ANY",
+    pax,
+    contentSources || "ANY",
+    segmentSignature || "NA",
+  ].join(":");
+}
 
 function parseBooleanFlag(value: unknown): boolean | null {
   if (typeof value === "boolean") return value;
@@ -2110,6 +2145,16 @@ export default async function handler(
         .json({ message: "segments is required for flight search" });
     }
 
+    const searchCacheKey = buildSearchCacheKey(body);
+    const cacheTtlSeconds = Math.max(
+      30,
+      toNumber(process.env.SEARCH_CACHE_TTL_SECONDS, 300)
+    );
+    const cachedResults = await cacheGetJson<Record<string, unknown>[]>(searchCacheKey);
+    if (Array.isArray(cachedResults) && cachedResults.length > 0) {
+      return res.status(200).json(cachedResults);
+    }
+
     const accessToken = await createToken();
     const flightsUrl = getRequiredEnv("TRAVELPORT_FLIGHTS_URL");
     const accessGroup = getRequiredEnv("TRAVELPORT_ACCESS_GROUP");
@@ -2218,6 +2263,8 @@ export default async function handler(
           "Legacy and mixed response models are removed. Use responseModel='unified' or omit the field.",
       });
     }
+
+    await cacheSetJson(searchCacheKey, unifiedResults, cacheTtlSeconds);
 
     return res.status(200).json(unifiedResults);
   } catch (error) {

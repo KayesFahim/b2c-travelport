@@ -11,9 +11,11 @@
     "@mui/lab": "^6.0.0-alpha.15",
     "@mui/material": "^6.1.0",
     "@mui/utils": "^6.1.0",
-    "@prisma/client": "^7.5.0",
+    "@prisma/client": "^6.19.0",
     "@react-oauth/google": "^0.12.1",
     "@react-pdf/renderer": "^4.0.0",
+    "@vercel/analytics": "^2.0.1",
+    "@vercel/speed-insights": "^2.0.0",
     "axios": "^1.7.7",
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
@@ -28,8 +30,8 @@
     "lucide-react": "^0.577.0",
     "moment": "^2.30.1",
     "moment-timezone": "^0.5.45",
-    "next": "^14.2.0",
-    "prisma": "^7.5.0",
+    "next": "^16.2.1",
+    "prisma": "^6.19.0",
     "react": "^18.3.1",
     "react-date-range": "^2.0.1",
     "react-datepicker": "^7.5.0",
@@ -64,15 +66,20 @@
     "tailwindcss-animate": "^1.0.7",
     "terser": "^5.46.1",
     "typescript": "^5.4.5",
-    "vite": "^5.4.8",
+    "vite": "^8.0.1",
     "vite-plugin-svgr": "^4.5.0"
   },
   "scripts": {
     "predev": "node scripts/predev.cjs",
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
     "start": "next start",
     "preview": "next start",
-    "lint": "next lint"
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:production": "node scripts/smoke.mjs",
+    "smoke:build": "npm run build && node scripts/smoke.mjs --with-server",
+    "lint": "next lint",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev"
   }
 }

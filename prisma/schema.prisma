@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum BookingStatus {
+  PREPARED
+  COMMITTED
+  FAILED
+  CANCELLED
+}
+
+model User {
+  id           Int       @id @default(autoincrement())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  bookings     Booking[]
+}
+
+model Booking {
+  id             Int          @id @default(autoincrement())
+  userId         Int
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingFlowKey String?      @unique
+  bookingOfferKey String?
+  reservationId  String?      @unique
+  locator        String?
+  status         BookingStatus @default(PREPARED)
+  routeKey       String
+  airlineCode    String
+  travelDate     DateTime
+  flightSignature String
+  departureCode  String?
+  arrivalCode    String?
+  totalFare      Float?
+  currencyCode   String?
+  rawPreview     Json?
+  rawCommit      Json?
+  payloadSnapshot Json?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  passengers     BookingPassenger[]
+
+  @@index([userId, createdAt])
+  @@index([userId, status, createdAt])
+  @@index([userId, flightSignature, travelDate, airlineCode])
+}
+
+model BookingPassenger {
+  id             Int      @id @default(autoincrement())
+  bookingId      Int
+  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  paxType        String
+  firstName      String?
+  lastName       String?
+  birthDate      DateTime?
+  passportNumber String?
+  createdAt      DateTime @default(now())
+
+  @@index([bookingId, paxType])
+}
