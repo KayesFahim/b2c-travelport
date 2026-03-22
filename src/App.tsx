@@ -50,7 +50,12 @@ const App: FC = () => {
     <div className="travelport-shell relative min-h-screen overflow-x-hidden">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(circle_at_10%_0%,rgba(0,154,214,0.24),transparent_58%)]" />
       <div className="pointer-events-none absolute right-[-120px] top-[120px] h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(20,184,166,0.2),transparent_70%)]" />
-      <BrowserRouter>
+      <BrowserRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
         <ScrollToTop />
         <div className="relative z-10">
         <Routes>
