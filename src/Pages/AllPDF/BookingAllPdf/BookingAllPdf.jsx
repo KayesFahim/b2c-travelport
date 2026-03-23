@@ -45,7 +45,7 @@ const BookingAllPdf = ({ quesData }) => {
           </Typography>
         </AccordionSummary>
         <AccordionDetails sx={{ background: "white" }}>
-          <Typography>
+          <Box>
             <div>
               {/* Conditional rendering for PDF download links */}
               {bookingCopy && (
@@ -69,7 +69,7 @@ const BookingAllPdf = ({ quesData }) => {
                 </PDFDownloadLink>
               )}
             </div>
-          </Typography>
+          </Box>
         </AccordionDetails>
       </Accordion>
     </Box>

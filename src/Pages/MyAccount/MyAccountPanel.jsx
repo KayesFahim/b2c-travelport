@@ -29,6 +29,7 @@ import moment from "moment";
 import { config } from "../../config";
 import NavBar from "../../Shared/NavBar/NavBar";
 import BookingAllPdf from "../AllPDF/BookingAllPdf/BookingAllPdf";
+import FlightDetailsContent from "../ShowDetails/FlightDetailsContent";
 
 const TABS = [
     "Dashboard",
@@ -66,6 +67,24 @@ const sectionTitleStyle = {
 function toText(value, fallback = "") {
     const text = String(value ?? "").trim();
     return text || fallback;
+}
+
+function toNumberValue(value) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatMoney(value) {
+    const n = toNumberValue(value);
+    return n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+function paxLabelDetail(value) {
+    const code = String(value || "").toUpperCase();
+    if (code === "ADT" || code === "ADULT") return "Adult";
+    if (code === "CHD" || code === "CNN" || code === "CHILD") return "Child";
+    if (code === "INF" || code === "INFANT") return "Infant";
+    return value || "Passenger";
 }
 
 function parseDateValue(value) {
@@ -906,6 +925,184 @@ export default function MyAccountPanel() {
         </Paper>
     );
 
+    const renderBookingDetailContent = () => {
+        if (!selectedBooking) return null;
+        const displayBooking = adaptBookingForPdf(selectedBooking)[0];
+        const priceRows = Array.isArray(displayBooking?.PriceBreakDown) ? displayBooking.PriceBreakDown : [];
+        const passengers = Array.isArray(displayBooking?.PassengerList) ? displayBooking.PassengerList : [];
+        const grossFare = toNumberValue(displayBooking?.GrossFare);
+        const netFare = toNumberValue(displayBooking?.NetFare);
+        const currency = priceRows?.[0]?.CurrencyCode || "BDT";
+        const pnr = toText(displayBooking?.PNR, "-");
+        const statusColor = (() => {
+            const s = String(displayBooking?.BookingStatus || "").toLowerCase();
+            if (s === "ticketed" || s === "issued") return { bgcolor: "#E6F9EE", color: "#1A7A41" };
+            if (s === "booked") return { bgcolor: "#E8F3FF", color: "#15488C" };
+            if (s === "cancelled") return { bgcolor: "#FDECEA", color: "#B71C1C" };
+            return { bgcolor: "#F3F5F9", color: "#444" };
+        })();
+        return (
+            <Box sx={{ display: "grid", gap: 1.5 }}>
+                {/* Header: IDs + Status */}
+                <Paper sx={{ ...panelStyle, p: 1.8, background: "linear-gradient(180deg,#fff 0%,#f5fbff 100%)" }}>
+                    <Grid container spacing={1.5} alignItems="center">
+                        <Grid item xs={6} md={2}>
+                            <Typography sx={{ fontSize: 11, color: "#607890" }}>Booking ID</Typography>
+                            <Typography sx={{ fontWeight: 700, color: "#15324f", fontSize: 13 }}>
+                                {toText(displayBooking?.BookingId, "-")}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <Typography sx={{ fontSize: 11, color: "#607890" }}>PNR</Typography>
+                            <Typography sx={{ fontWeight: 800, color: "#c0392b", fontSize: 16, letterSpacing: "1px" }}>
+                                {pnr}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={2}>
+                            <Typography sx={{ fontSize: 11, color: "#607890" }}>Status</Typography>
+                            <Chip
+                                label={toText(displayBooking?.BookingStatus, "-")}
+                                size="small"
+                                sx={{ fontWeight: 700, fontSize: 11, ...statusColor, border: "none" }}
+                            />
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                            <Typography sx={{ fontSize: 11, color: "#607890" }}>Departure</Typography>
+                            <Typography sx={{ fontWeight: 600, color: "#15324f", fontSize: 12 }}>
+                                {formatDateTime(getDepDate(selectedBooking))}
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={6} md={3}>
+                            <Typography sx={{ fontSize: 11, color: "#607890" }}>Route</Typography>
+                            <Typography sx={{ fontWeight: 700, color: "#15324f", fontSize: 14 }}>
+                                {bookingRouteText(selectedBooking)}
+                            </Typography>
+                        </Grid>
+                    </Grid>
+                </Paper>
+
+                {/* Flight info card — amenities, brand, segments */}
+                <Paper sx={{ ...panelStyle, p: 0, overflow: "hidden" }}>
+                    <Box sx={{ px: 2, py: 1.2, bgcolor: "var(--primary-button, #003580)" }}>
+                        <Typography sx={{ color: "#fff", fontWeight: 800, fontSize: 14 }}>
+                            Flight Information & Amenities
+                        </Typography>
+                    </Box>
+                    <Box sx={{ p: 1.5 }}>
+                        <FlightDetailsContent data={displayBooking} compactLayout amenityIconsOnly />
+                    </Box>
+                </Paper>
+
+                {/* Passengers */}
+                {passengers.length > 0 && (
+                    <Paper sx={{ ...panelStyle, p: 1.8 }}>
+                        <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1.2, fontSize: 14 }}>
+                            Passengers
+                        </Typography>
+                        <Grid container spacing={1.2}>
+                            {passengers.map((p, idx) => (
+                                <Grid item xs={12} md={6} key={`detail-pax-${idx}`}>
+                                    <Box sx={{ border: "1px solid #E9EEF8", borderRadius: "10px", p: 1.3, bgcolor: "#FCFEFF" }}>
+                                        <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.4 }}>
+                                            {p?.Title ? `${p.Title} ` : ""}
+                                            {p?.FirstName || ""} {p?.LastName || ""}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                            {paxLabelDetail(p?.PaxType)} | {p?.Gender || "N/A"}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                            DOB: {p?.DateOfBirth ? moment(p.DateOfBirth).format("DD MMM YYYY") : "N/A"}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                            Passport: {p?.PassportNumber || "N/A"}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                            Nationality: {p?.PassportNationality || "N/A"}
+                                        </Typography>
+                                    </Box>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </Paper>
+                )}
+
+                {/* Price Breakdown */}
+                {priceRows.length > 0 && (
+                    <Paper sx={{ ...panelStyle, p: 1.8 }}>
+                        <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1.2, fontSize: 14 }}>
+                            Fare & Price Breakdown
+                        </Typography>
+                        <Box
+                            sx={{
+                                display: "grid",
+                                gridTemplateColumns: { xs: "1fr 0.5fr 1fr 1fr 1fr", md: "1fr 0.6fr 1fr 1fr 1fr 1.3fr" },
+                                gap: 1,
+                                pb: 1,
+                                borderBottom: "1px solid #E3E8EF",
+                            }}
+                        >
+                            <Typography sx={{ fontSize: 11, fontWeight: 700 }}>Pax Type</Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>Qty</Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>Base Fare</Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>Tax</Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 700, textAlign: "right" }}>Total</Typography>
+                            <Typography sx={{ fontSize: 11, fontWeight: 700, display: { xs: "none", md: "block" } }}>Baggage</Typography>
+                        </Box>
+                        {priceRows.map((row, idx) => {
+                            const bags = Array.isArray(row?.Bag || row?.bag) ? (row?.Bag || row?.bag) : [];
+                            const baggageText = bags.length
+                                ? [...new Set(bags.map((b) => b?.Allowance || b?.allowance || "N/A"))].join(" | ")
+                                : "N/A";
+                            const rowBase = toNumberValue(row?.BaseFare ?? row?.baseFare);
+                            const rowTax = toNumberValue(row?.Taxes ?? row?.taxes) + toNumberValue(row?.ServiceFee ?? row?.serviceFee);
+                            const rowQty = toNumberValue(row?.PaxCount ?? row?.paxCount) || 1;
+                            const rowTotal = toNumberValue(row?.TotalFare ?? row?.totalFare) || ((rowBase + rowTax) * rowQty);
+                            return (
+                                <Box
+                                    key={`detail-price-${idx}`}
+                                    sx={{
+                                        display: "grid",
+                                        gridTemplateColumns: { xs: "1fr 0.5fr 1fr 1fr 1fr", md: "1fr 0.6fr 1fr 1fr 1fr 1.3fr" },
+                                        gap: 1,
+                                        py: 1,
+                                        borderBottom: "1px dashed #EBEEF3",
+                                        alignItems: "center",
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: 12, fontWeight: 600 }}>{paxLabelDetail(row?.PaxType || row?.paxType)}</Typography>
+                                    <Typography sx={{ fontSize: 12, fontWeight: 600, textAlign: "right" }}>{rowQty}</Typography>
+                                    <Typography sx={{ fontSize: 12, textAlign: "right" }}>{formatMoney(rowBase)} {currency}</Typography>
+                                    <Typography sx={{ fontSize: 12, textAlign: "right" }}>{formatMoney(rowTax)} {currency}</Typography>
+                                    <Typography sx={{ fontSize: 12, fontWeight: 700, textAlign: "right" }}>{formatMoney(rowTotal)} {currency}</Typography>
+                                    <Typography sx={{ fontSize: 12, color: "#63748E", display: { xs: "none", md: "block" } }}>{baggageText}</Typography>
+                                </Box>
+                            );
+                        })}
+                        <Divider sx={{ my: 1.2 }} />
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 3, flexWrap: "wrap" }}>
+                            {grossFare > 0 && grossFare !== netFare && (
+                                <Typography sx={{ fontSize: 13, color: "#607890" }}>
+                                    Gross: <strong>{formatMoney(grossFare)} {currency}</strong>
+                                </Typography>
+                            )}
+                            <Typography sx={{ fontSize: 15, color: "#0f4b7d", fontWeight: 700 }}>
+                                Total: <strong>{formatMoney(netFare || grossFare)} {currency}</strong>
+                            </Typography>
+                        </Box>
+                    </Paper>
+                )}
+
+                {/* PDF Download */}
+                <Paper sx={{ ...panelStyle, p: 1.4 }}>
+                    <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1, fontSize: 13 }}>
+                        Download Booking & Ticket PDF
+                    </Typography>
+                    <BookingAllPdf quesData={adaptBookingForPdf(selectedBooking)} />
+                </Paper>
+            </Box>
+        );
+    };
+
     const renderBookingHistory = () => (
         <Paper sx={{ ...panelStyle, p: 2.2 }}>
             <Typography sx={sectionTitleStyle}>
@@ -1215,57 +1412,8 @@ export default function MyAccountPanel() {
                     >
                         Booking Details
                     </DialogTitle>
-                    <DialogContent>
-                        {selectedBooking ? (
-                            <Box sx={{ display: "grid", gap: 1.2, mt: 1.2 }}>
-                                <Paper
-                                    sx={{
-                                        ...panelStyle,
-                                        p: 1.6,
-                                        background:
-                                            "linear-gradient(180deg, rgba(255,255,255,1) 0%, rgba(245,251,255,1) 100%)",
-                                    }}
-                                >
-                                    <Grid container spacing={1}>
-                                        <Grid item xs={12} md={4}>
-                                            <Typography sx={{ fontSize: 12, color: "#607890" }}>Booking ID</Typography>
-                                            <Typography sx={{ fontWeight: 700, color: "#15324f" }}>{toText(selectedBooking?.bookingId, "-")}</Typography>
-                                        </Grid>
-                                        <Grid item xs={12} md={4}>
-                                            <Typography sx={{ fontSize: 12, color: "#607890" }}>Route</Typography>
-                                            <Typography sx={{ fontWeight: 700, color: "#15324f" }}>{bookingRouteText(selectedBooking)}</Typography>
-                                        </Grid>
-                                        <Grid item xs={12} md={4}>
-                                            <Typography sx={{ fontSize: 12, color: "#607890" }}>Status</Typography>
-                                            <Typography sx={{ fontWeight: 700, color: "#15324f" }}>{toText(selectedBooking?.bookingStatus, "-")}</Typography>
-                                        </Grid>
-                                        <Grid item xs={12} md={4}>
-                                            <Typography sx={{ fontSize: 12, color: "#607890" }}>Departure</Typography>
-                                            <Typography sx={{ fontWeight: 600, color: "#15324f" }}>{formatDateTime(getDepDate(selectedBooking))}</Typography>
-                                        </Grid>
-                                        <Grid item xs={12} md={4}>
-                                            <Typography sx={{ fontSize: 12, color: "#607890" }}>Airline</Typography>
-                                            <Typography sx={{ fontWeight: 600, color: "#15324f" }}>{toText(selectedBooking?.Curriername, "-")}</Typography>
-                                        </Grid>
-                                        <Grid item xs={12} md={4}>
-                                            <Typography sx={{ fontSize: 12, color: "#607890" }}>Flight Number</Typography>
-                                            <Typography sx={{ fontWeight: 600, color: "#15324f" }}>{toText(selectedBooking?.flightNumber, "-")}</Typography>
-                                        </Grid>
-                                    </Grid>
-                                    <Divider sx={{ my: 1.2 }} />
-                                    <Typography sx={{ fontSize: 13, color: "#4f657c" }}>
-                                        This view mirrors your booking preview information and keeps download options below.
-                                    </Typography>
-                                </Paper>
-
-                                <Paper sx={{ ...panelStyle, p: 1.3 }}>
-                                    <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1 }}>
-                                        Download Booking and Ticket PDF
-                                    </Typography>
-                                    <BookingAllPdf quesData={adaptBookingForPdf(selectedBooking)} />
-                                </Paper>
-                            </Box>
-                        ) : null}
+                    <DialogContent sx={{ pt: 2 }}>
+                        {renderBookingDetailContent()}
                     </DialogContent>
                 </Dialog>
             </Box>

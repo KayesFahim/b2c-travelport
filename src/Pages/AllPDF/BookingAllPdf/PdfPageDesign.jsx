@@ -467,9 +467,8 @@ const PDFPageDesign = ({ SingleBooking }) => {
               </View>
             </View>
             {pdfData?.PriceBreakDown?.map((price, index) => (
-              <>
+              <React.Fragment key={index}>
                 <View
-                  key={index}
                   style={{
                     width: "100%",
                     height: "35px",
@@ -517,7 +516,7 @@ const PDFPageDesign = ({ SingleBooking }) => {
                     </Text>
                   </View>
                 </View>
-              </>
+              </React.Fragment>
             ))}
 
             <View
