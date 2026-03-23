@@ -17,14 +17,28 @@ const isMobile = window.innerWidth <= 768;
 
 const UserProfile = () => {
   const [userInfo, setUserInfo] = useState([]);
+  const [errorText, setErrorText] = useState("");
   const token = secureLocalStorage.getItem("access_token");
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchUserProfile = async () => {
-      const api = `${config.baseUrl}/user/profileInfo`;
+      const normalizedBaseUrl = String(config?.baseUrl || "").trim().replace(/\/+$/, "");
+      const api = `${normalizedBaseUrl}/user/profileInfo`;
 
       try {
+        setErrorText("");
+        const localResponse = await fetch("/api/user/profileInfo", {
+          method: "GET",
+          credentials: "include",
+        });
+
+        if (localResponse.ok) {
+          const data = await localResponse.json();
+          setUserInfo(data);
+          return;
+        }
+
         if (token) {
           const response = await fetch(api, {
             method: "GET",
@@ -61,9 +75,9 @@ const UserProfile = () => {
           return;
         }
 
-        navigate("/");
+        setErrorText("Unable to load profile right now. Please sign in again.");
       } catch (error) {
-        console.error("Error:", error);
+        setErrorText("Unable to connect to server. Please check API URL/server and try again.");
       }
     };
 
@@ -220,6 +234,11 @@ const UserProfile = () => {
             mt: 2,
           }}
         >
+          {errorText ? (
+            <Typography sx={{ color: "#B3261E", mb: 2 }}>
+              {errorText}
+            </Typography>
+          ) : null}
           <Grid
             container
             spacing={{ xs: 1, sm: 1, md: 0, lg: 0 }}

@@ -10,37 +10,47 @@ import { config } from "../../../config";
 const UserTraveler = () => {
   const [travelData, setTravelData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorText, setErrorText] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(3); // You can change this to the number of items per page
   const token = secureLocalStorage.getItem("access_token");
   const navigate = useNavigate();
 
   const handleAddTravellerClick = () => {
-    navigate("/userinfov2/addtravler");
+    navigate("/myprofile/addtravler");
   };
 
   useEffect(() => {
     const fetchTransactions = async () => {
+      if (!token) {
+        setTravelData([]);
+        setLoading(false);
+        return;
+      }
+
       try {
-        const response = await fetch(
-          `${config.baseUrl}/user/findAllTravelBuddy`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}`,
-            },
-          }
-        );
+        setErrorText("");
+        const normalizedBaseUrl = String(config?.baseUrl || "").trim().replace(/\/+$/, "");
+        const endpoint = `${normalizedBaseUrl}/user/findAllTravelBuddy`;
+
+        const response = await fetch(endpoint, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        });
 
         if (response.ok) {
           const data = await response.json();
-          setTravelData(data?.travelBuddies);
+          setTravelData(Array.isArray(data?.travelBuddies) ? data.travelBuddies : []);
         } else {
-          console.error("Failed to fetch data:", response.statusText);
+          setTravelData([]);
+          setErrorText("Unable to load travellers right now. Please try again.");
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        setTravelData([]);
+        setErrorText("Unable to connect to server. Please check API URL/server and try again.");
       } finally {
         setLoading(false);
       }
@@ -56,7 +66,7 @@ const UserTraveler = () => {
   const handlePageChange = (event, value) => {
     setCurrentPage(value);
   };
-  console.log("traveeler",travelData)
+
   return (
     <Box>
       <Box
@@ -100,6 +110,10 @@ const UserTraveler = () => {
           >
             <CircularProgress />
           </Box>
+        ) : errorText ? (
+          <Typography sx={{ color: "#B3261E", textAlign: "center" }}>
+            {errorText}
+          </Typography>
         ) : currentItems?.length > 0 ? (
           currentItems?.map((travel, index) => (
             <Box key={index}>
@@ -144,7 +158,7 @@ const UserTraveler = () => {
                     </Typography>
                   </Box>
                   <Box>
-                  <Typography
+                    <Typography
                       sx={{
                         color: "var(--primary-button)",
                         fontSize: {

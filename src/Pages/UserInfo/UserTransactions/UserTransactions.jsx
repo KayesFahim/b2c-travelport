@@ -12,18 +12,25 @@ const UserTransactions = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const transactionsPerPage = 3; // Adjust as needed
   const token = secureLocalStorage.getItem("access_token");
-  const [selectedTab, setSelectedTab] = useState("Booked"); // Tab state
+  const [selectedTab] = useState("Booked"); // Tab state
   // const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 3;
 
   useEffect(() => {
     const fetchTransactions = async () => {
+      if (!token) {
+        setTransactionsData([]);
+        setError("");
+        setLoading(false);
+        return;
+      }
+
       setError(""); // Reset error state
 
       try {
+        const normalizedBaseUrl = String(config?.baseUrl || "").trim().replace(/\/+$/, "");
         const response = await fetch(
-          // "https://<backend-api>/user/oneUserAllTransection",
-          `${config.baseUrl}/user/oneUserAllTransection?/${selectedTab}?page=${currentPage}&limit=${itemsPerPage}`,
+          `${normalizedBaseUrl}/user/oneUserAllTransection?page=${currentPage}&limit=${itemsPerPage}&status=${encodeURIComponent(selectedTab)}`,
           {
             method: "GET",
             headers: {
@@ -40,14 +47,15 @@ const UserTransactions = () => {
         const data = await response.json();
         setTransactionsData(data?.transactions || []);
       } catch (error) {
-        setError(error.message);
+        setTransactionsData([]);
+        setError("Unable to load transactions right now. Please try again.");
       } finally {
         setLoading(false);
       }
     };
 
     fetchTransactions();
-  }, [token]);
+  }, [token, currentPage, selectedTab, itemsPerPage]);
 
   // Pagination logic
   const indexOfLastTransaction = currentPage * transactionsPerPage;
@@ -111,6 +119,10 @@ const UserTransactions = () => {
           >
             <CircularProgress />
           </Box>
+        ) : error ? (
+          <Typography sx={{ color: "#B3261E", textAlign: "center", my: 2 }}>
+            {error}
+          </Typography>
         ) : (
           <Box>
             {/* Transactions */}
@@ -198,7 +210,7 @@ const UserTransactions = () => {
                 {loading
                   ? ""
                   : currentTransactions.length <= 0 &&
-                    "No transactions available."}
+                  "No transactions available."}
               </Typography>
             )}
           </Box>

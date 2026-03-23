@@ -264,14 +264,17 @@ const findBestMrzInText = (text: string): MrzParsed | null => {
     const line = lines[i];
     const next = lines[i + 1] || "";
 
-    if (line.startsWith("P<")) {
-      if (next) pushCandidate(line, next);
+    // Look for P< at the start OR embedded within OCR noise before the zone
+    const pIdx = line.startsWith("P<") ? 0 : line.indexOf("P<");
+    if (pIdx >= 0) {
+      const candidate = pIdx === 0 ? line : line.slice(pIdx);
+      if (next) pushCandidate(candidate, next);
 
-      if (line.length >= 88) {
-        pushCandidate(line.slice(0, 44), line.slice(44, 88));
+      if (candidate.length >= 88) {
+        pushCandidate(candidate.slice(0, 44), candidate.slice(44, 88));
       }
 
-      const compact = line.replace(/[^A-Z0-9<]/g, "");
+      const compact = candidate.replace(/[^A-Z0-9<]/g, "");
       if (compact.length >= 88 && compact.startsWith("P<")) {
         pushCandidate(compact.slice(0, 44), compact.slice(44, 88));
       }
@@ -280,7 +283,7 @@ const findBestMrzInText = (text: string): MrzParsed | null => {
 
   if (!candidates.length) return null;
   candidates.sort((a, b) => b.score - a.score);
-  return candidates[0]?.score >= 4 ? candidates[0] : null;
+  return candidates[0]?.score >= 3 ? candidates[0] : null;
 };
 
 const preprocessForOcr = async (sourceBuffer: Buffer): Promise<OcrVariant[]> => {
@@ -333,7 +336,24 @@ const preprocessForOcr = async (sourceBuffer: Buffer): Promise<OcrVariant[]> => 
       .toFormat("png")
       .toBuffer();
 
+    // Tight MRZ strip: bottom 22% upscaled 2x — best for OCR-B font on passport data page
+    const stripTop = Math.max(Math.floor(height * 0.78), 0);
+    const stripHeight = Math.max(height - stripTop, 20);
+    const mrzStripRaw = await sharp(fullGray)
+      .extract({ left: 0, top: stripTop, width, height: stripHeight })
+      .resize({ width: Math.min(width * 2, 3600), fit: "inside", withoutEnlargement: false })
+      .sharpen({ sigma: 0.8 })
+      .toFormat("png")
+      .toBuffer();
+    const mrzStripBinary = await sharp(mrzStripRaw)
+      .linear(1.5, -25)
+      .threshold(140)
+      .toFormat("png")
+      .toBuffer();
+
     variants.unshift(
+      { label: "mrz-strip-binary", buffer: mrzStripBinary, psm: PSM.SINGLE_BLOCK },
+      { label: "mrz-strip-gray", buffer: mrzStripRaw, psm: PSM.SINGLE_BLOCK },
       { label: "mrz-binary-psm7", buffer: mrzBinary, psm: PSM.SINGLE_LINE },
       { label: "mrz-binary-psm6", buffer: mrzBinary, psm: PSM.SINGLE_BLOCK },
       { label: "mrz-gray", buffer: mrzGray, psm: PSM.SINGLE_BLOCK }

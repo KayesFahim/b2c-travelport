@@ -251,6 +251,26 @@ const mapReservationTravelersToPassengers = (reservation) => {
   });
 };
 
+const extractTicketNumbersFromReservation = (reservation) => {
+  if (!reservation || typeof reservation !== "object") return [];
+
+  const receipts = Array.isArray(reservation?.Receipt) ? reservation.Receipt : [];
+  const numbers = [];
+
+  receipts.forEach((receipt) => {
+    const documents = Array.isArray(receipt?.Document) ? receipt.Document : [];
+    documents.forEach((doc) => {
+      const docType = toText(doc?.["@type"] || doc?.type).toLowerCase();
+      const ticketNumber = toText(doc?.Number || doc?.number);
+      if (ticketNumber && (docType.includes("documentticket") || docType.includes("ticket"))) {
+        numbers.push(ticketNumber);
+      }
+    });
+  });
+
+  return Array.from(new Set(numbers));
+};
+
 const summarizePostCommitReservation = (reservation) => {
   if (!reservation || typeof reservation !== "object") {
     return {
@@ -732,6 +752,13 @@ const BookingConfirmation = () => {
     return { base, taxes, total };
   }, [priceRows, flightInfoSource]);
 
+  const ticketNumbers = extractTicketNumbersFromReservation(
+    resolvedCommittedReservation
+  );
+  const hasTicket = ticketNumbers.length > 0;
+  const ticketStatusLabel = hasTicket ? "Ticketed" : "Pending";
+  const ticketNumberText = hasTicket ? ticketNumbers.join(", ") : "N/A";
+
   if (reservationByPnrLoading) {
     return (
       <Box>
@@ -825,12 +852,15 @@ const BookingConfirmation = () => {
   };
 
   const handleIssueTicket = async () => {
-    const reservationRef = toText(issueTicketReference?.reservationRef);
-    if (!reservationRef) {
+    const issueTicketPnr =
+      toText(pnrFromQuery) ||
+      toText(locator) ||
+      toText(issueTicketReference?.reservationRef);
+    if (!issueTicketPnr) {
       setIssueTicketFeedback({
         severity: "warning",
         message:
-          "Issue-ticket reference not found in v11 response. Please reload this confirmation from a fresh booking.",
+          "PNR not found for Issue Ticket. Please reload this confirmation page.",
         needsPreviewRecovery: false,
       });
       return;
@@ -840,27 +870,23 @@ const BookingConfirmation = () => {
     setIssueTicketFeedback({ severity: "", message: "", needsPreviewRecovery: false });
 
     try {
-      const response = await fetch("/api/travelport/book-hold", {
+      const response = await fetch(
+        `/api/travelport/issue-ticket?pnr=${encodeURIComponent(issueTicketPnr)}`,
+        {
         method: "POST",
         credentials: "include",
         headers: {
+          Accept: "application/json",
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          reservationId: reservationRef,
-          bookingFlowKey: issueTicketReference.flowKey,
-          bookingOfferKey: issueTicketReference.offerKey,
-          bookingFlowExpiresAt: issueTicketReference.expiresAt,
-          commit: true,
-          commitOnly: true,
-        }),
-      });
+          body: JSON.stringify({
+            pnr: issueTicketPnr,
+          }),
+        }
+      );
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        const commitOnlyMismatch =
-          payload?.stage === "commit_only_missing_prepared_booking" ||
-          response.status === 409;
         let resolvedMessage =
           payload?.message ||
           payload?.details ||
@@ -869,23 +895,19 @@ const BookingConfirmation = () => {
         if (payload?.requiresLogin || response.status === 401) {
           resolvedMessage =
             "Login required for Issue Ticket. Please sign in again and retry.";
-        } else if (commitOnlyMismatch) {
-          resolvedMessage =
-            "Issue Ticket v11 flow reference expired/missing. Please run Preview Booking again, then confirm and issue ticket.";
         }
 
-        const issueError = new Error(resolvedMessage);
-        issueError.needsPreviewRecovery = commitOnlyMismatch;
-        throw issueError;
+        throw new Error(resolvedMessage);
       }
 
-      setFinalCommitResponse(payload || null);
       const issuedLocator =
         toText(payload?.locator) || toText(locator) || toText(pnrFromQuery) || "N/A";
+      const issuedReservation =
+        toText(payload?.reservationId) || issueTicketPnr;
 
       setIssueTicketFeedback({
         severity: "success",
-        message: `Ticket issue flow completed. Reservation ${reservationRef} | PNR ${issuedLocator}`,
+        message: `Ticket issue flow completed. Reservation ${issuedReservation} | PNR ${issuedLocator}`,
         needsPreviewRecovery: false,
       });
       setPnrRefreshTick((prev) => prev + 1);
@@ -894,8 +916,7 @@ const BookingConfirmation = () => {
         severity: "error",
         message:
           error instanceof Error ? error.message : "Unable to issue ticket right now.",
-        needsPreviewRecovery:
-          Boolean(error && typeof error === "object" && error.needsPreviewRecovery),
+        needsPreviewRecovery: false,
       });
     } finally {
       setIssueTicketSubmitting(false);
@@ -980,22 +1001,42 @@ const BookingConfirmation = () => {
             Booking Reference
           </Typography>
           <Grid container spacing={2} alignItems="flex-start">
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6} md={3}>
               <Typography sx={{ fontSize: 11, color: "#78909C", fontFamily: FONT, fontWeight: 600, mb: 0.4 }}>PNR / Locator</Typography>
               <Typography sx={{ fontSize: 32, fontWeight: 900, color: "#0A527A", fontFamily: FONT, lineHeight: 1, letterSpacing: 2 }}>
                 {locator}
               </Typography>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6} md={3}>
               <Typography sx={{ fontSize: 11, color: "#78909C", fontFamily: FONT, fontWeight: 600, mb: 0.4 }}>Reservation ID</Typography>
               <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#1F344A", fontFamily: FONT, wordBreak: "break-all" }}>
                 {reservationId}
               </Typography>
             </Grid>
-            <Grid item xs={12} sm={4}>
+            <Grid item xs={12} sm={6} md={3}>
               <Typography sx={{ fontSize: 11, color: "#78909C", fontFamily: FONT, fontWeight: 600, mb: 0.4 }}>Offer ID</Typography>
               <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#1F344A", fontFamily: FONT, wordBreak: "break-all" }}>
                 {offerId}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Typography sx={{ fontSize: 11, color: "#78909C", fontFamily: FONT, fontWeight: 600, mb: 0.4 }}>Ticket Status</Typography>
+              <Chip
+                size="small"
+                label={ticketStatusLabel}
+                sx={{
+                  background: hasTicket ? "#E7F7EE" : "#FFF7E8",
+                  color: hasTicket ? "#12753C" : "#A26200",
+                  fontSize: 11,
+                  fontWeight: 800,
+                  fontFamily: FONT,
+                }}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Typography sx={{ fontSize: 11, color: "#78909C", fontFamily: FONT, fontWeight: 600, mb: 0.4 }}>Ticket Number</Typography>
+              <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#1F344A", fontFamily: FONT, wordBreak: "break-all" }}>
+                {ticketNumberText}
               </Typography>
             </Grid>
           </Grid>

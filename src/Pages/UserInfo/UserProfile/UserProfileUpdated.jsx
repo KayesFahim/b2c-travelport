@@ -23,12 +23,21 @@ const isMobile = window.innerWidth <= 768;
 const UserProfileUpdated = () => {
   const location = useLocation();
   const { userInfo } = location.state || {};
+  const resolveInitialDate = (value) => {
+    if (!value) return null;
+    const parsed = moment(value, ["DD-MM-YYYY", "YYYY-MM-DD", moment.ISO_8601], true);
+    return parsed.isValid() ? parsed.toDate() : value;
+  };
   const [openProfileDate, setOpenProfileDate] = useState(false);
   const [selectedProfileDate, setSelectedProfileDate] = useState(
-    userInfo?.dob || null
+    resolveInitialDate(userInfo?.dob)
   );
   const [openPassDate, setOpenPassDate] = useState(false);
-  const [selectedPassDate, setSelectedPassDate] = useState(null);
+  const [selectedPassDate, setSelectedPassDate] = useState(
+    resolveInitialDate(
+      userInfo?.passportexp || userInfo?.passportExp || userInfo?.passportExpiryDate
+    )
+  );
   const token = secureLocalStorage.getItem("access_token");
   const navigate = useNavigate();
   const [firstName, setFirstName] = useState(
@@ -37,8 +46,12 @@ const UserProfileUpdated = () => {
   // const [lastName, setLastName] = useState(userInfo?.lastName || "");
   const [gender, setGender] = useState(userInfo?.gender || "");
   const [nation, setNation] = useState(userInfo?.nationality || "BD");
+  const [address, setAddress] = useState(userInfo?.address || "");
   const [passportNumber, setPassportNumber] = useState(
-    userInfo?.passport || ""
+    userInfo?.passport || userInfo?.passportNumber || ""
+  );
+  const [passportIssuingCountry, setPassportIssuingCountry] = useState(
+    userInfo?.passportCountry || userInfo?.passportIssuingCountry || userInfo?.nationality || "BD"
   );
   const [email, setEmail] = useState(userInfo?.email || "");
   const [phone, setPhone] = useState(userInfo?.phone || "");
@@ -113,29 +126,77 @@ const UserProfileUpdated = () => {
   const handleUpdatedProfile = async (e) => {
     e.preventDefault();
 
-    const body = {
-      fullName: firstName,
-      phone: phone,
-      email: email,
-      dob: selectedProfileDate,
-      gender: gender,
-      nationility: nation,
-      passport: passportNumber,
-      passportexp: selectedPassDate,
+    const normalizeDateForApi = (value) => {
+      if (!value) return "";
+      const parsed = moment(value);
+      if (!parsed.isValid()) return String(value);
+      return parsed.format("DD-MM-YYYY");
     };
 
+    const normalizeGenderForApi = (value) => {
+      const text = String(value || "").trim().toLowerCase();
+      if (text === "male" || text === "m") return "Male";
+      if (text === "female" || text === "f") return "Female";
+      return String(value || "").trim();
+    };
+
+    const body = {
+      fullName: String(firstName || "").trim(),
+      phone: String(phone || "").replace(/[^0-9]/g, ""),
+      email: String(email || "").trim().toLowerCase(),
+      address: String(address || "").trim(),
+      dob: normalizeDateForApi(selectedProfileDate),
+      gender: normalizeGenderForApi(gender),
+      nationility: nation,
+      nationality: nation,
+      passport: passportNumber,
+      passportCountry: passportIssuingCountry,
+      passportIssuingCountry: passportIssuingCountry,
+      passportexp: normalizeDateForApi(selectedPassDate),
+      passportExp: normalizeDateForApi(selectedPassDate),
+      passportExpiryDate: normalizeDateForApi(selectedPassDate),
+    };
+
+    const normalizedBaseUrl = String(config?.baseUrl || "").trim().replace(/\/+$/, "");
+    const candidateUrls = [
+      "/api/user/updateUserProfile",
+      `${normalizedBaseUrl}/user/updateUserProfile`,
+      "/user/updateUserProfile",
+    ];
+
     try {
-      const response = await fetch(
-        `${config.baseUrl}/user/updateUserProfile`,
-        {
-          method: "PATCH",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify(body),
+      let response = null;
+      let lastError = null;
+
+      for (const url of candidateUrls) {
+        try {
+          response = await fetch(url, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify(body),
+          });
+
+          // If same-origin endpoint is not available, try next candidate.
+          if (response.status === 404 || response.status === 405) {
+            response = null;
+            continue;
+          }
+          break;
+        } catch (error) {
+          lastError = error;
+          response = null;
         }
-      );
+      }
+
+      if (!response) {
+        throw (
+          lastError ||
+          new Error("Profile update service is unavailable. Ensure backend is running on port 3001.")
+        );
+      }
 
       if (response.ok) {
         // Success alert
@@ -161,8 +222,9 @@ const UserProfileUpdated = () => {
       // Network or other errors
       Swal.fire({
         icon: "error",
-        title: "Oops...",
-        text: "Something went wrong. Please try again later.",
+        title: "Update Service Unavailable",
+        text:
+          "Could not reach update profile API. Please make sure backend server is running on localhost:3001.",
         confirmButtonText: "OK",
       });
     }
@@ -556,6 +618,65 @@ const UserProfileUpdated = () => {
               </Box>
             </Grid>
             <Grid item xs={12} sm={12} md={4} lg={4}>
+              <Box>
+                <Typography sx={{ fontSize: "12px", color: "#444542" }}>
+                  Passport Issuing Country
+                </Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    mt: "5px",
+                    flexDirection: "column",
+                    borderBottom: "1px solid #ACA6A6",
+                    width: {
+                      xs: "100%",
+                      sm: "100%",
+                    },
+                  }}
+                >
+                  <FormControl sx={{ minWidth: "100%", height: "100%" }}>
+                    <Select
+                      value={passportIssuingCountry}
+                      onChange={(e) => setPassportIssuingCountry(e.target.value)}
+                      displayEmpty
+                      inputProps={{ "aria-label": "Select Passport Issuing Country" }}
+                      sx={{
+                        width: "100%",
+                        "& .MuiOutlinedInput-notchedOutline": {
+                          border: "none",
+                        },
+                        "& .MuiInputBase-input": {
+                          padding: "2px 0",
+                          fontSize: "12px",
+                          color: "var(--primary-button)",
+                        },
+                        "&.Mui-focused .MuiOutlinedInput-notchedOutline": {
+                          border: "none",
+                        },
+                      }}
+                      MenuProps={{
+                        PaperProps: {
+                          style: {
+                            maxHeight: 200,
+                            width: 200,
+                          },
+                        },
+                      }}
+                    >
+                      <MenuItem value="BD" sx={{ fontWeight: 600 }}>
+                        Bangladesh (BD)
+                      </MenuItem>
+                      {countryName?.map((country, index) => (
+                        <MenuItem key={`passport-country-${index}`} value={`${country.code}`}>
+                          {country.name} ({country.code})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={12} md={4} lg={4}>
               <Box sx={{ position: "relative" }}>
                 <Box onClick={() => setOpenPassDate(true)}>
                   <Typography sx={{ fontSize: "12px", color: "#444542" }}>
@@ -687,6 +808,40 @@ const UserProfileUpdated = () => {
                     required
                     value={phone}
                     onChange={(e) => setPhone(e.target.value)}
+                    style={{
+                      border: "none",
+                      outline: "none",
+                      width: "100%",
+                      fontSize: "12px",
+                      background: "none",
+                      color: "var(--primary-button)",
+                    }}
+                  />
+                </Box>
+              </Box>
+            </Grid>
+            <Grid item xs={12} sm={12} md={4} lg={4}>
+              <Box>
+                <Typography sx={{ fontSize: "12px", color: "#444542" }}>
+                  Address
+                </Typography>
+                <Box
+                  sx={{
+                    display: "flex",
+                    mt: "10px",
+                    flexDirection: "column",
+                    borderBottom: "1px solid #ACA6A6",
+                    width: {
+                      xs: "100%",
+                      sm: "100%",
+                    },
+                    paddingBottom: "5px",
+                  }}
+                >
+                  <input
+                    placeholder="Enter Your Address"
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
                     style={{
                       border: "none",
                       outline: "none",

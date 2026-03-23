@@ -1,4 +1,4 @@
-import { Box, Container, Grid, Typography } from "@mui/material";
+import { Box, Button, Container, Grid, TextField, Typography } from "@mui/material";
 import React, { useState } from "react";
 import NavBar from "../../Shared/NavBar/NavBar";
 import PersonIcon from "@mui/icons-material/Person";
@@ -13,8 +13,12 @@ import { AccountCircle } from "@mui/icons-material";
 
 const UserInfoV2 = () => {
   const [userSidebar, setUserSideBar] = useState("profile");
+  const [manageBookingPnr, setManageBookingPnr] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
+  const isProfileRoute = (suffix) =>
+    location?.pathname === `/userinfov2/${suffix}` ||
+    location?.pathname === `/myprofile/${suffix}`;
   const user = secureLocalStorage.getItem("userData");
 
   const handleSideBar = (section) => {
@@ -45,6 +49,20 @@ const UserInfoV2 = () => {
     }).then(() => {
       navigate("/");
     });
+  };
+
+  const handleManageBooking = () => {
+    const pnr = String(manageBookingPnr || "").trim().toUpperCase();
+    if (!pnr) {
+      Swal.fire({
+        icon: "warning",
+        title: "PNR Required",
+        text: "Please paste a valid PNR/Locator to continue.",
+      });
+      return;
+    }
+
+    navigate(`/bookingconfirmation?pnr=${encodeURIComponent(pnr)}`);
   };
 
   return (
@@ -98,8 +116,8 @@ const UserInfoV2 = () => {
                   px: "10px",
                   display: "flex",
                   justifyContent: "center",
-                  borderBottom:"1px solid var(--primary-button)",
-                  mb:2,
+                  borderBottom: "1px solid var(--primary-button)",
+                  mb: 2,
                   // borderRadius: "5px"
                 }}
               >
@@ -109,7 +127,7 @@ const UserInfoV2 = () => {
                   }}
                 >
                   <AccountCircle
-                    sx={{ fontSize: "30px", color: "var(--primary-button)",pt:.5 }}
+                    sx={{ fontSize: "30px", color: "var(--primary-button)", pt: .5 }}
                   />
                   <Box sx={{ pl: "10px" }}>
                     <Typography
@@ -135,15 +153,13 @@ const UserInfoV2 = () => {
                     <Link
                       style={{
                         textDecoration: "none",
-                        backgroundColor:
-                          location?.pathname === "/userinfov2/userprofile"
-                            ? "var(--primary-color)"
-                            : "#E6ECF5",
+                        backgroundColor: isProfileRoute("userprofile")
+                          ? "var(--primary-color)"
+                          : "#E6ECF5",
                         display: "flex",
-                        color:
-                          location?.pathname === "/userinfov2/userprofile"
-                            ? "#3D3A49"
-                            : "#003E6B",
+                        color: isProfileRoute("userprofile")
+                          ? "#3D3A49"
+                          : "#003E6B",
                         alignItems: "center",
                         marginTop: "5px",
                         padding: "10px 10px",
@@ -164,15 +180,13 @@ const UserInfoV2 = () => {
                       to="userbooking"
                       style={{
                         textDecoration: "none",
-                        backgroundColor:
-                          location?.pathname === "/userinfov2/userbooking"
-                            ? "var(--primary-color)"
-                            : "#E6ECF5",
+                        backgroundColor: isProfileRoute("userbooking")
+                          ? "var(--primary-color)"
+                          : "#E6ECF5",
                         display: "flex",
-                        color:
-                          location.pathname === "/userinfov2/userbooking"
-                            ? "#3D3A49"
-                            : "#003E6B",
+                        color: isProfileRoute("userbooking")
+                          ? "#3D3A49"
+                          : "#003E6B",
                         alignItems: "center",
                         marginTop: "5px",
                         padding: "10px 10px",
@@ -218,15 +232,13 @@ const UserInfoV2 = () => {
                     to="usertransctions"
                     style={{
                       textDecoration: "none",
-                      backgroundColor:
-                        location.pathname === "/userinfov2/usertransctions"
-                          ? "var(--primary-color)"
-                          : "#E6ECF5",
+                      backgroundColor: isProfileRoute("usertransctions")
+                        ? "var(--primary-color)"
+                        : "#E6ECF5",
                       display: "flex",
-                      color:
-                        location.pathname === "/userinfov2/usertransctions"
-                          ? "#3D3A49"
-                          : "#003E6B",
+                      color: isProfileRoute("usertransctions")
+                        ? "#3D3A49"
+                        : "#003E6B",
                       alignItems: "center",
                       marginTop: "5px",
                       padding: "10px 10px",
@@ -244,15 +256,13 @@ const UserInfoV2 = () => {
                     to="usertraveler"
                     style={{
                       textDecoration: "none",
-                      backgroundColor:
-                        location?.pathname === "/userinfov2/usertraveler"
-                          ? "var(--primary-color)"
-                          : "#E6ECF5",
+                      backgroundColor: isProfileRoute("usertraveler")
+                        ? "var(--primary-color)"
+                        : "#E6ECF5",
                       display: "flex",
-                      color:
-                        location?.pathname === "/userinfov2/usertraveler"
-                          ? "#3D3A49"
-                          : "#003E6B",
+                      color: isProfileRoute("usertraveler")
+                        ? "#3D3A49"
+                        : "#003E6B",
                       alignItems: "center",
                       // height: "40px",
                       // paddingLeft: "20px",
@@ -268,6 +278,57 @@ const UserInfoV2 = () => {
                       My Travel Buddy
                     </Typography>
                   </Link>
+
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 1.25,
+                      border: "1px solid #d6e0ec",
+                      borderRadius: "8px",
+                      backgroundColor: "#f7fbff",
+                    }}
+                  >
+                    <Typography
+                      sx={{
+                        fontSize: "12px",
+                        fontWeight: 700,
+                        color: "#003E6B",
+                        mb: 0.8,
+                      }}
+                    >
+                      Manage Booking
+                    </Typography>
+                    <TextField
+                      size="small"
+                      placeholder="Paste PNR / Locator"
+                      value={manageBookingPnr}
+                      onChange={(event) => setManageBookingPnr(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          handleManageBooking();
+                        }
+                      }}
+                      fullWidth
+                      sx={{
+                        "& .MuiInputBase-input": {
+                          fontSize: "12px",
+                          py: "8px",
+                        },
+                        "& .MuiOutlinedInput-root": {
+                          backgroundColor: "#fff",
+                        },
+                      }}
+                    />
+                    <Button
+                      fullWidth
+                      variant="contained"
+                      sx={{ mt: 1, fontSize: "11px", fontWeight: 700 }}
+                      onClick={handleManageBooking}
+                    >
+                      Show Booking Details
+                    </Button>
+                  </Box>
                   {/* logout
                   <Box
                     sx={{

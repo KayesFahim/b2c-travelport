@@ -38,6 +38,7 @@ const createPassenger = (
 ) => ({
   Title: passenger?.title,
   FirstName: passenger?.fName,
+  MiddleName: passenger?.mName || "",
   LastName: passenger?.lName,
   PaxType: passenger?.type,
   DateOfBirth: moment(passenger?.dob).format("YYYY-MM-DDT00:00:00.000[Z]"), // corrction this line
@@ -46,6 +47,9 @@ const createPassenger = (
   PassportNumber: passenger?.passNo || null,
   PassportExpiryDate: passenger?.passEx
     ? moment(passenger?.passEx).format("YYYY-MM-DDT00:00:00.000[Z]")
+    : null,
+  PassportIssueDate: passenger?.passIssueDate
+    ? moment(passenger?.passIssueDate).format("YYYY-MM-DD")
     : null,
   PassportNationality: passenger?.passNation,
   PassportIssuingCountry: passenger?.passIssueCountry || null,
@@ -64,6 +68,7 @@ const createPassenger = (
 const generatePassengerData = (type, date) => ({
   type,
   fName: "",
+  mName: "",
   title: "",
   lName: "",
   gender: "",
@@ -71,6 +76,7 @@ const generatePassengerData = (type, date) => ({
   dob: "",
   passNation: "BD",
   passIssueCountry: "BD",
+  passIssueDate: "",
   passNo: "",
   passEx: "",
   PassCopy: null,

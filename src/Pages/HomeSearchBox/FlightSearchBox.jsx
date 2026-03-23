@@ -1,9 +1,22 @@
-import { Box, Button, Chip, Stack, Typography } from "@mui/material";
-import React from "react";
+import {
+  Box,
+  Button,
+  Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Stack,
+  TextField,
+  Typography,
+} from "@mui/material";
+import React, { useState } from "react";
 import FlightTakeoffRoundedIcon from "@mui/icons-material/FlightTakeoffRounded";
 import PublishedWithChangesRoundedIcon from "@mui/icons-material/PublishedWithChangesRounded";
 import HubRoundedIcon from "@mui/icons-material/HubRounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
+import ManageSearchRoundedIcon from "@mui/icons-material/ManageSearchRounded";
+import { useNavigate } from "react-router-dom";
 import OneWay from "../OneWay/OneWay";
 import RoundWay from "../RoundWay/RoundWay";
 import MultiCity from "../MultiCity/MultiCity";
@@ -62,6 +75,31 @@ const FlightSearchBox = ({
 }) => {
   const totalPassengers =
     Number(adultCount || 0) + Number(childCount || 0) + Number(infant || 0);
+  const [manageBookingPnr, setManageBookingPnr] = useState("");
+  const [manageBookingError, setManageBookingError] = useState("");
+  const [openManageBookingDialog, setOpenManageBookingDialog] = useState(false);
+  const navigate = useNavigate();
+
+  const handleOpenManageBookingDialog = () => {
+    setManageBookingError("");
+    setOpenManageBookingDialog(true);
+  };
+
+  const handleCloseManageBookingDialog = () => {
+    setOpenManageBookingDialog(false);
+    setManageBookingError("");
+  };
+
+  const handleManageBooking = () => {
+    const pnr = String(manageBookingPnr || "").trim().toUpperCase();
+    if (!pnr) {
+      setManageBookingError("Please enter a valid PNR / Locator.");
+      return;
+    }
+    setManageBookingError("");
+    setOpenManageBookingDialog(false);
+    navigate(`/bookingconfirmation?pnr=${encodeURIComponent(pnr)}`);
+  };
   const tripOptions = [
     {
       value: "oneway",
@@ -318,6 +356,27 @@ const FlightSearchBox = ({
               fontWeight: 700,
             }}
           />
+          <Button
+            size="small"
+            startIcon={<ManageSearchRoundedIcon sx={{ fontSize: "16px !important" }} />}
+            onClick={handleOpenManageBookingDialog}
+            sx={{
+              textTransform: "none",
+              borderRadius: "999px",
+              px: 1.4,
+              minHeight: 26,
+              color: "#ffffff",
+              fontWeight: 700,
+              fontSize: "12px",
+              background: "linear-gradient(120deg, var(--primary-color), #007bb0)",
+              boxShadow: "0 8px 16px rgba(0, 122, 175, 0.24)",
+              "&:hover": {
+                background: "linear-gradient(120deg, #008fc6, #006f9f)",
+              },
+            }}
+          >
+            Manage Booking
+          </Button>
         </Stack>
       </Box>
 
@@ -384,6 +443,64 @@ const FlightSearchBox = ({
       >
         {renderSearchForm()}
       </Box>
+
+      <Dialog
+        open={openManageBookingDialog}
+        onClose={handleCloseManageBookingDialog}
+        fullWidth
+        maxWidth="xs"
+      >
+        <DialogTitle sx={{ fontWeight: 700, color: "var(--depature-color)" }}>
+          Manage Booking
+        </DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            size="small"
+            placeholder="Enter PNR / Locator"
+            value={manageBookingPnr}
+            error={Boolean(manageBookingError)}
+            helperText={manageBookingError || " "}
+            onChange={(event) => {
+              setManageBookingPnr(event.target.value);
+              if (manageBookingError) setManageBookingError("");
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                handleManageBooking();
+              }
+            }}
+            sx={{
+              mt: 0.6,
+              "& .MuiInputBase-root": {
+                bgcolor: "#ffffff",
+              },
+            }}
+          />
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2.2 }}>
+          <Button
+            onClick={handleCloseManageBookingDialog}
+            sx={{ textTransform: "none", fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleManageBooking}
+            startIcon={<ManageSearchRoundedIcon />}
+            sx={{
+              textTransform: "none",
+              fontWeight: 700,
+              background: "linear-gradient(120deg, var(--primary-color), #007bb0)",
+            }}
+          >
+            View Booking
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

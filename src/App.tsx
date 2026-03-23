@@ -109,6 +109,15 @@ const App: FC = () => {
                 <Route path="addtravler" element={<AddTraveler />} />
                 <Route path="updateprofilev2" element={<UserProfileUpdated />} />
               </Route>
+              <Route path="/myprofile" element={<UserInfoV2 />}>
+                <Route path="userprofile" element={<UserProfile />} />
+                <Route path="userbooking" element={<Booking />} />
+                <Route path="adddeposite" element={<AddDeposite />} />
+                <Route path="usertransctions" element={<UserTransactions />} />
+                <Route path="usertraveler" element={<UserTraveler />} />
+                <Route path="addtravler" element={<AddTraveler />} />
+                <Route path="updateprofilev2" element={<UserProfileUpdated />} />
+              </Route>
             </Route>
           </Route>
 

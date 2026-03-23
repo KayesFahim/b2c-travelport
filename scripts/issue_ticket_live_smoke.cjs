@@ -93,6 +93,48 @@ function toJson(text) {
             process.exit(1);
         }
 
+        // ---- Passport OCR step (optional — skipped if no ocrImagePath) ----
+        const ocrImagePath =
+            process.env.SMOKE_PASSPORT_IMAGE || input?.ocrImagePath || "";
+        if (ocrImagePath) {
+            try {
+                const imgBuffer = fs.readFileSync(ocrImagePath);
+                const ext = ocrImagePath.split(".").pop().toLowerCase();
+                const mime =
+                    ext === "png"
+                        ? "image/png"
+                        : ext === "jpg" || ext === "jpeg"
+                          ? "image/jpeg"
+                          : "application/octet-stream";
+                const imageBase64 = `data:${mime};base64,${imgBuffer.toString("base64")}`;
+
+                const ocrRes = await fetch(`${base}/api/passport/extract-local`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Cookie: sessionCookie },
+                    body: JSON.stringify({ imageBase64 }),
+                });
+                const ocrText = await ocrRes.text();
+                const ocrJson = toJson(ocrText) || {};
+
+                report.steps.passportOcr = {
+                    ok: ocrRes.ok && ocrJson?.success === true,
+                    status: ocrRes.status,
+                    source: ocrJson?.source || null,
+                    message: ocrJson?.message || null,
+                    mrzLines: ocrJson?.mrzLines || null,
+                    extractedData: ocrJson?.extractedData || null,
+                    ocrImagePath,
+                };
+            } catch (ocrErr) {
+                report.steps.passportOcr = {
+                    ok: false,
+                    status: 0,
+                    message: ocrErr instanceof Error ? ocrErr.message : String(ocrErr),
+                    ocrImagePath,
+                };
+            }
+        }
+
         const sample = toJson(fs.readFileSync("sample/allFlowSmokeResult.json", "utf8")) || {};
         const searchBody = sample?.steps?.search?.body;
         const preTemplate = sample?.steps?.bookHoldPrecommit?.body || {};

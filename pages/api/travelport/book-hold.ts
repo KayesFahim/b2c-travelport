@@ -13,6 +13,8 @@ type BookHoldBody = {
   reservationId?: string;
   commit?: boolean | string;
   commitOnly?: boolean | string;
+  applyCommission?: boolean | string;
+  commissionPercent?: number | string;
   bookingFlowKey?: string;
   bookingOfferKey?: string;
   bookingFlowExpiresAt?: number | string;
@@ -53,6 +55,9 @@ type SuccessResponse = {
   travelerResponse: Record<string, unknown> | null;
   seatOfferResponse: Record<string, unknown> | null;
   primaryContactResponse: Record<string, unknown> | null;
+  documentOverrideResponse?: Record<string, unknown> | null;
+  formOfPaymentResponse?: Record<string, unknown> | null;
+  applyPaymentResponse?: Record<string, unknown> | null;
   commitResponse: Record<string, unknown> | null;
   bookingFlowKey?: string | null;
   bookingOfferKey?: string | null;
@@ -148,6 +153,38 @@ function parseBooleanFlag(value: unknown, defaultValue: boolean): boolean {
   if (text === "true") return true;
   if (text === "false") return false;
   return defaultValue;
+}
+
+function parseJsonEnvObject(name: string): Record<string, unknown> | null {
+  const raw = toText(process.env[name]);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function resolveCommissionPercent(body: BookHoldBody): number {
+  const fromBody = toNumber(body.commissionPercent, Number.NaN);
+  if (Number.isFinite(fromBody) && fromBody > 0) {
+    return Math.min(fromBody, 100);
+  }
+
+  const fromEnv = toNumber(process.env.TRAVELPORT_DEFAULT_COMMISSION_PERCENT, Number.NaN);
+  if (Number.isFinite(fromEnv) && fromEnv > 0) {
+    return Math.min(fromEnv, 100);
+  }
+
+  return 5;
+}
+
+function shouldApplyCommission(body: BookHoldBody): boolean {
+  return resolveCommissionPercent(body) > 0;
 }
 
 function toText(value: unknown): string {
@@ -1435,6 +1472,12 @@ function toDateOnly(value: unknown): string | undefined {
   )}-${String(parsed.getUTCDate()).padStart(2, "0")}`;
 }
 
+function fallbackBirthDateByPaxType(paxTypeCode: string): string {
+  if (paxTypeCode === "INF") return getRelativeBirthDateFromNow(1);
+  if (paxTypeCode === "CHD") return getRelativeBirthDateFromNow(8);
+  return getRelativeBirthDateFromNow(30);
+}
+
 function sanitizePhone(value: unknown): string {
   return String(value ?? "").replace(/[^0-9]/g, "");
 }
@@ -1562,6 +1605,26 @@ function buildTravelersPayload(
         "expireDate",
       ])
     );
+    const passportIssueDate = toDateOnly(
+      getValueByKeys(passenger, [
+        "PassportIssueDate",
+        "passportIssueDate",
+        "passIssueDate",
+        "issueDate",
+      ])
+    );
+    const middleName = sanitizeTravelerNamePart(
+      toText(
+        getValueByKeys(passenger, [
+          "MiddleName",
+          "middleName",
+          "mName",
+          "Middle",
+          "middle",
+        ])
+      ),
+      ""
+    );
     const passportIssueCountry = toText(
       getValueByKeys(passenger, [
         "PassportIssuingCountry",
@@ -1590,6 +1653,9 @@ function buildTravelersPayload(
       index === 0
     );
 
+    const resolvedGender = gender || "MALE";
+    const resolvedBirthDate = birthDate || fallbackBirthDateByPaxType(paxTypeCode);
+
     const traveler: Record<string, unknown> = {
       "@type": "Traveler",
       id: `trav_${index + 1}`,
@@ -1598,11 +1664,12 @@ function buildTravelersPayload(
         "@type": "PersonNameDetail",
         ...(prefix ? { Prefix: prefix } : {}),
         Given: given,
+        ...(middleName ? { Middle: middleName } : {}),
         Surname: surname,
         Suffix: paxTypeCode,
       },
-      ...(gender ? { gender } : {}),
-      ...(birthDate ? { birthDate } : {}),
+      gender: resolvedGender,
+      birthDate: resolvedBirthDate,
     };
 
     if (phone && isLeadPassenger) {
@@ -1625,19 +1692,28 @@ function buildTravelersPayload(
     ) {
       traveler.TravelDocument = [
         {
-          "@type": "TravelDocument",
+          "@type": "TravelDocumentDetail",
           ...(passportNumber ? { docNumber: passportNumber } : {}),
           docType: "Passport",
+          ...(passportIssueDate ? { issueDate: passportIssueDate } : {}),
           ...(passportExpiryDate ? { expireDate: passportExpiryDate } : {}),
-          ...(passportIssueCountry ? { issueCountry: passportIssueCountry } : {}),
-          ...(birthDate ? { birthDate } : {}),
-          ...(birthCountry ? { birthCountry } : {}),
-          ...(gender ? { Gender: gender } : {}),
+          issueCountry: passportIssueCountry || birthCountry || "",
+          birthDate: resolvedBirthDate,
+          birthCountry: birthCountry || passportIssueCountry || "",
+          Gender: resolvedGender,
           PersonName: {
             "@type": "PersonName",
             Given: given,
+            ...(middleName ? { Middle: middleName } : {}),
             Surname: surname,
           },
+          ...(birthCountry
+            ? {
+              IssuedForGeoPoliticalArea: {
+                value: birthCountry,
+              },
+            }
+            : {}),
         },
       ];
     }
@@ -1648,6 +1724,14 @@ function buildTravelersPayload(
 
 function resolveTravelerIdentifiers(payload: Record<string, unknown>): string[] {
   const identifiers: string[] = [];
+  const directIdentifiers = getArrayByKeys(payload, [
+    "travelerIdentifiers",
+    "TravelerIdentifiers",
+  ]);
+  directIdentifiers.forEach((value) => {
+    const identifier = toText(value);
+    if (identifier) identifiers.push(identifier);
+  });
   const travelerListResponse = getValueByKeys(payload, [
     "TravelerListResponse",
     "travelerListResponse",
@@ -1690,6 +1774,96 @@ function resolveTravelerIdentifiers(payload: Record<string, unknown>): string[] 
   }
 
   return Array.from(new Set(identifiers.filter(Boolean)));
+}
+
+function collectTravelerIdentifiersDeep(
+  value: unknown,
+  bucket: Set<string> = new Set(),
+  seen: Set<unknown> = new Set()
+): Set<string> {
+  if (value === null || value === undefined) return bucket;
+  if (typeof value !== "object") return bucket;
+  if (seen.has(value)) return bucket;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTravelerIdentifiersDeep(item, bucket, seen));
+    return bucket;
+  }
+
+  const row = value as Record<string, unknown>;
+  const identifier = toText(
+    getValueByKeys(row, ["Identifier", "identifier", "id", "ID"])
+  );
+  const travelerType = toText(
+    getValueByKeys(row, [
+      "passengerTypeCode",
+      "PassengerTypeCode",
+      "paxType",
+      "PaxType",
+      "travelerType",
+      "TravelerType",
+    ])
+  );
+
+  if (
+    identifier &&
+    (travelerType || /^trav[_-]/i.test(identifier) || /^traveler/i.test(identifier))
+  ) {
+    bucket.add(identifier);
+  }
+
+  Object.values(row).forEach((entry) => {
+    collectTravelerIdentifiersDeep(entry, bucket, seen);
+  });
+  return bucket;
+}
+
+function resolvePreparedTravelerIdentifiers(payload: Record<string, unknown>): string[] {
+  const nestedTravelerResponse = getValueByKeys(payload, [
+    "travelerResponse",
+    "TravelerResponse",
+  ]) as Record<string, unknown> | undefined;
+
+  return Array.from(
+    new Set(
+      [
+        ...resolveTravelerIdentifiers(payload),
+        ...resolveTravelerIdentifiers(nestedTravelerResponse || {}),
+        ...collectTravelerIdentifiersDeep(payload),
+        ...collectTravelerIdentifiersDeep(nestedTravelerResponse || {}),
+      ].filter(Boolean)
+    )
+  );
+}
+
+function resolveTravelerRefIds(travelers: Array<Record<string, unknown>>): string[] {
+  return Array.from(
+    new Set(
+      travelers
+        .map((traveler, index) => {
+          return toText(getValueByKeys(traveler, ["id", "ID"])) || `trav_${index + 1}`;
+        })
+        .filter(Boolean)
+    )
+  );
+}
+
+function resolvePreparedTravelerRefIds(payload: Record<string, unknown>): string[] {
+  const directRefIds = getArrayByKeys(payload, ["travelerRefIds", "TravelerRefIds"])
+    .map((value) => toText(value))
+    .filter(Boolean);
+
+  if (directRefIds.length) {
+    return Array.from(new Set(directRefIds));
+  }
+
+  const directIdentifiers = resolveTravelerIdentifiers(payload);
+  if (directIdentifiers.some((value) => /^trav[_-]/i.test(value))) {
+    return Array.from(new Set(directIdentifiers));
+  }
+
+  return [];
 }
 
 function resolveTravelerReferences(payload: Record<string, unknown>): TravelerReference[] {
@@ -1904,6 +2078,127 @@ async function commitReservation(params: {
   };
 }
 
+function resolveStepUrl(params: {
+  bookingBaseUrl: string;
+  reservationId: string;
+  template: string;
+}): string {
+  const resolvedTemplate = params.template.replace(
+    /\{reservationId\}/g,
+    encodeURIComponent(params.reservationId)
+  );
+
+  if (/^https?:\/\//i.test(resolvedTemplate)) {
+    return resolvedTemplate;
+  }
+
+  const normalizedBase = params.bookingBaseUrl.replace(/\/+$/, "");
+  const normalizedPath = `/${resolvedTemplate.replace(/^\/+/, "")}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
+async function runIssueTicketPaymentStep(params: {
+  bookingBaseUrl: string;
+  reservationId: string;
+  headers: Record<string, string>;
+  enabled: boolean;
+  pathTemplate: string;
+  payloadEnvName: string;
+  defaultPayload: Record<string, unknown>;
+  method?: string;
+  defaultErrorMessage: string;
+}) {
+  if (!params.enabled || !toText(params.pathTemplate)) {
+    return {
+      attempted: false,
+      ok: true,
+      status: 0,
+      payload: null,
+      errorMessage: "",
+    };
+  }
+
+  const url = resolveStepUrl({
+    bookingBaseUrl: params.bookingBaseUrl,
+    reservationId: params.reservationId,
+    template: params.pathTemplate,
+  });
+  const payloadBody =
+    parseJsonEnvObject(params.payloadEnvName) || params.defaultPayload;
+  const httpMethod = toText(params.method).toUpperCase() || "POST";
+
+  const response = await fetch(url, {
+    method: httpMethod,
+    headers: params.headers,
+    body: JSON.stringify(payloadBody),
+  });
+  const payload = (await parseJsonSafe(response)) as Record<string, unknown>;
+
+  return {
+    attempted: true,
+    ok: response.ok && !hasTravelportErrors(payload),
+    status: response.status,
+    payload,
+    errorMessage:
+      extractTravelportErrorMessage(payload) || params.defaultErrorMessage,
+  };
+}
+
+async function applyDocumentOverrides(params: {
+  bookingBaseUrl: string;
+  reservationId: string;
+  headers: Record<string, string>;
+  travelerRefIds: string[];
+  commissionPercent: number;
+}) {
+  const travelerRefs = Array.from(new Set(params.travelerRefIds.filter(Boolean))).map(
+    (id) => ({ id })
+  );
+
+  if (!travelerRefs.length) {
+    return {
+      ok: false,
+      status: 400,
+      payload: { message: "No traveler refs available for commission override." },
+      errorMessage: "No traveler refs available for commission override.",
+    };
+  }
+
+  const overrideUrl = `${params.bookingBaseUrl}/documentoverride/Reservation/${encodeURIComponent(
+    params.reservationId
+  )}/documentoverrides`;
+  const overrideBody = {
+    "@type": "DocumentOverrides",
+    id: "documentOverrides_1",
+    DocumentOverridesRef: "documentOverrides_1",
+    Commissions: [
+      {
+        TravelerIdentifierRef: travelerRefs,
+        Commission: {
+          "@type": "CommissionPercent",
+          Percent: params.commissionPercent,
+        },
+      },
+    ],
+  };
+
+  const overrideResponse = await fetch(overrideUrl, {
+    method: "POST",
+    headers: params.headers,
+    body: JSON.stringify(overrideBody),
+  });
+  const overridePayload = (await parseJsonSafe(overrideResponse)) as Record<string, unknown>;
+
+  return {
+    ok: overrideResponse.ok && !hasTravelportErrors(overridePayload),
+    status: overrideResponse.status,
+    payload: overridePayload,
+    errorMessage:
+      extractTravelportErrorMessage(overridePayload) ||
+      "Unable to apply document override commission.",
+  };
+}
+
 async function persistPreparedBooking(params: {
   userId: number;
   body: BookHoldBody;
@@ -2082,49 +2377,43 @@ export default async function handler(
     if (activeBookingFlowKey && commitOnlyRequested) {
       const existingFlow = getBookingFlowStore().get(activeBookingFlowKey);
       if (!existingFlow) {
-        return respondWithLoggedError(res, {
-          status: 409,
-          message: "Booking flow key is missing or expired. Start booking preview again.",
-          stage: "commit_only_flow_expired",
-          reservationId: activeReservationId,
-          bookingFlowKey: activeBookingFlowKey,
-          bookingOfferKey: activeBookingOfferKey,
-          commitRequested,
-          commitOnlyRequested,
-        });
+        // For post-commit issue-ticket flow, continue with reservationId even if flow key is stale.
+        activeBookingFlowKey = "";
+        activeBookingOfferKey = "";
+      } else {
+        if (existingFlow.status !== "prepared") {
+          return respondWithLoggedError(res, {
+            status: 409,
+            message:
+              "Booking preview is not prepared yet. Complete pre-commit add traveler/offer steps first.",
+            stage: "commit_only_not_prepared",
+            reservationId: existingFlow.reservationId || activeReservationId,
+            bookingFlowKey: activeBookingFlowKey,
+            bookingOfferKey: activeBookingOfferKey,
+            commitRequested,
+            commitOnlyRequested,
+          });
+        }
+        if (
+          explicitReservationId &&
+          existingFlow.reservationId &&
+          existingFlow.reservationId !== explicitReservationId
+        ) {
+          return respondWithLoggedError(res, {
+            status: 409,
+            message: "Reservation does not match active booking flow key.",
+            stage: "commit_only_flow_mismatch",
+            reservationId: activeReservationId,
+            bookingFlowKey: activeBookingFlowKey,
+            bookingOfferKey: activeBookingOfferKey,
+            commitRequested,
+            commitOnlyRequested,
+          });
+        }
+        activeBookingOfferKey = activeBookingOfferKey || existingFlow.offerKey || "";
+        activeBookingFlowExpiresAt = existingFlow.expiresAt || activeBookingFlowExpiresAt;
+        activeReservationId = activeReservationId || existingFlow.reservationId || null;
       }
-      if (existingFlow.status !== "prepared") {
-        return respondWithLoggedError(res, {
-          status: 409,
-          message:
-            "Booking preview is not prepared yet. Complete pre-commit add traveler/offer steps first.",
-          stage: "commit_only_not_prepared",
-          reservationId: existingFlow.reservationId || activeReservationId,
-          bookingFlowKey: activeBookingFlowKey,
-          bookingOfferKey: activeBookingOfferKey,
-          commitRequested,
-          commitOnlyRequested,
-        });
-      }
-      if (
-        explicitReservationId &&
-        existingFlow.reservationId &&
-        existingFlow.reservationId !== explicitReservationId
-      ) {
-        return respondWithLoggedError(res, {
-          status: 409,
-          message: "Reservation does not match active booking flow key.",
-          stage: "commit_only_flow_mismatch",
-          reservationId: activeReservationId,
-          bookingFlowKey: activeBookingFlowKey,
-          bookingOfferKey: activeBookingOfferKey,
-          commitRequested,
-          commitOnlyRequested,
-        });
-      }
-      activeBookingOfferKey = activeBookingOfferKey || existingFlow.offerKey || "";
-      activeBookingFlowExpiresAt = existingFlow.expiresAt || activeBookingFlowExpiresAt;
-      activeReservationId = activeReservationId || existingFlow.reservationId || null;
     }
 
     const logAndRespondError = async (params: {
@@ -2205,16 +2494,9 @@ export default async function handler(
         reservationId: commitReservationId,
       });
 
-      if (!preparedBooking || preparedBooking.status !== "PREPARED") {
-        return logAndRespondError({
-          status: 409,
-          message:
-            "Booking preview is missing in database. Run Preview Booking again before final commit.",
-          stage: "commit_only_missing_prepared_booking",
-          reservationId: commitReservationId,
-          destroyFlowKey: true,
-        });
-      }
+      const preparedBookingReady = Boolean(
+        preparedBooking && preparedBooking.status === "PREPARED"
+      );
 
       const { start: dayStart, end: dayEnd } = toUtcDayBounds(new Date());
       const committedTodayCount = await prisma.booking.count({
@@ -2236,26 +2518,161 @@ export default async function handler(
         });
       }
 
-      const duplicateBooking = await prisma.booking.findFirst({
-        where: {
-          userId: sessionUser.id,
-          status: "COMMITTED",
-          flightSignature: preparedBooking.flightSignature,
-          routeKey: preparedBooking.routeKey,
-          airlineCode: preparedBooking.airlineCode,
-          travelDate: preparedBooking.travelDate,
-        },
-        orderBy: { createdAt: "desc" },
-      });
-
-      if (duplicateBooking) {
-        return res.status(409).json({
-          message:
-            "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
-          details: "Previous booking returned instead of creating a duplicate booking.",
-          previousBooking: getBookingSummaryRow(duplicateBooking),
-          dailyCommittedCount: committedTodayCount,
+      if (preparedBookingReady) {
+        const duplicateBooking = await prisma.booking.findFirst({
+          where: {
+            userId: sessionUser.id,
+            status: "COMMITTED",
+            flightSignature: preparedBooking.flightSignature,
+            routeKey: preparedBooking.routeKey,
+            airlineCode: preparedBooking.airlineCode,
+            travelDate: preparedBooking.travelDate,
+          },
+          orderBy: { createdAt: "desc" },
         });
+
+        if (duplicateBooking) {
+          return res.status(409).json({
+            message:
+              "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
+            details: "Previous booking returned instead of creating a duplicate booking.",
+            previousBooking: getBookingSummaryRow(duplicateBooking),
+            dailyCommittedCount: committedTodayCount,
+          });
+        }
+      }
+
+      let documentOverrideResult:
+        | {
+          ok: boolean;
+          status: number;
+          payload: Record<string, unknown>;
+          errorMessage: string;
+        }
+        | null = null;
+      let formOfPaymentResult: Record<string, unknown> | null = null;
+      let applyPaymentResult: Record<string, unknown> | null = null;
+
+      const previewPayload =
+        preparedBookingReady && preparedBooking?.rawPreview && typeof preparedBooking.rawPreview === "object"
+          ? (preparedBooking.rawPreview as Record<string, unknown>)
+          : {};
+      const existingDocumentOverrideResponse = getValueByKeys(previewPayload, [
+        "documentOverrideResponse",
+        "DocumentOverrideResponse",
+      ]) as Record<string, unknown> | undefined;
+
+      if (preparedBookingReady && !existingDocumentOverrideResponse) {
+        let travelerRefIds = resolvePreparedTravelerRefIds(previewPayload);
+        if (!travelerRefIds.length) {
+          const passengerCount = await prisma.bookingPassenger.count({
+            where: { bookingId: preparedBooking.id },
+          });
+          travelerRefIds = Array.from(
+            { length: passengerCount },
+            (_, index) => `trav_${index + 1}`
+          );
+        }
+
+        documentOverrideResult = await applyDocumentOverrides({
+          bookingBaseUrl,
+          reservationId: commitReservationId,
+          headers: commonHeaders,
+          travelerRefIds,
+          commissionPercent: resolveCommissionPercent(body),
+        });
+
+        if (!documentOverrideResult.ok) {
+          await prisma.booking.update({
+            where: { id: preparedBooking.id },
+            data: {
+              rawCommit: documentOverrideResult.payload as unknown as object,
+            },
+          });
+          return logAndRespondError({
+            status: 502,
+            message: `Travelport document override commission failed (${documentOverrideResult.status})`,
+            details: documentOverrideResult.errorMessage,
+            stage: "commit_only_document_override",
+            reservationId: commitReservationId,
+          });
+        }
+      } else if (existingDocumentOverrideResponse) {
+        documentOverrideResult = {
+          ok: true,
+          status: 200,
+          payload: existingDocumentOverrideResponse,
+          errorMessage: "",
+        };
+      }
+
+      const strictPaymentFlow = parseBooleanFlag(
+        process.env.TRAVELPORT_ISSUE_TICKET_PAYMENT_STRICT,
+        false
+      );
+      const enableFormOfPayment = parseBooleanFlag(
+        process.env.TRAVELPORT_ISSUE_TICKET_ENABLE_FORM_OF_PAYMENT,
+        false
+      );
+      const enableApplyPayment = parseBooleanFlag(
+        process.env.TRAVELPORT_ISSUE_TICKET_ENABLE_APPLY_PAYMENT,
+        false
+      );
+
+      if (enableFormOfPayment) {
+        const step = await runIssueTicketPaymentStep({
+          bookingBaseUrl,
+          reservationId: commitReservationId,
+          headers: commonHeaders,
+          enabled: true,
+          pathTemplate: toText(process.env.TRAVELPORT_ISSUE_TICKET_FORM_OF_PAYMENT_PATH),
+          payloadEnvName: "TRAVELPORT_ISSUE_TICKET_FORM_OF_PAYMENT_PAYLOAD",
+          defaultPayload: { "@type": "ReservationQueryAddFormOfPayment" },
+          method: toText(process.env.TRAVELPORT_ISSUE_TICKET_FORM_OF_PAYMENT_METHOD) || "POST",
+          defaultErrorMessage: "Unable to set form of payment.",
+        });
+
+        formOfPaymentResult = (step.payload as Record<string, unknown>) || null;
+        if (!step.ok) {
+          if (strictPaymentFlow) {
+            return logAndRespondError({
+              status: 502,
+              message: `Travelport form of payment failed (${step.status})`,
+              details: step.errorMessage,
+              stage: "commit_only_form_of_payment",
+              reservationId: commitReservationId,
+            });
+          }
+          warnings.push(`Form of payment step warning: ${step.errorMessage}`);
+        }
+      }
+
+      if (enableApplyPayment) {
+        const step = await runIssueTicketPaymentStep({
+          bookingBaseUrl,
+          reservationId: commitReservationId,
+          headers: commonHeaders,
+          enabled: true,
+          pathTemplate: toText(process.env.TRAVELPORT_ISSUE_TICKET_APPLY_PAYMENT_PATH),
+          payloadEnvName: "TRAVELPORT_ISSUE_TICKET_APPLY_PAYMENT_PAYLOAD",
+          defaultPayload: { "@type": "ReservationQueryApplyPayment" },
+          method: toText(process.env.TRAVELPORT_ISSUE_TICKET_APPLY_PAYMENT_METHOD) || "POST",
+          defaultErrorMessage: "Unable to apply payment.",
+        });
+
+        applyPaymentResult = (step.payload as Record<string, unknown>) || null;
+        if (!step.ok) {
+          if (strictPaymentFlow) {
+            return logAndRespondError({
+              status: 502,
+              message: `Travelport apply payment failed (${step.status})`,
+              details: step.errorMessage,
+              stage: "commit_only_apply_payment",
+              reservationId: commitReservationId,
+            });
+          }
+          warnings.push(`Apply payment step warning: ${step.errorMessage}`);
+        }
       }
 
       const commitResult = await commitReservation({
@@ -2264,13 +2681,15 @@ export default async function handler(
         headers: commonHeaders,
       });
       if (!commitResult.ok) {
-        await prisma.booking.update({
-          where: { id: preparedBooking.id },
-          data: {
-            status: "FAILED",
-            rawCommit: commitResult.payload as unknown as object,
-          },
-        });
+        if (preparedBookingReady) {
+          await prisma.booking.update({
+            where: { id: preparedBooking.id },
+            data: {
+              status: "FAILED",
+              rawCommit: commitResult.payload as unknown as object,
+            },
+          });
+        }
         return logAndRespondError({
           status: 502,
           message: `Travelport commit reservation failed (${commitResult.status})`,
@@ -2280,15 +2699,17 @@ export default async function handler(
         });
       }
 
-      await prisma.booking.update({
-        where: { id: preparedBooking.id },
-        data: {
-          status: "COMMITTED",
-          reservationId: commitReservationId,
-          locator: commitResult.locator || null,
-          rawCommit: commitResult.payload as unknown as object,
-        },
-      });
+      if (preparedBookingReady) {
+        await prisma.booking.update({
+          where: { id: preparedBooking.id },
+          data: {
+            status: "COMMITTED",
+            reservationId: commitReservationId,
+            locator: commitResult.locator || null,
+            rawCommit: commitResult.payload as unknown as object,
+          },
+        });
+      }
 
       const locatorWarnings: string[] = [];
       if (commitResult.locator) {
@@ -2321,6 +2742,9 @@ export default async function handler(
         travelerResponse: null,
         seatOfferResponse: null,
         primaryContactResponse: null,
+        documentOverrideResponse: documentOverrideResult?.payload || null,
+        formOfPaymentResponse: formOfPaymentResult,
+        applyPaymentResponse: applyPaymentResult,
         commitResponse: commitResult.payload,
         bookingFlowKey: activeBookingFlowKey || null,
         bookingOfferKey: activeBookingOfferKey || null,
@@ -2395,6 +2819,7 @@ export default async function handler(
     const warnings: string[] = [];
 
     const travelers = buildTravelersPayload(selectedOffer, body);
+    const travelerRefIds = resolveTravelerRefIds(travelers);
     if (!travelers.length) {
       return logAndRespondError({
         status: 400,
@@ -2472,6 +2897,35 @@ export default async function handler(
     if (!travelerIdentifiers.length) {
       warnings.push("Traveler identifiers were not returned by Travelport.");
     }
+
+    let documentOverrideResult:
+      | {
+        ok: boolean;
+        status: number;
+        payload: Record<string, unknown>;
+        errorMessage: string;
+      }
+      | null = null;
+
+    documentOverrideResult = await applyDocumentOverrides({
+      bookingBaseUrl,
+      reservationId,
+      headers: commonHeaders,
+      travelerRefIds,
+      commissionPercent: resolveCommissionPercent(body),
+    });
+
+    if (!documentOverrideResult.ok) {
+      return logAndRespondError({
+        status: 502,
+        message: `Travelport document override commission failed (${documentOverrideResult.status})`,
+        details: documentOverrideResult.errorMessage,
+        warnings,
+        stage: "precommit_document_override",
+        destroyFlowKey: true,
+      });
+    }
+
     let travelerReferences = resolveTravelerReferences(travelerPayloadResponse);
     if (!travelerReferences.length && travelerIdentifiers.length) {
       travelerReferences = travelerIdentifiers.map((identifier, travelerIndex) => ({
@@ -2736,10 +3190,13 @@ export default async function handler(
         preCommitResponse: {
           reservationId,
           offerIdentifiers: activeOfferIdentifiers,
+          travelerIdentifiers,
+          travelerRefIds,
           addOfferResponse: addOfferPayloadResponse,
           travelerResponse: travelerPayloadResponse,
           seatOfferResponse: seatOfferPayloadResponse,
           primaryContactResponse: primaryContactPayloadResponse,
+          documentOverrideResponse: documentOverrideResult?.payload || null,
           warnings,
         },
       });
@@ -2782,6 +3239,7 @@ export default async function handler(
         travelerResponse: travelerPayloadResponse,
         seatOfferResponse: seatOfferPayloadResponse,
         primaryContactResponse: primaryContactPayloadResponse,
+        documentOverrideResponse: documentOverrideResult?.payload || null,
         commitResponse: null,
         bookingFlowKey: activeBookingFlowKey || null,
         bookingOfferKey: activeBookingOfferKey || null,
@@ -2832,6 +3290,16 @@ export default async function handler(
         });
       }
     }
+
+    const storedDocumentOverrideResponse = getValueByKeys(
+      preparedBookingRecord
+        ? ((await prisma.booking.findUnique({
+          where: { id: preparedBookingRecord.id },
+          select: { rawPreview: true },
+        }))?.rawPreview as Record<string, unknown> | null)
+        : null,
+      ["documentOverrideResponse", "DocumentOverrideResponse"]
+    ) as Record<string, unknown> | null;
 
     const commitResult = await commitReservation({
       bookingBaseUrl,
@@ -2890,6 +3358,7 @@ export default async function handler(
       travelerResponse: travelerPayloadResponse,
       seatOfferResponse: seatOfferPayloadResponse,
       primaryContactResponse: primaryContactPayloadResponse,
+      documentOverrideResponse: storedDocumentOverrideResponse || null,
       commitResponse: commitResult.payload,
       bookingFlowKey: activeBookingFlowKey || null,
       bookingOfferKey: activeBookingOfferKey || null,

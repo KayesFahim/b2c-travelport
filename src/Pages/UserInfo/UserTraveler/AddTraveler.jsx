@@ -145,7 +145,7 @@ const AddTraveler = () => {
         icon: "success",
         confirmButtonText: "OK",
       });
-      navigate("/userinfov2/usertraveler");
+      navigate("/myprofile/usertraveler");
 
       // Optionally, clear form fields or redirect
       setTravelInfo({

@@ -9,44 +9,55 @@ datasource db {
 
 enum BookingStatus {
   PREPARED
-  COMMITTED
+  BOOKED
   FAILED
   CANCELLED
+  TICKTED
 }
 
 model User {
-  id           Int       @id @default(autoincrement())
-  email        String    @unique
-  name         String?
-  passwordHash String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  bookings     Booking[]
+  id                     Int       @id @default(autoincrement())
+  email                  String    @unique
+  name                   String?
+  givenName              String?
+  surName                String?
+  address                String?
+  phone                  String?
+  dateOfBirth            DateTime?
+  passportNumber         String?
+  passportIssuingCountry String?
+  passportExpiryDate     DateTime?
+  nationality            String?
+  gender                 String?
+  passwordHash           String
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  bookings               Booking[]
 }
 
 model Booking {
-  id             Int          @id @default(autoincrement())
-  userId         Int
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookingFlowKey String?      @unique
+  id              Int                @id @default(autoincrement())
+  userId          Int
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookingFlowKey  String?            @unique
   bookingOfferKey String?
-  reservationId  String?      @unique
-  locator        String?
-  status         BookingStatus @default(PREPARED)
-  routeKey       String
-  airlineCode    String
-  travelDate     DateTime
+  reservationId   String?            @unique
+  locator         String?
+  status          BookingStatus      @default(PREPARED)
+  routeKey        String
+  airlineCode     String
+  travelDate      DateTime
   flightSignature String
-  departureCode  String?
-  arrivalCode    String?
-  totalFare      Float?
-  currencyCode   String?
-  rawPreview     Json?
-  rawCommit      Json?
+  departureCode   String?
+  arrivalCode     String?
+  totalFare       Float?
+  currencyCode    String?
+  rawPreview      Json?
+  rawCommit       Json?
   payloadSnapshot Json?
-  createdAt      DateTime     @default(now())
-  updatedAt      DateTime     @updatedAt
-  passengers     BookingPassenger[]
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  passengers      BookingPassenger[]
 
   @@index([userId, createdAt])
   @@index([userId, status, createdAt])
@@ -54,15 +65,22 @@ model Booking {
 }
 
 model BookingPassenger {
-  id             Int      @id @default(autoincrement())
-  bookingId      Int
-  booking        Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  paxType        String
-  firstName      String?
-  lastName       String?
-  birthDate      DateTime?
-  passportNumber String?
-  createdAt      DateTime @default(now())
+  id                     Int       @id @default(autoincrement())
+  bookingId              Int
+  booking                Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  paxType                String
+  prefix                 String?
+  firstName              String?
+  lastName               String?
+  birthDate              DateTime?
+  passportNumber         String?
+  passportIssuingCountry String?
+  passportExpiryDate     DateTime?
+  nationality            String?
+  gender                 String?
+  phone                  String?
+  email                  String?
+  createdAt              DateTime  @default(now())
 
   @@index([bookingId, paxType])
 }

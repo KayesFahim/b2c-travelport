@@ -25,15 +25,22 @@ import { useLocation, useNavigate } from "react-router-dom";
 import moment from "moment";
 import { config } from "../../config";
 import NavBar from "../../Shared/NavBar/NavBar";
+import DashboardIcon from "@mui/icons-material/Dashboard";
+import PersonIcon from "@mui/icons-material/Person";
+import HistoryIcon from "@mui/icons-material/History";
+import PaymentIcon from "@mui/icons-material/Payment";
+import GroupIcon from "@mui/icons-material/Group";
+import SupportAgentIcon from "@mui/icons-material/SupportAgent";
+import HelpCenterIcon from "@mui/icons-material/HelpCenter";
 
 const TABS = [
-    "Dashboard",
-    "Personal Information",
-    "Booking History",
-    "Payment History",
-    "Travel Buddy",
-    "Raise Case",
-    "Help Center",
+    { id: "Dashboard", label: "Dashboard", icon: DashboardIcon },
+    { id: "Personal Information", label: "Personal Information", icon: PersonIcon },
+    { id: "Booking History", label: "Booking History", icon: HistoryIcon },
+    { id: "Payment History", label: "Payment History", icon: PaymentIcon },
+    { id: "Travel Buddy", label: "Travel Buddy", icon: GroupIcon },
+    { id: "Raise Case", label: "Raise Case", icon: SupportAgentIcon },
+    { id: "Help Center", label: "Help Center", icon: HelpCenterIcon },
 ];
 
 const STATUS_KEYS = ["Booked", "IssueInProcess", "Ticketed", "Cancelled"];
@@ -261,7 +268,11 @@ function buildCachedBookingFromSession(previewPayload, finalCommitPayload) {
     );
 
     const locator = toText(finalCommitPayload?.locator || selectedAirPrice?.locator);
-    const bookingId = reservationId || locator || "LOCAL-BOOKING";
+    if (!locator) {
+        return null;
+    }
+
+    const bookingId = reservationId || locator;
 
     const passengers = Array.isArray(previewPayload?.passengers)
         ? previewPayload.passengers
@@ -401,6 +412,7 @@ export default function MyAccountPanel() {
         const fetchJson = async (url, options = {}) => {
             const response = await fetch(url, {
                 ...options,
+                credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
@@ -414,6 +426,30 @@ export default function MyAccountPanel() {
             }
 
             return response.json().catch(() => ({}));
+        };
+
+        const fetchBookingsByStatus = async (status) => {
+            // Primary source: local Next.js API route backed by Prisma + session userId
+            try {
+                const payload = await fetchJson(
+                    `/api/user/bookings/${status}?page=1&limit=100`
+                );
+                return payload?.bookings || [];
+            } catch {
+                // Backward-compatible fallback: legacy external API
+                const payload = await fetchJson(
+                    `${config.baseUrl}/user/bookings/${status}?page=1&limit=100`
+                );
+                return payload?.bookings || [];
+            }
+        };
+
+        const fetchProfileInfo = async () => {
+            try {
+                return await fetchJson(`/api/user/profileInfo`);
+            } catch {
+                return await fetchJson(`${config.baseUrl}/user/profileInfo`);
+            }
         };
 
         const fetchAll = async () => {
@@ -437,6 +473,16 @@ export default function MyAccountPanel() {
                     if (cancelled) return;
 
                     const fallbackData = getSessionFallbackAccountData(sessionEmail);
+                    const bookingDataByStatus = await Promise.all(
+                        STATUS_KEYS.map((status) =>
+                            fetchBookingsByStatus(status).catch(() => [])
+                        )
+                    );
+                    const dbBookings = dedupeBookings(bookingDataByStatus.flat());
+                    const mergedBookings = dedupeBookings([
+                        ...dbBookings,
+                        ...fallbackData.bookings,
+                    ]);
 
                     setProfile(sessionProfile);
                     setProfileDraft({
@@ -448,7 +494,7 @@ export default function MyAccountPanel() {
                         nationality: "BD",
                         passport: "",
                     });
-                    setBookings(fallbackData.bookings);
+                    setBookings(mergedBookings);
                     setTransactions(fallbackData.transactions);
                     setTravelBuddies(fallbackData.travelBuddies);
                     return;
@@ -456,14 +502,12 @@ export default function MyAccountPanel() {
 
                 const [profileData, buddyData, transactionData, bookingDataByStatus] =
                     await Promise.all([
-                        fetchJson(`${config.baseUrl}/user/profileInfo`),
+                        fetchProfileInfo(),
                         fetchJson(`${config.baseUrl}/user/findAllTravelBuddy`),
                         fetchJson(`${config.baseUrl}/user/oneUserAllTransection?page=1&limit=50`),
                         Promise.all(
                             STATUS_KEYS.map((status) =>
-                                fetchJson(`${config.baseUrl}/user/bookings/${status}?page=1&limit=100`)
-                                    .then((payload) => payload?.bookings || [])
-                                    .catch(() => [])
+                                fetchBookingsByStatus(status).catch(() => [])
                             )
                         ),
                     ]);
@@ -474,10 +518,11 @@ export default function MyAccountPanel() {
                 const uniqueBookings = dedupeBookings(allBookings);
 
                 const resolvedEmail = toText(profileData?.email) || sessionEmail;
-                const filteredRemoteBookings = filterBookingsByEmail(uniqueBookings, resolvedEmail);
                 const fallbackData = getSessionFallbackAccountData(resolvedEmail);
+                // The API already returns bookings based on the authenticated User ID.
+                // We previously filtered by email which hid valid bookings for this User ID.
                 const mergedBookings = dedupeBookings([
-                    ...filteredRemoteBookings,
+                    ...uniqueBookings,
                     ...fallbackData.bookings,
                 ]);
 
@@ -487,9 +532,9 @@ export default function MyAccountPanel() {
                     email: toText(profileData?.email),
                     phone: toText(profileData?.phone),
                     gender: toText(profileData?.gender),
-                    dob: toText(profileData?.dob),
+                    dob: toText(profileData?.dob || profileData?.dateOfBirth),
                     nationality: toText(profileData?.nationality || "BD"),
-                    passport: toText(profileData?.passport),
+                    passport: toText(profileData?.passport || profileData?.passportNumber),
                 });
                 setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
                 setTransactions(Array.isArray(transactionData?.transactions) ? transactionData.transactions : []);
@@ -553,22 +598,36 @@ export default function MyAccountPanel() {
     const handleSaveProfile = async () => {
         try {
             setSavingProfile(true);
-            const response = await fetch(`${config.baseUrl}/user/updateUserProfile`, {
+            const requestBody = {
+                fullName: profileDraft.fullName,
+                email: profileDraft.email,
+                phone: profileDraft.phone,
+                dob: profileDraft.dob || null,
+                gender: profileDraft.gender,
+                nationility: profileDraft.nationality,
+                passport: profileDraft.passport,
+            };
+
+            let response = await fetch(`/api/user/updateUserProfile`, {
                 method: "PATCH",
+                credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
                     Authorization: `Bearer ${token}`,
                 },
-                body: JSON.stringify({
-                    fullName: profileDraft.fullName,
-                    email: profileDraft.email,
-                    phone: profileDraft.phone,
-                    dob: profileDraft.dob || null,
-                    gender: profileDraft.gender,
-                    nationility: profileDraft.nationality,
-                    passport: profileDraft.passport,
-                }),
+                body: JSON.stringify(requestBody),
             });
+
+            if (response.status === 404 || response.status === 405) {
+                response = await fetch(`${config.baseUrl}/user/updateUserProfile`, {
+                    method: "PATCH",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify(requestBody),
+                });
+            }
 
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
@@ -577,16 +636,17 @@ export default function MyAccountPanel() {
 
             setEditingProfile(false);
             setErrorText("");
+            const resolvedProfile = payload?.profile || {};
             setProfile((prev) => ({
                 ...prev,
-                firstName: toText(profileDraft.fullName).split(" ")[0] || "",
-                lastName: toText(profileDraft.fullName).split(" ").slice(1).join(" "),
-                email: profileDraft.email,
-                phone: profileDraft.phone,
-                gender: profileDraft.gender,
-                dob: profileDraft.dob,
-                nationality: profileDraft.nationality,
-                passport: profileDraft.passport,
+                firstName: toText(resolvedProfile.firstName) || toText(profileDraft.fullName).split(" ")[0] || "",
+                lastName: toText(resolvedProfile.lastName) || toText(profileDraft.fullName).split(" ").slice(1).join(" "),
+                email: toText(resolvedProfile.email) || profileDraft.email,
+                phone: toText(resolvedProfile.phone) || profileDraft.phone,
+                gender: toText(resolvedProfile.gender) || profileDraft.gender,
+                dob: toText(resolvedProfile.dateOfBirth) || profileDraft.dob,
+                nationality: toText(resolvedProfile.nationality) || profileDraft.nationality,
+                passport: toText(resolvedProfile.passportNumber) || profileDraft.passport,
             }));
         } catch (error) {
             setErrorText(error instanceof Error ? error.message : "Failed to update profile.");
@@ -1003,7 +1063,7 @@ export default function MyAccountPanel() {
                 <Typography sx={sectionTitleStyle}>
                     Travel Buddy
                 </Typography>
-                <Button variant="contained" onClick={() => navigate("/userinfov2/addtravler")}>
+                <Button variant="contained" onClick={() => navigate("/myprofile/addtravler")}>
                     Add Travel Buddy
                 </Button>
             </Box>
@@ -1152,49 +1212,66 @@ export default function MyAccountPanel() {
                     </Alert>
                 ) : null}
 
-                <Paper sx={{ ...panelStyle, mb: 2, overflow: "hidden" }}>
-                    <Tabs
-                        value={activeTab}
-                        onChange={(_, value) => setActiveTab(value)}
-                        variant="scrollable"
-                        scrollButtons="auto"
-                        sx={{
-                            "& .MuiTab-root": {
-                                textTransform: "none",
-                                fontWeight: 700,
-                                minHeight: 50,
-                                color: "#34516e",
-                            },
-                            "& .Mui-selected": {
-                                color: "#0f4b7d !important",
-                            },
-                            "& .MuiTabs-indicator": {
-                                backgroundColor: "#0f8fcc",
-                                height: 3,
-                            },
-                        }}
-                    >
-                        {TABS.map((tab) => (
-                            <Tab key={tab} label={tab} value={tab} />
-                        ))}
-                    </Tabs>
-                </Paper>
+                <Grid container spacing={2.5}>
+                    <Grid item xs={12} md={3}>
+                        <Paper sx={{ ...panelStyle, overflow: "hidden", p: 1 }}>
+                            <Box sx={{ display: "flex", flexDirection: { xs: "row", md: "column" }, overflowX: "auto", gap: 0.5 }}>
+                                {TABS.map((tabObj) => {
+                                    const isActive = activeTab === tabObj.id;
+                                    const IconComponent = tabObj.icon;
+                                    return (
+                                        <Box
+                                            key={tabObj.id}
+                                            onClick={() => setActiveTab(tabObj.id)}
+                                            sx={{
+                                                px: 2,
+                                                py: 1.5,
+                                                borderRadius: "12px",
+                                                cursor: "pointer",
+                                                transition: "all 0.2s ease",
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: 1.5,
+                                                backgroundColor: isActive ? "#eef6fd" : "transparent",
+                                                color: isActive ? "#0f4b7d" : "#34516e",
+                                                fontWeight: isActive ? 800 : 600,
+                                                minWidth: { xs: "auto", md: "auto" },
+                                                textAlign: "left",
+                                                whiteSpace: "nowrap",
+                                                "&:hover": {
+                                                    backgroundColor: isActive ? "#eef6fd" : "rgba(0, 0, 0, 0.04)",
+                                                }
+                                            }}
+                                        >
+                                            <IconComponent sx={{ fontSize: 20, color: isActive ? "#0f4b7d" : "#607890" }} />
+                                            <Typography sx={{ fontSize: 14, fontWeight: "inherit" }}>
+                                                {tabObj.label}
+                                            </Typography>
+                                        </Box>
+                                    );
+                                })}
+                            </Box>
+                        </Paper>
+                    </Grid>
 
-                {loading ? (
-                    <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
-                        <CircularProgress />
-                    </Box>
-                ) : (
-                    <>
-                        {activeTab === "Dashboard" ? renderDashboard() : null}
-                        {activeTab === "Personal Information" ? renderPersonalInformation() : null}
-                        {activeTab === "Booking History" ? renderBookingHistory() : null}
-                        {activeTab === "Payment History" ? renderPaymentHistory() : null}
-                        {activeTab === "Travel Buddy" ? renderTravelBuddy() : null}
-                        {activeTab === "Raise Case" ? renderRaiseCase() : null}
-                        {activeTab === "Help Center" ? renderHelpCenter() : null}
-                    </>
-                )}
+                    <Grid item xs={12} md={9}>
+                        {loading ? (
+                            <Box sx={{ display: "flex", justifyContent: "center", py: 8 }}>
+                                <CircularProgress />
+                            </Box>
+                        ) : (
+                            <>
+                                {activeTab === "Dashboard" ? renderDashboard() : null}
+                                {activeTab === "Personal Information" ? renderPersonalInformation() : null}
+                                {activeTab === "Booking History" ? renderBookingHistory() : null}
+                                {activeTab === "Payment History" ? renderPaymentHistory() : null}
+                                {activeTab === "Travel Buddy" ? renderTravelBuddy() : null}
+                                {activeTab === "Raise Case" ? renderRaiseCase() : null}
+                                {activeTab === "Help Center" ? renderHelpCenter() : null}
+                            </>
+                        )}
+                    </Grid>
+                </Grid>
 
             </Box>
         </Box>
