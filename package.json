@@ -79,6 +79,7 @@
     "smoke": "node scripts/smoke.mjs",
     "smoke:production": "node scripts/smoke.mjs",
     "smoke:build": "npm run build && node scripts/smoke.mjs --with-server",
+    "smoke:issue-ticket-live": "node scripts/issue_ticket_live_smoke.cjs",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev"

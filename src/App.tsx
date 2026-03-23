@@ -44,6 +44,7 @@ import TourSearchResultNew from "./Pages/Tour/TourSearchResult/TourSearchResultN
 import TourDetails from "./Pages/Tour/TourDetails/TourDetails"
 import Footer from "./Shared/Footer/Footer"
 import MyAccountPanel from "./Pages/MyAccount/MyAccountPanel"
+import BookingDetailsPage from "./Pages/MyAccount/BookingDetailsPage"
 
 const App: FC = () => {
 
@@ -81,6 +82,7 @@ const App: FC = () => {
           <Route path="/nobooking" element={<NoBookingsFound />} />
           <Route path="/signIn" element={<SignIn />} />
           <Route path="/my-account" element={<MyAccountPanel />} />
+          <Route path="/my-account/bookingdetails" element={<BookingDetailsPage />} />
           {/* booking route  */}
 
           <Route

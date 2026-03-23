@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { cacheDelete, cacheGetJson, cacheSetJson } from "./redis-cache";
 
 export const BOOKING_SESSION_COOKIE = "flyjatt_booking_session";
-const BOOKING_SESSION_TTL_SEC = 7 * 24 * 60 * 60;
+const BOOKING_SESSION_TTL_SEC = 60 * 60; // 1 hour
 
 type SessionUser = {
   id: number;

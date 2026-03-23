@@ -263,6 +263,7 @@ const NavBar = () => {
           secureLocalStorage.setItem("data", {
             ...data,
             authSource: "local-session",
+            expireIn: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
           });
           loginSucceeded = true;
         } else {
@@ -532,6 +533,9 @@ const NavBar = () => {
     secureLocalStorage.removeItem("access_token");
     secureLocalStorage.removeItem("userData");
     secureLocalStorage.removeItem("data");
+    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
+      () => { }
+    );
 
     Swal.fire({
       icon: "success",
