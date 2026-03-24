@@ -1,4 +1,4 @@
-const TRAVELPORT_BUILD_FROM_PRODUCTS_PATH = "/api/travelport/build-from-products";
+const TRAVELPORT_PRICE_CHECK_PATH = "/api/travelport/price-check";
 const DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY = "USD";
 
 function joinBaseAndPath(baseUrl, path) {
@@ -13,7 +13,11 @@ function getConfiguredBuildFromProductsUrl() {
   if (typeof process === "undefined") {
     return "";
   }
-  return process.env.NEXT_PUBLIC_TRAVELPORT_BUILD_FROM_PRODUCTS_URL || "";
+  return (
+    process.env.NEXT_PUBLIC_TRAVELPORT_PRICE_CHECK_URL ||
+    process.env.NEXT_PUBLIC_TRAVELPORT_BUILD_FROM_PRODUCTS_URL ||
+    ""
+  );
 }
 
 function getConfiguredBaseUrl() {
@@ -30,10 +34,10 @@ function getLocalFallbackBuildFromProductsUrl() {
 
   const { protocol, hostname, port } = window.location;
   if (port === "3001") {
-    return `${protocol}//${hostname}:3000${TRAVELPORT_BUILD_FROM_PRODUCTS_PATH}`;
+    return `${protocol}//${hostname}:3000${TRAVELPORT_PRICE_CHECK_PATH}`;
   }
   if (port === "3000") {
-    return `${protocol}//${hostname}:3001${TRAVELPORT_BUILD_FROM_PRODUCTS_PATH}`;
+    return `${protocol}//${hostname}:3001${TRAVELPORT_PRICE_CHECK_PATH}`;
   }
   return "";
 }
@@ -44,9 +48,9 @@ function getCandidateBuildFromProductsUrls() {
   const configuredBaseUrl = getConfiguredBaseUrl();
 
   const urls = [
-    TRAVELPORT_BUILD_FROM_PRODUCTS_PATH,
+    TRAVELPORT_PRICE_CHECK_PATH,
     configuredUrl,
-    joinBaseAndPath(configuredBaseUrl, TRAVELPORT_BUILD_FROM_PRODUCTS_PATH),
+    joinBaseAndPath(configuredBaseUrl, TRAVELPORT_PRICE_CHECK_PATH),
     localFallbackUrl,
   ].filter(Boolean);
 
