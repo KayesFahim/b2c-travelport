@@ -106,3 +106,30 @@ model TravelBuddy {
   @@index([userId, createdAt])
   @@index([userId, passportNumber])
 }
+
+model BlogPost {
+  id         Int      @id @default(autoincrement())
+  title      String
+  tag        String   @default("Travel Tips")
+  excerpt    String?  @db.Text
+  content    String?  @db.LongText
+  imageUrl   String?
+  published  Boolean  @default(true)
+  authorName String?  @default("FlyJatt Team")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([published, createdAt])
+}
+
+model SiteSettings {
+  id        Int      @id @default(autoincrement())
+  section   String
+  key       String
+  value     String?  @db.Text
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([section, key])
+  @@index([section])
+}

@@ -9,41 +9,56 @@ import {
   Stack,
   Typography,
 } from "@mui/material";
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link as RouterLink } from "react-router-dom";
 import NavBar from "../../../Shared/NavBar/NavBar";
 
-const values = [
-  {
-    title: "Clear Pricing",
-    description:
-      "We show transparent fares so travelers and agents can make decisions fast without hidden surprises.",
-  },
-  {
-    title: "Reliable Support",
-    description:
-      "From first search to ticketing, we keep support available for route guidance, changes, and urgent assistance.",
-  },
-  {
-    title: "Smart Technology",
-    description:
-      "Our booking flows are designed for speed, accurate fare details, and stable performance across devices.",
-  },
-  {
-    title: "Global Access",
-    description:
-      "By connecting strong supplier content, we help travelers reach more destinations with better options.",
-  },
-];
-
-const milestones = [
-  { label: "Founded", value: "2024" },
-  { label: "Focus", value: "Flight-first OTA" },
-  { label: "Core Market", value: "Bangladesh + Global routes" },
-  { label: "Platform", value: "Web booking + API-ready" },
-];
+const DEFAULT_ABOUT = {
+  headline: "Building a faster, cleaner way to search and book flights.",
+  subtext: "Fly Jatt is a modern travel platform focused on reliable flight discovery, transparent fare details, and smooth booking workflows.",
+  mission: "Make flight booking transparent and accessible for every traveler.",
+  value1Title: "Clear Pricing",
+  value1Desc: "We show transparent fares so travelers and agents can make decisions fast without hidden surprises.",
+  value2Title: "Reliable Support",
+  value2Desc: "From first search to ticketing, we keep support available for route guidance, changes, and urgent assistance.",
+  value3Title: "Smart Technology",
+  value3Desc: "Our booking flows are designed for speed, accurate fare details, and stable performance across devices.",
+  value4Title: "Global Access",
+  value4Desc: "By connecting strong supplier content, we help travelers reach more destinations with better options.",
+  founded: "2024",
+  focus: "Flight-first OTA",
+  coreMarket: "Bangladesh + Global routes",
+  platform: "Web booking + API-ready",
+};
 
 const AboutUs = () => {
+  const [about, setAbout] = useState(DEFAULT_ABOUT);
+
+  useEffect(() => {
+    fetch("/api/cms/settings?section=about")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data === "object" && !data.message) {
+          setAbout((prev) => ({ ...prev, ...data }));
+        }
+      })
+      .catch(() => { });
+  }, []);
+
+  const values = [
+    { title: about.value1Title, description: about.value1Desc },
+    { title: about.value2Title, description: about.value2Desc },
+    { title: about.value3Title, description: about.value3Desc },
+    { title: about.value4Title, description: about.value4Desc },
+  ];
+
+  const milestones = [
+    { label: "Founded", value: about.founded },
+    { label: "Focus", value: about.focus },
+    { label: "Core Market", value: about.coreMarket },
+    { label: "Platform", value: about.platform },
+  ];
+
   return (
     <Box sx={{ minHeight: "100%" }}>
       <NavBar />
@@ -94,7 +109,7 @@ const AboutUs = () => {
                 color: "var(--flight-color)",
               }}
             >
-              Building a faster, cleaner way to search and book flights.
+              {about.headline}
             </Typography>
             <Typography
               sx={{
@@ -103,10 +118,7 @@ const AboutUs = () => {
                 maxWidth: 680,
               }}
             >
-              Fly Jatt is a modern travel platform focused on reliable flight discovery,
-              transparent fare details, and smooth booking workflows. We combine
-              supplier connectivity and practical UI design to reduce friction for both
-              travelers and travel businesses.
+              {about.subtext}
             </Typography>
             <Stack direction={{ xs: "column", sm: "row" }} spacing={2} pt={1}>
               <Button

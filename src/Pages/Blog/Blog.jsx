@@ -24,6 +24,7 @@ const categories = [
 const posts = [
   {
     title: "How to Read Fare Rules Before You Book",
+    import { useState, useEffect } from "react";
     tag: "Fare Rules",
     date: "March 18, 2026",
     image:
@@ -33,7 +34,7 @@ const posts = [
     title: "Best Time Windows for Lower International Fares",
     tag: "Flight Tips",
     date: "March 15, 2026",
-    image:
+    const FALLBACK_POSTS = [
       "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1200&q=80",
   },
   {
@@ -76,9 +77,28 @@ const Blog = () => {
           sx={{
             position: "relative",
             overflow: "hidden",
-            borderRadius: "26px",
+];
             p: { xs: 3, md: 6 },
             border: "1px solid rgba(0,154,214,0.2)",
+  const [posts, setPosts] = useState(FALLBACK_POSTS);
+
+  useEffect(() => {
+    fetch("/api/cms/blog")
+      .then((r) => r.json())
+      .then((data) => {
+        if (Array.isArray(data) && data.length > 0) {
+          setPosts(
+            data.map((p) => ({
+              ...p,
+              date: new Date(p.createdAt).toLocaleDateString("en-US", {
+                year: "numeric", month: "long", day: "numeric",
+              }),
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, []);
             background:
               "linear-gradient(115deg, rgba(0,154,214,0.18) 0%, rgba(0,154,214,0.05) 43%, rgba(255,255,255,0.98) 100%)",
             mb: 5,
@@ -220,7 +240,7 @@ const Blog = () => {
                 >
                   <Box
                     component="img"
-                    src={post.image}
+                    src={post.imageUrl || post.image}
                     alt={post.title}
                     sx={{
                       width: 120,
@@ -280,7 +300,7 @@ const Blog = () => {
                 >
                   <Box
                     component="img"
-                    src={post.image}
+                    src={post.imageUrl || post.image}
                     alt={post.title}
                     sx={{ width: "100%", height: 190, objectFit: "cover" }}
                   />
@@ -357,8 +377,8 @@ const Blog = () => {
             Subscribe
           </Button>
         </Box>
-      </Container>
-    </Box>
+      </Container >
+    </Box >
   );
 };
 

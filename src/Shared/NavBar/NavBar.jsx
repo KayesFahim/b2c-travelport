@@ -624,10 +624,8 @@ const NavBar = () => {
     "/userinfov2/addtravler",
     "/userinfov2/adddeposite",
 
-    "/myprofile/addtravler",
     "/paymentgateway",
     "/userinfov2/updateprofilev2",
-    "/myprofile/updateprofilev2",
     "/my-account",
     "*",
     "/tourdetails",

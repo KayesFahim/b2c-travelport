@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Alert,
   Box,
@@ -63,31 +63,34 @@ function validate(values) {
   return nextErrors;
 }
 
-const contactHighlights = [
-  {
-    icon: <EmailRoundedIcon />,
-    title: "Email",
-    text: "info@flyjatt.com",
-  },
-  {
-    icon: <PhoneInTalkRoundedIcon />,
-    title: "Phone",
-    text: "+88 01736-987906",
-  },
-  {
-    icon: <PlaceRoundedIcon />,
-    title: "Address",
-    text: "DCC7, North Ibrahimpur, Kafrul, Dhaka-1206, Bangladesh",
-  },
-  {
-    icon: <AccessTimeRoundedIcon />,
-    title: "Support Hours",
-    text: "24/7 online support",
-  },
-];
+const DEFAULT_CONTACT = {
+  email: "info@flyjatt.com",
+  phone: "+88 01736-987906",
+  address: "DCC7, North Ibrahimpur, Kafrul, Dhaka-1206, Bangladesh",
+  supportHours: "24/7 online support",
+};
 
 const Contact = () => {
   const [formValues, setFormValues] = useState(initialFormValues);
+  const [contactInfo, setContactInfo] = useState(DEFAULT_CONTACT);
+
+  useEffect(() => {
+    fetch("/api/cms/settings?section=contact")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data && typeof data === "object" && !data.message) {
+          setContactInfo((prev) => ({ ...prev, ...data }));
+        }
+      })
+      .catch(() => { });
+  }, []);
+
+  const contactHighlights = [
+    { icon: <EmailRoundedIcon />, title: "Email", text: contactInfo.email },
+    { icon: <PhoneInTalkRoundedIcon />, title: "Phone", text: contactInfo.phone },
+    { icon: <PlaceRoundedIcon />, title: "Address", text: contactInfo.address },
+    { icon: <AccessTimeRoundedIcon />, title: "Support Hours", text: contactInfo.supportHours },
+  ];
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [submitSuccess, setSubmitSuccess] = useState("");

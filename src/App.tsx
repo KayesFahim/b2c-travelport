@@ -14,11 +14,7 @@ import BookingDetaills from "./Pages/BookingDetaills/BookingDetaills"
 import PreviewBooking from "./Pages/BookingDetaills/PreviewBooking"
 import BookingConfirmation from "./Pages/BookingDetaills/BookingConfirmation"
 import BookingQueInfo from "./Pages/BookingQueInfo/BookingQueInfo"
-import UserProfileUpdated from "./Pages/UserInfo/UserProfile/UserProfileUpdated"
-import UserProfile from "./Pages/UserInfo/UserProfile/UserProfile"
-import AddDeposite from "./Pages/UserInfo/UserWallet/AddDeposite"
-import UserTransactions from "./Pages/UserInfo/UserTransactions/UserTransactions"
-import AddTraveler from "./Pages/UserInfo/UserTraveler/AddTraveler"
+import AdminDashboard from "./Pages/Admin/AdminDashboard"
 import ScrollToTop from "./ScrollToTop"
 import OtpVerification from "./Pages/SignUp/OtpVerification"
 import ForgetEmail from "./Pages/SignUp/ForgetEmail"
@@ -72,10 +68,13 @@ const App: FC = () => {
           <Route path="/about" element={<AboutUs />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/blog" element={<Blog />} />
+                    <Route path="/about-us" element={<AboutUs />} />
+                    <Route path="/blogs" element={<Blog />} />
           <Route path="/nobooking" element={<NoBookingsFound />} />
           <Route path="/signIn" element={<SignIn />} />
           <Route path="/my-account" element={<MyAccountPanel />} />
           <Route path="/my-account/bookingdetails" element={<BookingDetailsPage />} />
+          <Route path="/admin" element={<AdminDashboard />} />
           {/* booking route  */}
 
           <Route
@@ -85,14 +84,6 @@ const App: FC = () => {
             <Route path="/previewbooking" element={<PreviewBooking />} />
             <Route path="/bookingconfirmation" element={<BookingConfirmation />} />
             <Route path="/bookingquedetails" element={<BookingQueInfo />} />
-            {/* userDashbord Route  */}
-            <Route  >
-              <Route path="/myprofile" element={<UserProfile />} />
-              <Route path="/myprofile/adddeposite" element={<AddDeposite />} />
-              <Route path="/myprofile/usertransctions" element={<UserTransactions />} />
-              <Route path="/myprofile/addtravler" element={<AddTraveler />} />
-              <Route path="/myprofile/updateprofilev2" element={<UserProfileUpdated />} />
-            </Route>
           </Route>
 
           {/* tour routes  */}
