@@ -31,11 +31,11 @@ type ErrorResponse = {
     message: string;
 };
 
-function toText(value: unknown): string {
-    if (value === null || value === undefined) return "";
+function toText(value: unknown, fallback = ""): string {
+    if (value === null || value === undefined) return fallback;
     if (typeof value === "string") return value.trim();
     if (typeof value === "number" || typeof value === "boolean") return String(value);
-    return "";
+    return fallback;
 }
 
 function normalizeArray(value: unknown): Record<string, unknown>[] {

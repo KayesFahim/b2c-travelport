@@ -81,8 +81,6 @@ function getAccountTabFromPath(pathname) {
     return match ? match[0] : "Dashboard";
 }
 
-const STATUS_KEYS = ["Booked", "IssueInProcess", "Ticketed", "Cancelled"];
-
 const panelStyle = {
     border: "1px solid rgba(0, 154, 214, 0.18)",
     borderRadius: "16px",
@@ -137,7 +135,21 @@ function formatDateTime(value) {
     if (!value) return "-";
     const date = parseDateValue(value);
     if (!date) return "-";
-    return moment(date).format("ddd, DD MMM YYYY hh:mm A");
+    return moment(date).format("DD MMM YY HH:mm");
+}
+
+function formatDateOnly(value) {
+    if (!value) return "-";
+    const date = parseDateValue(value);
+    if (!date) return "-";
+    return moment(date).format("DD-MM-YYYY");
+}
+
+function toDateInputValue(value) {
+    if (!value) return "";
+    const date = parseDateValue(value);
+    if (!date) return "";
+    return moment(date).format("YYYY-MM-DD");
 }
 
 function buildProfileDraft(source = {}) {
@@ -261,9 +273,9 @@ function buildTravelBuddyForm(source = {}) {
         lastName: toUpperInput(source?.lastName),
         gender: toText(source?.gender, INITIAL_TRAVEL_BUDDY_FORM.gender),
         nationality: toUpperInput(source?.nationality || INITIAL_TRAVEL_BUDDY_FORM.nationality),
-        dob: toText(source?.dob || source?.dateOfBirth),
+        dob: toDateInputValue(source?.dob || source?.dateOfBirth),
         passport: toUpperInput(source?.passport || source?.passportNumber),
-        passportexp: toText(source?.passportexp || source?.passportExpiryDate),
+        passportexp: toDateInputValue(source?.passportexp || source?.passportExpiryDate),
     };
 }
 
@@ -492,6 +504,12 @@ export default function MyAccountPanel() {
         past: 0,
         upcoming: 0,
     });
+    const [bookingPage, setBookingPage] = useState(1);
+    const [bookingTotalPages, setBookingTotalPages] = useState(1);
+    const [bookingTotalRows, setBookingTotalRows] = useState(0);
+    const [bookingLoading, setBookingLoading] = useState(false);
+    const [bookingFilterStatus, setBookingFilterStatus] = useState("ALL");
+    const [bookingFilterQuery, setBookingFilterQuery] = useState("");
     const [transactions, setTransactions] = useState([]);
     const [travelBuddies, setTravelBuddies] = useState([]);
     const [showAddTravelBuddy, setShowAddTravelBuddy] = useState(false);
@@ -692,6 +710,94 @@ export default function MyAccountPanel() {
         };
     }, [activeTab, token]);
 
+    useEffect(() => {
+        if (activeTab !== "Dashboard") return;
+
+        let cancelled = false;
+
+        const loadDashboardSummary = async () => {
+            const response = await fetch("/api/user/dashboard-summary", {
+                method: "GET",
+                credentials: "include",
+                headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Failed to load dashboard summary.");
+            }
+
+            if (cancelled) return;
+
+            setDashboardStats({
+                total: Number(payload?.stats?.total || 0),
+                hold: Number(payload?.stats?.hold || 0),
+                past: Number(payload?.stats?.past || 0),
+                upcoming: Number(payload?.stats?.upcoming || 0),
+            });
+            setDashboardCalendarBookings(Array.isArray(payload?.calendarBookings) ? payload.calendarBookings : []);
+        };
+
+        loadDashboardSummary().catch((error) => {
+            if (!cancelled) {
+                setDashboardStats({ total: 0, hold: 0, past: 0, upcoming: 0 });
+                setDashboardCalendarBookings([]);
+                setErrorText(error instanceof Error ? error.message : "Failed to load dashboard summary.");
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, token]);
+
+    useEffect(() => {
+        if (activeTab !== "Booking") return;
+
+        let cancelled = false;
+
+        const loadBookingHistory = async () => {
+            setBookingLoading(true);
+            const response = await fetch(`/api/user/booking-history?page=${bookingPage}&limit=100`, {
+                method: "GET",
+                credentials: "include",
+                headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Failed to load booking history.");
+            }
+
+            if (cancelled) return;
+
+            setBookings(Array.isArray(payload?.bookings) ? payload.bookings : []);
+            setBookingTotalRows(Number(payload?.total || 0));
+            setBookingTotalPages(Number(payload?.totalPages || 1));
+        };
+
+        loadBookingHistory().catch((error) => {
+            if (!cancelled) {
+                setBookings([]);
+                setBookingTotalRows(0);
+                setBookingTotalPages(1);
+                setErrorText(error instanceof Error ? error.message : "Failed to load booking history.");
+            }
+        }).finally(() => {
+            if (!cancelled) {
+                setBookingLoading(false);
+            }
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, token, bookingPage]);
+
     const bookingStats = dashboardStats;
 
     const sortedBookings = useMemo(
@@ -701,6 +807,31 @@ export default function MyAccountPanel() {
             ),
         [bookings]
     );
+
+    const filteredBookings = useMemo(() => {
+        const statusFilter = normalizeStatus(bookingFilterStatus);
+        const queryFilter = toText(bookingFilterQuery).toLowerCase();
+
+        return sortedBookings.filter((item) => {
+            if (statusFilter !== "all" && normalizeStatus(item?.bookingStatus) !== statusFilter) {
+                return false;
+            }
+
+            if (!queryFilter) return true;
+
+            const searchFields = [
+                toText(item?.bookingId),
+                toText(item?.locator),
+                toText(item?.reservationId),
+                bookingPnrText(item),
+                bookingRouteText(item),
+            ]
+                .join(" ")
+                .toLowerCase();
+
+            return searchFields.includes(queryFilter);
+        });
+    }, [sortedBookings, bookingFilterStatus, bookingFilterQuery]);
 
     const sortedTransactions = useMemo(
         () =>
@@ -1451,28 +1582,59 @@ export default function MyAccountPanel() {
             <Typography sx={sectionTitleStyle}>
                 Booking History
             </Typography>
+            <Box sx={{ mt: 1.2, display: "flex", gap: 1.2, flexWrap: "wrap", alignItems: "center" }}>
+                <TextField
+                    select
+                    size="small"
+                    label="Status Filter"
+                    value={bookingFilterStatus}
+                    onChange={(event) => setBookingFilterStatus(event.target.value)}
+                    sx={{ minWidth: 170 }}
+                >
+                    <MenuItem value="ALL">All</MenuItem>
+                    <MenuItem value="Booked">Booked</MenuItem>
+                    <MenuItem value="IssueInProcess">Issue In Process</MenuItem>
+                    <MenuItem value="Ticketed">Ticketed</MenuItem>
+                    <MenuItem value="Cancelled">Cancelled</MenuItem>
+                </TextField>
+                <TextField
+                    size="small"
+                    label="Search (ID / PNR / Route)"
+                    value={bookingFilterQuery}
+                    onChange={(event) => setBookingFilterQuery(event.target.value)}
+                    sx={{ minWidth: 260 }}
+                />
+            </Box>
             <TableContainer sx={{ mt: 1.4 }}>
                 <Table size="small">
                     <TableHead>
                         <TableRow sx={{ backgroundColor: "#f0f8ff" }}>
-                            <TableCell>Booking ID</TableCell>
                             <TableCell>PNR</TableCell>
                             <TableCell>Route</TableCell>
-                            <TableCell>Departure</TableCell>
+                            <TableCell>Airlines</TableCell>
                             <TableCell align="right">Cost</TableCell>
+                            <TableCell>Travel Date</TableCell>
+                            <TableCell>Created At</TableCell>
                             <TableCell>Status</TableCell>
-                            <TableCell align="right">Action</TableCell>
+                            <TableCell align="right">View Details</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {sortedBookings.length ? (
-                            sortedBookings.map((item) => (
+                        {bookingLoading ? (
+                            <TableRow>
+                                <TableCell colSpan={7} align="center">
+                                    Loading booking history...
+                                </TableCell>
+                            </TableRow>
+                        ) : filteredBookings.length ? (
+                            filteredBookings.map((item) => (
                                 <TableRow key={item?.bookingId || item?.id} hover>
-                                    <TableCell>{toText(item?.bookingId, "-")}</TableCell>
                                     <TableCell>{bookingPnrText(item)}</TableCell>
                                     <TableCell>{bookingRouteText(item)}</TableCell>
-                                    <TableCell>{formatDateTime(getDepDate(item))}</TableCell>
+                                    <TableCell>{toText(item?.Curriername || item?.CurrierCode, "-")}</TableCell>
                                     <TableCell align="right">{bookingCostText(item)}</TableCell>
+                                    <TableCell>{formatDateTime(getDepDate(item))}</TableCell>
+                                    <TableCell>{formatDateTime(item?.createdAt)}</TableCell>
                                     <TableCell>
                                         <Chip
                                             size="small"
@@ -1519,14 +1681,37 @@ export default function MyAccountPanel() {
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={7} align="center">
-                                    No booking history found.
+                                <TableCell colSpan={8} align="center">
+                                    No booking history found for selected filter.
                                 </TableCell>
                             </TableRow>
                         )}
                     </TableBody>
                 </Table>
             </TableContainer>
+            <Box sx={{ mt: 1.2, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1 }}>
+                <Typography sx={{ fontSize: 13, color: "#4b6784" }}>
+                    Total: {bookingTotalRows} | Page {bookingPage} of {bookingTotalPages}
+                </Typography>
+                <Box sx={{ display: "flex", gap: 1 }}>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={bookingPage <= 1 || bookingLoading}
+                        onClick={() => setBookingPage((prev) => Math.max(1, prev - 1))}
+                    >
+                        Prev
+                    </Button>
+                    <Button
+                        size="small"
+                        variant="outlined"
+                        disabled={bookingPage >= bookingTotalPages || bookingLoading}
+                        onClick={() => setBookingPage((prev) => Math.min(bookingTotalPages, prev + 1))}
+                    >
+                        Next
+                    </Button>
+                </Box>
+            </Box>
         </Paper>
     );
 
@@ -1795,6 +1980,7 @@ export default function MyAccountPanel() {
                     <TableHead>
                         <TableRow sx={{ backgroundColor: "#f0f8ff" }}>
                             <TableCell>Name</TableCell>
+                            <TableCell>Passenger Type</TableCell>
                             <TableCell>Passport</TableCell>
                             <TableCell>Gender</TableCell>
                             <TableCell>Nationality</TableCell>
@@ -1807,10 +1993,11 @@ export default function MyAccountPanel() {
                             travelBuddies.map((item, index) => (
                                 <TableRow key={`${item?.passport || "buddy"}-${index}`} hover>
                                     <TableCell>{`${toText(item?.title).toUpperCase()} ${toText(item?.firstName).toUpperCase()} ${toText(item?.lastName).toUpperCase()}`.trim()}</TableCell>
+                                    <TableCell>{toText(item?.paxtype, "-").toUpperCase()}</TableCell>
                                     <TableCell>{toText(item?.passport, "-").toUpperCase()}</TableCell>
                                     <TableCell>{toText(item?.gender, "-").toUpperCase()}</TableCell>
                                     <TableCell>{toText(item?.nationality, "-").toUpperCase()}</TableCell>
-                                    <TableCell>{formatDateTime(item?.dob)}</TableCell>
+                                    <TableCell>{formatDateOnly(item?.dob || item?.dateOfBirth)}</TableCell>
                                     <TableCell align="right">
                                         <Button size="small" variant="outlined" onClick={() => handleEditTravelBuddy(item)}>
                                             Edit
@@ -1820,7 +2007,7 @@ export default function MyAccountPanel() {
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={6} align="center">
+                                <TableCell colSpan={7} align="center">
                                     No travel buddies found.
                                 </TableCell>
                             </TableRow>

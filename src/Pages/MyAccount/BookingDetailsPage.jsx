@@ -4,6 +4,7 @@ import {
     Box,
     Button,
     Chip,
+    CircularProgress,
     Container,
     Divider,
     Grid,
@@ -154,7 +155,12 @@ export default function BookingDetailsPage() {
     const location = useLocation();
     const navigate = useNavigate();
 
-    const booking = useMemo(() => {
+    const queryBookingId = useMemo(() => {
+        const search = new URLSearchParams(location.search);
+        return toText(search.get("id"));
+    }, [location.search]);
+
+    const cachedBooking = useMemo(() => {
         const search = new URLSearchParams(location.search);
         const targetId = search.get("id");
         const fromState = location.state?.booking;
@@ -175,10 +181,79 @@ export default function BookingDetailsPage() {
         }
     }, [location.search, location.state]);
 
+    const [booking, setBooking] = useState(cachedBooking);
+    const [passengersDetailed, setPassengersDetailed] = useState([]);
+    const [contactInfo, setContactInfo] = useState({ email: "", phone: "", address: "" });
+    const [specialServices, setSpecialServices] = useState([]);
+    const [brandInfo, setBrandInfo] = useState({ code: "", name: "", features: [], amenities: [] });
+    const [loadingDetails, setLoadingDetails] = useState(Boolean(queryBookingId));
+    const [loadingError, setLoadingError] = useState("");
+
     const [issuingTicket, setIssuingTicket] = useState(false);
     const [ticketStatusOverride, setTicketStatusOverride] = useState("");
     const [issueMessage, setIssueMessage] = useState("");
     const [issueError, setIssueError] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadDetails = async () => {
+            if (!queryBookingId) {
+                setBooking(cachedBooking || null);
+                setPassengersDetailed([]);
+                setContactInfo({ email: "", phone: "", address: "" });
+                setSpecialServices([]);
+                setBrandInfo({ code: "", name: "", features: [], amenities: [] });
+                setLoadingDetails(false);
+                return;
+            }
+
+            setLoadingDetails(true);
+            setLoadingError("");
+
+            const response = await fetch(`/api/user/booking-details?id=${encodeURIComponent(queryBookingId)}`, {
+                method: "GET",
+                credentials: "include",
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Unable to load booking details");
+            }
+
+            if (cancelled) return;
+
+            setBooking(payload?.booking || null);
+            setPassengersDetailed(Array.isArray(payload?.passengers) ? payload.passengers : []);
+            setContactInfo({
+                email: toText(payload?.contact?.email),
+                phone: toText(payload?.contact?.phone),
+                address: toText(payload?.contact?.address),
+            });
+            setSpecialServices(Array.isArray(payload?.specialServices) ? payload.specialServices : []);
+            setBrandInfo({
+                code: toText(payload?.brand?.code),
+                name: toText(payload?.brand?.name),
+                features: Array.isArray(payload?.brand?.features) ? payload.brand.features : [],
+                amenities: Array.isArray(payload?.brand?.amenities) ? payload.brand.amenities : [],
+            });
+            setLoadingDetails(false);
+        };
+
+        loadDetails().catch((error) => {
+            if (cancelled) return;
+            setBooking(cachedBooking || null);
+            setPassengersDetailed([]);
+            setContactInfo({ email: "", phone: "", address: "" });
+            setSpecialServices([]);
+            setBrandInfo({ code: "", name: "", features: [], amenities: [] });
+            setLoadingDetails(false);
+            setLoadingError(error instanceof Error ? error.message : "Unable to load booking details");
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [cachedBooking, queryBookingId]);
 
     useEffect(() => {
         setTicketStatusOverride("");
@@ -187,13 +262,26 @@ export default function BookingDetailsPage() {
         setIssuingTicket(false);
     }, [booking?.id, booking?.reservationId, booking?.locator]);
 
+    if (loadingDetails) {
+        return (
+            <Box>
+                <NavBar />
+                <Container maxWidth="lg" sx={{ py: 3 }}>
+                    <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+                        <CircularProgress />
+                    </Box>
+                </Container>
+            </Box>
+        );
+    }
+
     if (!booking) {
         return (
             <Box>
                 <NavBar />
                 <Container maxWidth="lg" sx={{ py: 3 }}>
                     <Alert severity="warning" sx={{ mb: 2 }}>
-                        Booking details not found. Please open from My Account Booking History.
+                        {toText(loadingError, "Booking details not found. Please open from My Account Booking History.")}
                     </Alert>
                     <Button variant="contained" onClick={() => navigate("/my-account/booking")}>Back To Booking History</Button>
                 </Container>
@@ -205,9 +293,11 @@ export default function BookingDetailsPage() {
     const priceRows = Array.isArray(displayBooking?.PriceBreakDown)
         ? displayBooking.PriceBreakDown
         : [];
-    const passengers = Array.isArray(displayBooking?.PassengerList)
-        ? displayBooking.PassengerList
-        : [];
+    const passengers = passengersDetailed.length
+        ? passengersDetailed
+        : Array.isArray(displayBooking?.PassengerList)
+            ? displayBooking.PassengerList
+            : [];
     const grossFare = toNumberValue(displayBooking?.GrossFare);
     const netFare = toNumberValue(displayBooking?.NetFare);
     const currency = priceRows?.[0]?.CurrencyCode || "BDT";
@@ -280,6 +370,10 @@ export default function BookingDetailsPage() {
                 </Box>
 
                 <Box sx={{ display: "grid", gap: 1.5 }}>
+                    {loadingError ? (
+                        <Alert severity="warning">{loadingError}</Alert>
+                    ) : null}
+
                     <Paper sx={{ ...panelStyle, p: 1.8, background: "linear-gradient(180deg,#fff 0%,#f5fbff 100%)" }}>
                         <Grid container spacing={1.5} alignItems="center">
                             <Grid item xs={6} md={2}>
@@ -364,6 +458,81 @@ export default function BookingDetailsPage() {
                         </Box>
                     </Paper>
 
+                    <Paper sx={{ ...panelStyle, p: 1.8 }}>
+                        <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1.2, fontSize: 14 }}>
+                            Brand & Brand Features
+                        </Typography>
+                        <Grid container spacing={1.2}>
+                            <Grid item xs={12} md={4}>
+                                <Typography sx={{ fontSize: 11, color: "#607890" }}>Brand Name</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#15324f" }}>
+                                    {toText(brandInfo?.name, "N/A")}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <Typography sx={{ fontSize: 11, color: "#607890" }}>Brand Code</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#15324f" }}>
+                                    {toText(brandInfo?.code, "N/A")}
+                                </Typography>
+                            </Grid>
+                        </Grid>
+
+                        <Divider sx={{ my: 1.2 }} />
+
+                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                            Brand Features
+                        </Typography>
+                        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap", mb: 1.4 }}>
+                            {brandInfo.features.length ? brandInfo.features.map((feature) => (
+                                <Chip key={`brand-feature-${feature}`} size="small" label={feature} />
+                            )) : <Typography sx={{ fontSize: 12, color: "#607890" }}>N/A</Typography>}
+                        </Box>
+
+                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                            Amenities
+                        </Typography>
+                        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+                            {brandInfo.amenities.length ? brandInfo.amenities.map((amenity) => (
+                                <Chip key={`brand-amenity-${amenity}`} size="small" label={amenity} />
+                            )) : <Typography sx={{ fontSize: 12, color: "#607890" }}>N/A</Typography>}
+                        </Box>
+                    </Paper>
+
+                    <Paper sx={{ ...panelStyle, p: 1.8 }}>
+                        <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1.2, fontSize: 14 }}>
+                            Contact & Special Services
+                        </Typography>
+                        <Grid container spacing={1.2}>
+                            <Grid item xs={12} md={4}>
+                                <Typography sx={{ fontSize: 11, color: "#607890" }}>Contact Email</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#15324f" }}>
+                                    {toText(contactInfo?.email, "N/A")}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <Typography sx={{ fontSize: 11, color: "#607890" }}>Contact Phone</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#15324f" }}>
+                                    {toText(contactInfo?.phone, "N/A")}
+                                </Typography>
+                            </Grid>
+                            <Grid item xs={12} md={4}>
+                                <Typography sx={{ fontSize: 11, color: "#607890" }}>Address</Typography>
+                                <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#15324f" }}>
+                                    {toText(contactInfo?.address, "N/A")}
+                                </Typography>
+                            </Grid>
+                        </Grid>
+                        <Divider sx={{ my: 1.2 }} />
+                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                            Special Services
+                        </Typography>
+                        <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+                            {specialServices.length ? specialServices.map((service) => (
+                                <Chip key={`ssr-${service}`} size="small" label={service} />
+                            )) : <Typography sx={{ fontSize: 12, color: "#607890" }}>N/A</Typography>}
+                        </Box>
+                    </Paper>
+
                     {passengers.length > 0 && (
                         <Paper sx={{ ...panelStyle, p: 1.8 }}>
                             <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1.2, fontSize: 14 }}>
@@ -374,21 +543,44 @@ export default function BookingDetailsPage() {
                                     <Grid item xs={12} md={6} key={`detail-pax-${idx}`}>
                                         <Box sx={{ border: "1px solid #E9EEF8", borderRadius: "10px", p: 1.3, bgcolor: "#FCFEFF" }}>
                                             <Typography sx={{ fontSize: 13, fontWeight: 700, mb: 0.4 }}>
-                                                {p?.Title ? `${p.Title} ` : ""}
-                                                {p?.FirstName || ""} {p?.LastName || ""}
+                                                {toText(p?.title || p?.Title) ? `${toText(p?.title || p?.Title)} ` : ""}
+                                                {toText(p?.firstName || p?.FirstName)} {toText(p?.lastName || p?.LastName)}
                                             </Typography>
                                             <Typography sx={{ fontSize: 12, color: "#63748E" }}>
-                                                {paxLabelDetail(p?.PaxType)} | {p?.Gender || "N/A"}
+                                                {paxLabelDetail(p?.paxType || p?.PaxType)} | {toText(p?.gender || p?.Gender, "N/A")}
                                             </Typography>
                                             <Typography sx={{ fontSize: 12, color: "#63748E" }}>
-                                                DOB: {p?.DateOfBirth ? moment(p.DateOfBirth).format("DD MMM YYYY") : "N/A"}
+                                                DOB: {toText(p?.dateOfBirth || p?.DateOfBirth)
+                                                    ? moment(p?.dateOfBirth || p?.DateOfBirth).format("DD MMM YYYY")
+                                                    : "N/A"}
                                             </Typography>
                                             <Typography sx={{ fontSize: 12, color: "#63748E" }}>
-                                                Passport: {p?.PassportNumber || "N/A"}
+                                                Passport: {toText(p?.passportNumber || p?.PassportNumber, "N/A")}
                                             </Typography>
                                             <Typography sx={{ fontSize: 12, color: "#63748E" }}>
-                                                Nationality: {p?.PassportNationality || "N/A"}
+                                                Passport Country: {toText(p?.passportIssuingCountry || p?.PassportIssuingCountry, "N/A")}
                                             </Typography>
+                                            <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                                Passport Expiry: {toText(p?.passportExpiryDate || p?.PassportExpiryDate)
+                                                    ? moment(p?.passportExpiryDate || p?.PassportExpiryDate).format("DD MMM YYYY")
+                                                    : "N/A"}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                                Nationality: {toText(p?.nationality || p?.PassportNationality, "N/A")}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                                Email: {toText(p?.email || p?.Email, "N/A")}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                                                Phone: {toText(p?.phone || p?.Phone, "N/A")}
+                                            </Typography>
+                                            {Array.isArray(p?.specialServices) && p.specialServices.length ? (
+                                                <Box sx={{ mt: 0.7, display: "flex", gap: 0.6, flexWrap: "wrap" }}>
+                                                    {p.specialServices.map((ssr) => (
+                                                        <Chip key={`${idx}-${ssr}`} size="small" label={ssr} />
+                                                    ))}
+                                                </Box>
+                                            ) : null}
                                         </Box>
                                     </Grid>
                                 ))}

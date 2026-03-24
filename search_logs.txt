@@ -1,0 +1,1 @@
+{"timestamp":"2026-03-24T20:56:17.337Z","mode":"authenticated","userId":1,"status":"success","route":"DXB-JFK-2026-03-26","cabinClass":"1","segments":1,"ipHash":"eff8e7ca506627fe15dda5e0","browserFingerprint":"d327ae678ed476df75507d65","visitorId":"2480ea1891b8df35911539f61f579659","count":1,"limit":350,"remaining":349,"bookingCount":7,"message":"Live search success"}

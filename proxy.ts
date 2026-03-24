@@ -14,7 +14,6 @@ const PROTECTED_PREFIXES = [
     "/api/admin",
     "/api/user",
     "/api/travel-buddy",
-    "/api/travelport",
     "/api/auth/logout",
     "/api/cms/settings",
 ];

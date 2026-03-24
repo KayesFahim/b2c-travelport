@@ -127,14 +127,6 @@ function pushApiFlowLog(params: {
     });
 }
 
-function resolveIssueTicketCommissionPercent(): number {
-    const fromEnv = Number(process.env.TRAVELPORT_DEFAULT_COMMISSION_PERCENT);
-    if (Number.isFinite(fromEnv) && fromEnv > 0) {
-        return Math.min(fromEnv, 100);
-    }
-    return 5;
-}
-
 function resolveBookingBaseUrl(version: string): string {
     const directUrl =
         process.env.TRAVELPORT_AIR_BOOKING ||
@@ -632,73 +624,6 @@ async function enrichWorkbenchTravelers(params: {
     return [];
 }
 
-async function applyIssueTicketDocumentOverrides(params: {
-    bookingBaseUrl: string;
-    reservationId: string;
-    headers: Record<string, string>;
-    travelerRefIds: string[];
-    commissionPercent: number;
-    logs: ApiFlowLog[];
-}) {
-    const travelerRefs = Array.from(new Set((params.travelerRefIds || []).filter(Boolean))).map(
-        (id) => ({ id })
-    );
-
-    if (!travelerRefs.length) {
-        return {
-            ok: false,
-            status: 400,
-            payload: { message: "No traveler refs available for commission override." },
-            errorMessage: "No traveler refs available for commission override.",
-        };
-    }
-
-    const overrideUrl = `${params.bookingBaseUrl}/documentoverride/Reservation/${encodeURIComponent(
-        params.reservationId
-    )}/documentoverrides`;
-    const overrideBody = {
-        "@type": "DocumentOverrides",
-        id: "documentOverrides_1",
-        DocumentOverridesRef: "documentOverrides_1",
-        Commissions: [
-            {
-                TravelerIdentifierRef: travelerRefs,
-                Commission: {
-                    "@type": "CommissionPercent",
-                    Percent: params.commissionPercent,
-                },
-            },
-        ],
-    };
-
-    const overrideResponse = await fetch(overrideUrl, {
-        method: "POST",
-        headers: params.headers,
-        body: JSON.stringify(overrideBody),
-    });
-    const overridePayload = (await parseJsonSafe(overrideResponse)) as Record<string, unknown>;
-
-    pushApiFlowLog({
-        logs: params.logs,
-        step: "issue_ticket_document_override",
-        method: "POST",
-        url: overrideUrl,
-        requestBody: overrideBody,
-        status: overrideResponse.status,
-        ok: overrideResponse.ok && !hasTravelportErrors(overridePayload),
-        responseBody: overridePayload,
-    });
-
-    return {
-        ok: overrideResponse.ok && !hasTravelportErrors(overridePayload),
-        status: overrideResponse.status,
-        payload: overridePayload,
-        errorMessage:
-            extractTravelportErrorMessage(overridePayload) ||
-            "Unable to apply document override commission.",
-    };
-}
-
 // ── Workbench build / commit ───────────────────────────────────────────────────
 
 async function buildWorkbenchFromLocator(params: {
@@ -891,35 +816,6 @@ export default async function handler(
         );
 
         // Traveler enrichment flow removed from issue-ticket process by requirement.
-
-        // Apply commission override before commit to avoid:
-        // "COMMISSION PERCENTAGE MUST BE ENTERED"
-        const travelerRefIds = allTravelers
-            .map((traveler) => toText(traveler?.id))
-            .filter(Boolean);
-        const commissionPercent = resolveIssueTicketCommissionPercent();
-        const overrideStep = await applyIssueTicketDocumentOverrides({
-            bookingBaseUrl,
-            reservationId: reservationIdForCommit,
-            headers: commonHeaders,
-            travelerRefIds,
-            commissionPercent,
-            logs: apiFlowLogs,
-        });
-
-        documentOverrideResponse =
-            (overrideStep.payload as Record<string, unknown>) || null;
-
-        if (!overrideStep.ok) {
-            return res.status(502).json({
-                message: `Travelport document override failed (${overrideStep.status})`,
-                details: overrideStep.errorMessage,
-                warnings,
-                stage: "issue_ticket_document_override",
-                apiFlowLogs,
-            });
-        }
-        // ───────────────────────────────────────────────────────────────────────
 
         if (enableFormOfPayment) {
             const step = await runIssueTicketPaymentStep({
