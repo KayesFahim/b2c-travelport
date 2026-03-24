@@ -32,7 +32,7 @@ const defaultPaths = [
   "/previewbooking",
   "/bookingconfirmation",
   "/onewaysearchresult",
-  "/selectedflightdetails",
+  "/selectedOffer",
 ];
 
 function parsePaths() {

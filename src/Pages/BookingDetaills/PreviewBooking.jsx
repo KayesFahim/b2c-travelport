@@ -1178,7 +1178,7 @@ const PreviewBooking = () => {
           </Alert>
           <Button
             variant="contained"
-            onClick={() => navigate("/selectedflightdetails")}
+            onClick={() => navigate("/selectedOffer")}
             sx={{ bgcolor: "var(--primary-button)", textTransform: "none" }}
           >
             Back To Booking Details

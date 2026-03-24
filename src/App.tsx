@@ -87,7 +87,7 @@ const App: FC = () => {
 
           <Route
           >
-            <Route path="/selectedflightdetails" element={<BookingDetaills />} />
+            <Route path="/selectedOffer" element={<BookingDetaills />} />
             <Route path="/bookingdetails" element={<BookingDetaills />} />
             <Route path="/previewbooking" element={<PreviewBooking />} />
             <Route path="/bookingconfirmation" element={<BookingConfirmation />} />

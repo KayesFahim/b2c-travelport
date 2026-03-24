@@ -1767,39 +1767,32 @@ function buildTravelersPayload(
     if (email && isLeadPassenger) {
       traveler.Email = [{ comment: "Primary Email Id", value: email }];
     }
-    if (
-      passportNumber ||
-      passportExpiryDate ||
-      passportIssueCountry ||
-      birthCountry
-    ) {
-      traveler.TravelDocument = [
-        {
-          "@type": "TravelDocumentDetail",
-          ...(passportNumber ? { docNumber: passportNumber } : {}),
-          docType: "Passport",
-          ...(passportIssueDate ? { issueDate: passportIssueDate } : {}),
-          ...(passportExpiryDate ? { expireDate: passportExpiryDate } : {}),
-          issueCountry: passportIssueCountry || birthCountry || "",
-          birthDate: resolvedBirthDate,
-          birthCountry: birthCountry || passportIssueCountry || "",
-          Gender: resolvedGender,
-          PersonName: {
-            "@type": "PersonName",
-            Given: given,
-            ...(middleName ? { Middle: middleName } : {}),
-            Surname: surname,
-          },
-          ...(birthCountry
-            ? {
-              IssuedForGeoPoliticalArea: {
-                value: birthCountry,
-              },
-            }
-            : {}),
+    traveler.TravelDocument = [
+      {
+        "@type": "TravelDocumentDetail",
+        ...(passportNumber ? { docNumber: passportNumber } : {}),
+        docType: "Passport",
+        ...(passportIssueDate ? { issueDate: passportIssueDate } : {}),
+        ...(passportExpiryDate ? { expireDate: passportExpiryDate } : {}),
+        issueCountry: passportIssueCountry || birthCountry || "",
+        birthDate: resolvedBirthDate,
+        birthCountry: birthCountry || passportIssueCountry || "",
+        Gender: resolvedGender,
+        PersonName: {
+          "@type": "PersonName",
+          Given: given,
+          ...(middleName ? { Middle: middleName } : {}),
+          Surname: surname,
         },
-      ];
-    }
+        ...(birthCountry
+          ? {
+            IssuedForGeoPoliticalArea: {
+              value: birthCountry,
+            },
+          }
+          : {}),
+      },
+    ];
 
     return traveler;
   });

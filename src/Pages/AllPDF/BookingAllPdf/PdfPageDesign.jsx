@@ -195,7 +195,7 @@ const PDFPageDesign = ({ SingleBooking }) => {
   return (
     <Document>
       <Page size="A4" style={styles.page}>
-        
+
         {/* HEADER SECTION */}
         <View style={styles.headerSection}>
           <View>
@@ -293,24 +293,26 @@ const PDFPageDesign = ({ SingleBooking }) => {
             <Text style={styles.cardHeaderTitle}>PASSENGER DETAILS</Text>
           </View>
           <View style={styles.tableHeader}>
-            <Text style={{ ...styles.tableColHeader, width: "30%" }}>Name</Text>
-            <Text style={{ ...styles.tableColHeader, width: "15%" }}>Type</Text>
-            <Text style={{ ...styles.tableColHeader, width: "15%" }}>Gender</Text>
-            <Text style={{ ...styles.tableColHeader, width: "20%" }}>DOB</Text>
-            <Text style={{ ...styles.tableColHeader, width: "20%" }}>Passport No</Text>
+            <Text style={{ ...styles.tableColHeader, width: "24%" }}>Name</Text>
+            <Text style={{ ...styles.tableColHeader, width: "12%" }}>Type</Text>
+            <Text style={{ ...styles.tableColHeader, width: "12%" }}>Gender</Text>
+            <Text style={{ ...styles.tableColHeader, width: "16%" }}>DOB</Text>
+            <Text style={{ ...styles.tableColHeader, width: "16%" }}>Passport No</Text>
+            <Text style={{ ...styles.tableColHeader, width: "20%" }}>Ticket No</Text>
           </View>
           {(pdfData?.PassengerList || []).map((passenger, index) => {
             return (
               <View key={index} style={styles.tableRow}>
-                <Text style={{ ...styles.tableColValue, width: "30%", fontFamily: "Helvetica-Bold" }}>
+                <Text style={{ ...styles.tableColValue, width: "24%", fontFamily: "Helvetica-Bold" }}>
                   {passenger?.Title ? passenger.Title + " " : ""}{passenger?.FirstName} {passenger?.LastName}
                 </Text>
-                <Text style={{ ...styles.tableColValue, width: "15%" }}>{passenger?.PaxType || "Adult"}</Text>
-                <Text style={{ ...styles.tableColValue, width: "15%" }}>{passenger?.Gender || "N/A"}</Text>
-                <Text style={{ ...styles.tableColValue, width: "20%" }}>
+                <Text style={{ ...styles.tableColValue, width: "12%" }}>{passenger?.PaxType || "Adult"}</Text>
+                <Text style={{ ...styles.tableColValue, width: "12%" }}>{passenger?.Gender || "N/A"}</Text>
+                <Text style={{ ...styles.tableColValue, width: "16%" }}>
                   {passenger?.DateOfBirth ? moment(passenger.DateOfBirth).format("DD MMM YYYY") : "N/A"}
                 </Text>
-                <Text style={{ ...styles.tableColValue, width: "20%" }}>{passenger?.PassportNumber || "N/A"}</Text>
+                <Text style={{ ...styles.tableColValue, width: "16%" }}>{passenger?.PassportNumber || "N/A"}</Text>
+                <Text style={{ ...styles.tableColValue, width: "20%" }}>{passenger?.TicketNumber || "N/A"}</Text>
               </View>
             );
           })}
@@ -342,7 +344,7 @@ const PDFPageDesign = ({ SingleBooking }) => {
               </View>
             );
           })}
-          
+
           <View style={styles.summarySection}>
             <View style={styles.summaryGrid}>
               {discount > 0 && (

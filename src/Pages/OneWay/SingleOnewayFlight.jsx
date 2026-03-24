@@ -96,7 +96,7 @@ const SingleOnewayFlight = ({ data, className }) => {
   };
 
   // const handleBooking = (data) => {
-  //   navigate("/selectedflightdetails", { state: data });
+  //   navigate("/selectedOffer", { state: data });
 
   //   // if (!token) {
   //   //   Swal.fire({
@@ -134,7 +134,7 @@ const SingleOnewayFlight = ({ data, className }) => {
       console.warn("Unable to cache selected offer for booking flow", storageError);
     }
 
-    navigate("/selectedflightdetails", { state: bookingState });
+    navigate("/selectedOffer", { state: bookingState });
   };
 
   const location = useLocation();
@@ -224,7 +224,7 @@ const SingleOnewayFlight = ({ data, className }) => {
           title: "Success",
           text: datas.message || "User signed in successfully!",
         }).then(() => {
-          navigate("/selectedflightdetails", {
+          navigate("/selectedOffer", {
             state: {
               selectedOffer: data || {},
               source: "search-results",

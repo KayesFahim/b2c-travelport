@@ -535,7 +535,7 @@ const NavBar = () => {
     "/hotel",
     "/terms",
     "/privacypolicy",
-    "/selectedflightdetails",
+    "/selectedOffer",
     "/bookingdetails",
     "/OtpVerification",
     "/paymentsuccess",

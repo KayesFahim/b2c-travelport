@@ -15,8 +15,10 @@ import CalendarTodayRoundedIcon from "@mui/icons-material/CalendarTodayRounded";
 import { useLocation, useNavigate } from "react-router-dom";
 import moment from "moment";
 import commaNumber from "comma-number";
+import { PDFDownloadLink } from "@react-pdf/renderer";
 import NavBar from "../../Shared/NavBar/NavBar";
 import FlightDetailsContent from "../ShowDetails/FlightDetailsContent";
+import PdfPageDesign from "../AllPDF/BookingAllPdf/PdfPageDesign";
 
 const FONT = '"Manrope", sans-serif';
 
@@ -83,6 +85,11 @@ const paxLabel = (value) => {
   return value || "Passenger";
 };
 
+const isTicketedStatus = (value) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status === "ticketed" || status === "issued" || status === "ticket issue done";
+};
+
 const toText = (value) => {
   if (value === null || value === undefined) return "";
   if (typeof value === "string") return value.trim();
@@ -104,6 +111,88 @@ const toText = (value) => {
     );
   }
   return "";
+};
+
+const toStringList = (value) => {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => toText(item)).filter(Boolean);
+};
+
+const uniqueTexts = (values) => Array.from(new Set(values.filter(Boolean)));
+
+const collectTextsByLikelyKeys = (source, keys) => {
+  if (!source || typeof source !== "object") return [];
+  const rows = [];
+  const visit = (node, depth = 0) => {
+    if (!node || depth > 6) return;
+    if (Array.isArray(node)) {
+      node.forEach((item) => visit(item, depth + 1));
+      return;
+    }
+    if (typeof node !== "object") return;
+
+    Object.entries(node).forEach(([key, val]) => {
+      const normalizedKey = String(key || "").toLowerCase();
+      if (keys.some((k) => normalizedKey.includes(k))) {
+        if (Array.isArray(val)) {
+          rows.push(...toStringList(val));
+        } else if (val && typeof val === "object") {
+          rows.push(
+            toText(val?.description) ||
+            toText(val?.Description) ||
+            toText(val?.text) ||
+            toText(val?.Text) ||
+            toText(val?.value) ||
+            toText(val?.Value) ||
+            ""
+          );
+        } else {
+          rows.push(toText(val));
+        }
+      }
+      if (val && typeof val === "object") {
+        visit(val, depth + 1);
+      }
+    });
+  };
+
+  visit(source, 0);
+  return uniqueTexts(rows);
+};
+
+const extractAmenitiesFromApi = (...sources) => {
+  const amenities = [];
+  sources.forEach((source) => {
+    amenities.push(
+      ...collectTextsByLikelyKeys(source, ["amenit", "feature", "brandfeature"]),
+      ...toStringList(source?.brand?.amenities),
+      ...toStringList(source?.brand?.features),
+      ...toStringList(source?.Brand?.Amenities),
+      ...toStringList(source?.Brand?.Features)
+    );
+  });
+  return uniqueTexts(amenities);
+};
+
+const extractChangeCancelPoliciesFromApi = (...sources) => {
+  const allPolicyTexts = [];
+  sources.forEach((source) => {
+    allPolicyTexts.push(
+      ...collectTextsByLikelyKeys(source, ["policy", "penalt", "refund", "cancel", "change", "reissue"])
+    );
+  });
+
+  const unique = uniqueTexts(allPolicyTexts);
+  const changePolicies = unique.filter((line) => {
+    const text = line.toLowerCase();
+    return text.includes("change") || text.includes("reissue") || text.includes("exchange");
+  });
+  const cancellationPolicies = unique.filter((line) => {
+    const text = line.toLowerCase();
+    return text.includes("cancel") || text.includes("refund") || text.includes("void");
+  });
+
+  return { changePolicies, cancellationPolicies };
 };
 
 const resolveReservationFromPnrPayload = (payload) => {
@@ -254,11 +343,8 @@ const mapReservationTravelersToPassengers = (reservation) => {
 const extractTicketNumbersFromReservation = (reservation) => {
   if (!reservation || typeof reservation !== "object") return [];
 
-  const receipts = Array.isArray(reservation?.Receipt) ? reservation.Receipt : [];
-  const numbers = [];
-
-  receipts.forEach((receipt) => {
-    const documents = Array.isArray(receipt?.Document) ? receipt.Document : [];
+  const pickTicketNumbersFromDocuments = (documents) => {
+    const numbers = [];
     documents.forEach((doc) => {
       const docType = toText(doc?.["@type"] || doc?.type).toLowerCase();
       const ticketNumber = toText(doc?.Number || doc?.number);
@@ -266,9 +352,77 @@ const extractTicketNumbersFromReservation = (reservation) => {
         numbers.push(ticketNumber);
       }
     });
+    return Array.from(new Set(numbers));
+  };
+
+  const receipts = Array.isArray(reservation?.Receipt) ? reservation.Receipt : [];
+  const allDocuments = receipts.flatMap((receipt) =>
+    (Array.isArray(receipt?.Document) ? receipt.Document : [])
+  );
+
+  return pickTicketNumbersFromDocuments(allDocuments);
+};
+
+const extractPassengerTicketNumbers = (reservation, passengerCount) => {
+  if (!reservation || typeof reservation !== "object") return [];
+
+  const travelers = Array.isArray(reservation?.Traveler) ? reservation.Traveler : [];
+  const fromTravelers = travelers.map((traveler) => {
+    const travelerDocs = [
+      ...getArrayByKeys(traveler, ["Ticket", "ticket", "TicketDocument", "ticketDocument", "eTicket", "ETicket"]),
+      ...getArrayByKeys(traveler, ["Document", "document"]),
+    ];
+
+    const ticketNumbers = travelerDocs
+      .map((doc) => toText(doc?.Number || doc?.number || doc?.ticketNumber || doc?.TicketNumber))
+      .filter(Boolean);
+
+    return Array.from(new Set(ticketNumbers)).join(", ");
   });
 
-  return Array.from(new Set(numbers));
+  if (fromTravelers.some(Boolean)) {
+    return fromTravelers;
+  }
+
+  const fallback = extractTicketNumbersFromReservation(reservation);
+  const normalizedCount = Math.max(passengerCount || 0, fallback.length);
+  return Array.from({ length: normalizedCount }, (_, idx) => fallback[idx] || "");
+};
+
+const normalizeStatusForPdf = (statusText, hasTicket) => {
+  const status = String(statusText || "").trim().toLowerCase();
+  if (status === "booked") return "Booked";
+  if (status === "hold") return "Hold";
+  if (status === "cancelled") return "Cancelled";
+  if (hasTicket || status === "ticketed" || status === "issued") return "Ticketed";
+  return "Booked";
+};
+
+const buildPdfPayload = ({
+  bookingId,
+  bookingStatus,
+  pnr,
+  allLegsInfo,
+  passengerList,
+  priceBreakDown,
+  grossFare,
+  netFare,
+  bookingDate,
+}) => {
+  return [
+    {
+      BookingId: bookingId || "N/A",
+      BookingStatus: bookingStatus || "Booked",
+      BookingDate: bookingDate || new Date().toISOString(),
+      TripType: (Array.isArray(allLegsInfo) && allLegsInfo.length > 1) ? "Return" : "OneWay",
+      PNR: pnr || "N/A",
+      AllLegsInfo: Array.isArray(allLegsInfo) ? allLegsInfo : [],
+      PassengerList: Array.isArray(passengerList) ? passengerList : [],
+      PriceBreakDown: Array.isArray(priceBreakDown) ? priceBreakDown : [],
+      GrossFare: toNumberValue(grossFare),
+      NetFare: toNumberValue(netFare),
+    },
+  ];
 };
 
 const summarizePostCommitReservation = (reservation) => {
@@ -723,6 +877,26 @@ const BookingConfirmation = () => {
       : flightInfoSourceFromBooking && Object.keys(flightInfoSourceFromBooking).length
         ? flightInfoSourceFromBooking
         : {};
+  const amenitiesFromApi = useMemo(
+    () =>
+      extractAmenitiesFromApi(
+        flightInfoSource,
+        resolvedCommittedReservation,
+        reservationByPnrPayload,
+        bookingPayload
+      ),
+    [flightInfoSource, resolvedCommittedReservation, reservationByPnrPayload, bookingPayload]
+  );
+  const { changePolicies, cancellationPolicies } = useMemo(
+    () =>
+      extractChangeCancelPoliciesFromApi(
+        flightInfoSource,
+        resolvedCommittedReservation,
+        reservationByPnrPayload,
+        bookingPayload
+      ),
+    [flightInfoSource, resolvedCommittedReservation, reservationByPnrPayload, bookingPayload]
+  );
 
   const allLegs = getArrayByKeys(flightInfoSource, ["AllLegsInfo", "allLegsInfo"]);
   const priceRows = getArrayByKeys(flightInfoSource, ["PriceBreakDown", "priceBreakDown"]);
@@ -755,9 +929,72 @@ const BookingConfirmation = () => {
   const ticketNumbers = extractTicketNumbersFromReservation(
     resolvedCommittedReservation
   );
+  const bookingStatusText =
+    toText(bookingPayload?.BookingStatus || bookingPayload?.bookingStatus) ||
+    toText(finalCommitResponse?.BookingStatus || finalCommitResponse?.bookingStatus);
   const hasTicket = ticketNumbers.length > 0;
-  const ticketStatusLabel = hasTicket ? "Ticketed" : "Pending";
+  const isAlreadyTicketed = hasTicket || isTicketedStatus(bookingStatusText);
+  const ticketStatusLabel = isAlreadyTicketed ? "Ticketed" : "Pending";
   const ticketNumberText = hasTicket ? ticketNumbers.join(", ") : "N/A";
+  const passengerTicketNumbers = useMemo(
+    () => extractPassengerTicketNumbers(resolvedCommittedReservation, passengers.length),
+    [resolvedCommittedReservation, passengers.length]
+  );
+  const bookingStatusForPdf = normalizeStatusForPdf(bookingStatusText, hasTicket);
+  const canDownloadBookingCopy = ["booked", "hold"].includes(
+    String(bookingStatusForPdf || "").trim().toLowerCase()
+  );
+  const canDownloadTicketCopy = isAlreadyTicketed;
+  const bookingCopyPdfData = useMemo(
+    () =>
+      buildPdfPayload({
+        bookingId: reservationId,
+        bookingStatus: bookingStatusForPdf,
+        pnr: locator,
+        allLegsInfo: allLegs,
+        passengerList: passengers,
+        priceBreakDown: priceRows,
+        grossFare: totals.total,
+        netFare: totals.total,
+        bookingDate: finalCommitResponse?.createdAt || new Date().toISOString(),
+      }),
+    [reservationId, bookingStatusForPdf, locator, allLegs, passengers, priceRows, totals.total, finalCommitResponse?.createdAt]
+  );
+  const passengerTicketDownloadRows = useMemo(() => {
+    return passengers
+      .map((passenger, index) => {
+        const ticketNumber = toText(passengerTicketNumbers[index]);
+        if (!ticketNumber) return null;
+        const passengerName = [passenger?.Title, passenger?.FirstName, passenger?.LastName]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+        const singlePassengerPdfData = buildPdfPayload({
+          bookingId: reservationId,
+          bookingStatus: "Ticketed",
+          pnr: locator,
+          allLegsInfo: allLegs,
+          passengerList: [
+            {
+              ...passenger,
+              TicketNumber: ticketNumber,
+            },
+          ],
+          priceBreakDown: priceRows,
+          grossFare: totals.total,
+          netFare: totals.total,
+          bookingDate: finalCommitResponse?.createdAt || new Date().toISOString(),
+        });
+
+        return {
+          index,
+          ticketNumber,
+          passengerName: passengerName || `Passenger ${index + 1}`,
+          data: singlePassengerPdfData,
+        };
+      })
+      .filter(Boolean);
+  }, [passengers, passengerTicketNumbers, reservationId, locator, allLegs, priceRows, totals.total, finalCommitResponse?.createdAt]);
 
   if (reservationByPnrLoading) {
     return (
@@ -873,12 +1110,12 @@ const BookingConfirmation = () => {
       const response = await fetch(
         `/api/travelport/issue-ticket?pnr=${encodeURIComponent(issueTicketPnr)}`,
         {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
+          method: "POST",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             pnr: issueTicketPnr,
           }),
@@ -1063,6 +1300,72 @@ const BookingConfirmation = () => {
           <FlightDetailsContent data={flightInfoSource} />
         </Box>
 
+        {/* ── Policies & Amenities ── */}
+        <Box
+          sx={{
+            border: "1px solid #DFE7EF",
+            borderRadius: "16px",
+            background: "#FFFFFF",
+            p: { xs: 2, md: 2.5 },
+            mb: 2.5,
+          }}
+        >
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#54697E", fontFamily: FONT, mb: 1.5, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Cancellation, Change Policy & Amenities (API)
+          </Typography>
+
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={6}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                Change Policy
+              </Typography>
+              {changePolicies.length ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6 }}>
+                  {changePolicies.map((policy, idx) => (
+                    <Typography key={`change-policy-${idx}`} sx={{ fontSize: 12, color: "#5A6B7D", fontFamily: FONT }}>
+                      • {policy}
+                    </Typography>
+                  ))}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: "#8A97A6", fontFamily: FONT }}>N/A</Typography>
+              )}
+            </Grid>
+
+            <Grid item xs={12} md={6}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                Cancellation Policy
+              </Typography>
+              {cancellationPolicies.length ? (
+                <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6 }}>
+                  {cancellationPolicies.map((policy, idx) => (
+                    <Typography key={`cancel-policy-${idx}`} sx={{ fontSize: 12, color: "#5A6B7D", fontFamily: FONT }}>
+                      • {policy}
+                    </Typography>
+                  ))}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: "#8A97A6", fontFamily: FONT }}>N/A</Typography>
+              )}
+            </Grid>
+
+            <Grid item xs={12}>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                Amenities
+              </Typography>
+              {amenitiesFromApi.length ? (
+                <Box sx={{ display: "flex", gap: 0.8, flexWrap: "wrap" }}>
+                  {amenitiesFromApi.map((amenity) => (
+                    <Chip key={`confirm-amenity-${amenity}`} size="small" label={amenity} />
+                  ))}
+                </Box>
+              ) : (
+                <Typography sx={{ fontSize: 12, color: "#8A97A6", fontFamily: FONT }}>N/A</Typography>
+              )}
+            </Grid>
+          </Grid>
+        </Box>
+
         {/* ── Passengers ── */}
         <Box
           sx={{
@@ -1121,11 +1424,105 @@ const BookingConfirmation = () => {
                         Nationality: <strong>{passenger?.PassportNationality || passenger?.Nationality}</strong>
                       </Typography>
                     ) : null}
+                    <Typography sx={{ fontSize: 11.5, color: "#5A6B7D", fontFamily: FONT }}>
+                      Ticket Number: <strong>{passengerTicketNumbers[index] || "N/A"}</strong>
+                    </Typography>
                   </Box>
                 </Box>
               </Grid>
             ))}
           </Grid>
+        </Box>
+
+        {/* ── PDF Downloads ── */}
+        <Box
+          sx={{
+            border: "1px solid #DFE7EF",
+            borderRadius: "16px",
+            background: "#FFFFFF",
+            p: { xs: 2, md: 2.5 },
+            mb: 2.5,
+          }}
+        >
+          <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#54697E", fontFamily: FONT, mb: 1.2, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Download Documents
+          </Typography>
+
+          <Box sx={{ display: "flex", gap: 1.2, flexWrap: "wrap", mb: passengerTicketDownloadRows.length ? 1.5 : 0 }}>
+            {canDownloadBookingCopy ? (
+              <PDFDownloadLink
+                document={<PdfPageDesign SingleBooking={bookingCopyPdfData} />}
+                fileName={`${locator || reservationId || "booking"}_booking_copy.pdf`}
+                style={{
+                  textDecoration: "none",
+                  background: "#0A527A",
+                  color: "#fff",
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  fontWeight: 700,
+                  fontFamily: FONT,
+                  fontSize: 13,
+                }}
+              >
+                {({ loading }) => (loading ? "Preparing Booking Copy..." : "Download Booking Copy")}
+              </PDFDownloadLink>
+            ) : null}
+
+            {canDownloadTicketCopy ? (
+              <PDFDownloadLink
+                document={<PdfPageDesign SingleBooking={bookingCopyPdfData} />}
+                fileName={`${locator || reservationId || "booking"}_ticket_copy.pdf`}
+                style={{
+                  textDecoration: "none",
+                  background: "#1A7A41",
+                  color: "#fff",
+                  padding: "10px 14px",
+                  borderRadius: "10px",
+                  fontWeight: 700,
+                  fontFamily: FONT,
+                  fontSize: 13,
+                }}
+              >
+                {({ loading }) => (loading ? "Preparing Ticket Copy..." : "Download Ticket Copy")}
+              </PDFDownloadLink>
+            ) : null}
+          </Box>
+
+          {canDownloadTicketCopy && passengerTicketDownloadRows.length ? (
+            <Box>
+              <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                Download Per Passenger Ticket Copy
+              </Typography>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 0.7 }}>
+                {passengerTicketDownloadRows.map((row) => (
+                  <PDFDownloadLink
+                    key={`pax-ticket-${row.index}`}
+                    document={<PdfPageDesign SingleBooking={row.data} />}
+                    fileName={`${locator || reservationId || "booking"}_${row.ticketNumber}_ticket_copy.pdf`}
+                    style={{
+                      textDecoration: "none",
+                      color: "#0A527A",
+                      fontWeight: 600,
+                      fontFamily: FONT,
+                      fontSize: 13,
+                    }}
+                  >
+                    {({ loading }) =>
+                      loading
+                        ? `Preparing ${row.passengerName} ticket...`
+                        : `Download ${row.passengerName} Ticket (${row.ticketNumber})`
+                    }
+                  </PDFDownloadLink>
+                ))}
+              </Box>
+            </Box>
+          ) : null}
+
+          {!canDownloadBookingCopy && !canDownloadTicketCopy ? (
+            <Typography sx={{ fontSize: 12, color: "#8A97A6", fontFamily: FONT }}>
+              Download links will appear when status is Booked/Hold (booking copy) or Ticketed (ticket copy).
+            </Typography>
+          ) : null}
         </Box>
 
         {/* ── Fare Summary ── */}
@@ -1224,21 +1621,23 @@ const BookingConfirmation = () => {
 
         {/* ── Actions ── */}
         <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5, mb: 4, flexWrap: "wrap" }}>
-          <Button
-            variant="contained"
-            onClick={handleIssueTicket}
-            disabled={issueTicketSubmitting}
-            sx={{
-              textTransform: "none",
-              borderRadius: "10px",
-              fontWeight: 700,
-              fontFamily: FONT,
-              bgcolor: "#0A527A",
-              ":hover": { bgcolor: "#0A527A" },
-            }}
-          >
-            {issueTicketSubmitting ? "Issuing Ticket..." : "Issue Ticket"}
-          </Button>
+          {!isAlreadyTicketed ? (
+            <Button
+              variant="contained"
+              onClick={handleIssueTicket}
+              disabled={issueTicketSubmitting}
+              sx={{
+                textTransform: "none",
+                borderRadius: "10px",
+                fontWeight: 700,
+                fontFamily: FONT,
+                bgcolor: "#0A527A",
+                ":hover": { bgcolor: "#0A527A" },
+              }}
+            >
+              {issueTicketSubmitting ? "Issuing Ticket..." : "Issue Ticket"}
+            </Button>
+          ) : null}
           <Button
             onClick={handleGoToPreviewBooking}
             onClick={() => navigate("/")}

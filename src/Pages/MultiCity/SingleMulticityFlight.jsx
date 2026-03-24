@@ -509,7 +509,7 @@ const SingleMulticityFlight = ({ data }) => {
       console.warn("Unable to cache selected offer for booking flow", storageError);
     }
 
-    navigate("/selectedflightdetails", { state: bookingState });
+    navigate("/selectedOffer", { state: bookingState });
   };
   return (
     <Box
