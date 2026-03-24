@@ -1,10 +1,17 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../src/server/prisma";
+import { canManageCms, deny, getActor } from "@/server/rbac";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === "GET") {
         try {
             const adminMode = req.query.admin === "true";
+            if (adminMode) {
+                const actor = await getActor(req);
+                if (!canManageCms(actor)) {
+                    return deny(res, "Only Super Admin/Admin/Manager can access admin blog list");
+                }
+            }
             const posts = await prisma.blogPost.findMany({
                 where: adminMode ? {} : { published: true },
                 orderBy: { createdAt: "desc" },
@@ -18,6 +25,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === "POST") {
         try {
+            const actor = await getActor(req);
+            if (!canManageCms(actor)) {
+                return deny(res, "Only Super Admin/Admin/Manager can create blog posts");
+            }
             const { title, tag, excerpt, content, imageUrl, published, authorName } = req.body ?? {};
             if (!title || !title.trim()) {
                 return res.status(400).json({ message: "Title is required" });
@@ -42,6 +53,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === "PUT") {
         try {
+            const actor = await getActor(req);
+            if (!canManageCms(actor)) {
+                return deny(res, "Only Super Admin/Admin/Manager can update blog posts");
+            }
             const id = Number(req.query.id);
             if (!id) return res.status(400).json({ message: "Missing id" });
             const { title, tag, excerpt, content, imageUrl, published, authorName } = req.body ?? {};
@@ -66,6 +81,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === "DELETE") {
         try {
+            const actor = await getActor(req);
+            if (!canManageCms(actor)) {
+                return deny(res, "Only Super Admin/Admin/Manager can delete blog posts");
+            }
             const id = Number(req.query.id);
             if (!id) return res.status(400).json({ message: "Missing id" });
             await prisma.blogPost.delete({ where: { id } });

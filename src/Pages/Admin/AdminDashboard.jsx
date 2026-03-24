@@ -1,24 +1,21 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-    Box,
-    Drawer,
+    Alert,
     AppBar,
-    Toolbar,
-    Typography,
+    Avatar,
+    Box,
+    CircularProgress,
+    Divider,
+    Drawer,
+    IconButton,
     List,
     ListItem,
     ListItemIcon,
     ListItemText,
-    Avatar,
     Menu,
     MenuItem,
-    Divider,
-    IconButton,
-    Paper,
-    Grid,
-    Card,
-    CardContent,
-    CardHeader,
+    Toolbar,
+    Typography,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import DashboardIcon from "@mui/icons-material/Dashboard";
@@ -42,13 +39,13 @@ import ArticleIcon from "@mui/icons-material/Article";
 const DRAWER_WIDTH = 250;
 
 const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: DashboardIcon, color: "#0d9488" },
-    { id: "bookings", label: "Booking Management", icon: BookingIcon, color: "#0ea5e9" },
-    { id: "customers", label: "Customer Management", icon: PeopleIcon, color: "#f59e0b" },
-    { id: "payments", label: "Payment Management", icon: PaymentIcon, color: "#8b5cf6" },
-    { id: "reports", label: "Reports", icon: BarChartIcon, color: "#ef4444" },
-    { id: "cms", label: "CMS", icon: ArticleIcon, color: "#8b5cf6" },
-    { id: "settings", label: "Settings", icon: SettingsIcon, color: "#6b7280" },
+    { id: "dashboard", label: "Dashboard", icon: DashboardIcon, color: "#0d9488", roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "STAFF", "ACCOUNTANT", "RESERVATION"] },
+    { id: "bookings", label: "Booking Management", icon: BookingIcon, color: "#0ea5e9", roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "STAFF", "RESERVATION"] },
+    { id: "customers", label: "Customer Management", icon: PeopleIcon, color: "#f59e0b", roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "STAFF", "RESERVATION"] },
+    { id: "payments", label: "Payment Management", icon: PaymentIcon, color: "#8b5cf6", roles: ["SUPER_ADMIN", "ADMIN", "ACCOUNTANT"] },
+    { id: "reports", label: "Reports", icon: BarChartIcon, color: "#ef4444", roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "ACCOUNTANT"] },
+    { id: "cms", label: "CMS", icon: ArticleIcon, color: "#8b5cf6", roles: ["SUPER_ADMIN", "ADMIN", "MANAGER"] },
+    { id: "settings", label: "Settings", icon: SettingsIcon, color: "#6b7280", roles: ["SUPER_ADMIN", "ADMIN"] },
 ];
 
 export default function AdminDashboard() {
@@ -56,6 +53,65 @@ export default function AdminDashboard() {
     const [activeTab, setActiveTab] = useState("dashboard");
     const [mobileOpen, setMobileOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState(null);
+    const [authLoading, setAuthLoading] = useState(true);
+    const [authError, setAuthError] = useState("");
+    const [currentUser, setCurrentUser] = useState(null);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadSession = async () => {
+            try {
+                setAuthLoading(true);
+                setAuthError("");
+
+                const response = await fetch("/api/auth/me", {
+                    method: "GET",
+                    credentials: "include",
+                });
+
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok || !payload?.user) {
+                    throw new Error(payload?.message || "You must be logged in to access the admin area.");
+                }
+
+                if (!payload.user.admin || payload.user.role === "CUSTOMER") {
+                    throw new Error("You do not have permission to access the admin area.");
+                }
+
+                if (!cancelled) {
+                    setCurrentUser(payload.user);
+                }
+            } catch (error) {
+                if (!cancelled) {
+                    setAuthError(error instanceof Error ? error.message : "Unable to validate admin session.");
+                }
+            } finally {
+                if (!cancelled) {
+                    setAuthLoading(false);
+                }
+            }
+        };
+
+        loadSession();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const visibleMenuItems = useMemo(() => {
+        if (!currentUser?.role) return [];
+        return menuItems.filter((item) => item.roles.includes(currentUser.role));
+    }, [currentUser]);
+
+    useEffect(() => {
+        if (!visibleMenuItems.length) return;
+        const tabStillAllowed = visibleMenuItems.some((item) => item.id === activeTab);
+        if (!tabStillAllowed) {
+            setActiveTab(visibleMenuItems[0].id);
+        }
+    }, [activeTab, visibleMenuItems]);
 
     const handleDrawerToggle = () => {
         setMobileOpen(!mobileOpen);
@@ -69,12 +125,29 @@ export default function AdminDashboard() {
         setAnchorEl(null);
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
         handleMenuClose();
-        navigate("/");
+        try {
+            await fetch("/api/auth/logout", {
+                method: "POST",
+                credentials: "include",
+            });
+        } catch {
+            // Ignore logout failure.
+        }
+        navigate("/signIn");
     };
 
     const renderContent = () => {
+        const allowed = visibleMenuItems.some((item) => item.id === activeTab);
+        if (!allowed) {
+            return (
+                <Alert severity="warning" sx={{ borderRadius: "12px" }}>
+                    You do not have access to this section.
+                </Alert>
+            );
+        }
+
         switch (activeTab) {
             case "dashboard":
                 return <AdminDashboardView />;
@@ -109,7 +182,7 @@ export default function AdminDashboard() {
             <Divider />
 
             <List sx={{ flex: 1, py: 2 }}>
-                {menuItems.map((item) => {
+                {visibleMenuItems.map((item) => {
                     const Icon = item.icon;
                     return (
                         <ListItem
@@ -165,12 +238,38 @@ export default function AdminDashboard() {
                         Logged in as
                     </Typography>
                     <Typography variant="body2" sx={{ fontWeight: 600, color: "#0f766e" }}>
-                        Admin User
+                        {currentUser?.name || currentUser?.email || "Admin User"}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "#64748b" }}>
+                        {String(currentUser?.role || "ADMIN").replace(/_/g, " ")}
                     </Typography>
                 </Box>
             </Box>
         </Box>
     );
+
+    if (authLoading) {
+        return (
+            <Box sx={{ minHeight: "70vh", display: "grid", placeItems: "center" }}>
+                <Box sx={{ textAlign: "center" }}>
+                    <CircularProgress />
+                    <Typography sx={{ mt: 1.5, color: "#64748b" }}>
+                        Loading admin access...
+                    </Typography>
+                </Box>
+            </Box>
+        );
+    }
+
+    if (authError) {
+        return (
+            <Box sx={{ minHeight: "70vh", display: "grid", placeItems: "center", px: 2 }}>
+                <Alert severity="error" sx={{ maxWidth: 520, borderRadius: "12px" }}>
+                    {authError}
+                </Alert>
+            </Box>
+        );
+    }
 
     return (
         <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#f9fafb" }}>
@@ -233,7 +332,7 @@ export default function AdminDashboard() {
                         </IconButton>
 
                         <Typography variant="h6" sx={{ flex: 1, fontWeight: 700, color: "#0f766e" }}>
-                            {menuItems.find((m) => m.id === activeTab)?.label || "Dashboard"}
+                            {visibleMenuItems.find((m) => m.id === activeTab)?.label || "Dashboard"}
                         </Typography>
 
                         <Box sx={{ display: "flex", gap: 1, alignItems: "center" }}>
@@ -251,7 +350,7 @@ export default function AdminDashboard() {
                                     fontWeight: 700,
                                 }}
                             >
-                                AD
+                                {String(currentUser?.name || currentUser?.email || "AD").slice(0, 2).toUpperCase()}
                             </Avatar>
 
                             <Menu

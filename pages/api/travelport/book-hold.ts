@@ -525,6 +525,27 @@ function getBookingSummaryRow(booking: {
   };
 }
 
+async function findDuplicateCommittedBooking(params: {
+  userId: number;
+  fingerprint: BookingFingerprint | null;
+}) {
+  if (!params.fingerprint) {
+    return null;
+  }
+
+  return prisma.booking.findFirst({
+    where: {
+      userId: params.userId,
+      status: "COMMITTED",
+      flightSignature: params.fingerprint.flightSignature,
+      routeKey: params.fingerprint.routeKey,
+      airlineCode: params.fingerprint.airlineCode,
+      travelDate: params.fingerprint.travelDate,
+    },
+    orderBy: { createdAt: "desc" },
+  });
+}
+
 function countPassengersFromList(passengers: Array<Record<string, unknown>>) {
   let adt = 0;
   let chd = 0;
@@ -2600,16 +2621,9 @@ export default async function handler(
       }
 
       if (commitOnlyFingerprint) {
-        const duplicateBooking = await prisma.booking.findFirst({
-          where: {
-            userId: sessionUser.id,
-            status: "COMMITTED",
-            flightSignature: commitOnlyFingerprint.flightSignature,
-            routeKey: commitOnlyFingerprint.routeKey,
-            airlineCode: commitOnlyFingerprint.airlineCode,
-            travelDate: commitOnlyFingerprint.travelDate,
-          },
-          orderBy: { createdAt: "desc" },
+        const duplicateBooking = await findDuplicateCommittedBooking({
+          userId: sessionUser.id,
+          fingerprint: commitOnlyFingerprint,
         });
 
         if (duplicateBooking) {
@@ -2852,6 +2866,48 @@ export default async function handler(
         message: "Selected flight does not contain valid product criteria",
         stage: "precommit_validation",
         destroyFlowKey: true,
+      });
+    }
+
+    const { start: dayStart, end: dayEnd } = toUtcDayBounds(new Date());
+    const committedTodayCount = await prisma.booking.count({
+      where: {
+        userId: sessionUser.id,
+        status: "COMMITTED",
+        createdAt: {
+          gte: dayStart,
+          lt: dayEnd,
+        },
+      },
+    });
+
+    if (committedTodayCount >= 10) {
+      return res.status(429).json({
+        message: "Daily booking limit reached. Maximum 10 committed bookings per day.",
+        details: "Try again tomorrow or contact support for exception handling.",
+        dailyCommittedCount: committedTodayCount,
+        apiFlowLogs,
+      });
+    }
+
+    const commitFingerprint = resolveBookingFingerprint(selectedOffer);
+    const duplicateBooking = await findDuplicateCommittedBooking({
+      userId: sessionUser.id,
+      fingerprint: commitFingerprint,
+    });
+
+    if (duplicateBooking) {
+      if (activeBookingFlowKey) {
+        clearBookingFlow(activeBookingFlowKey);
+      }
+
+      return res.status(409).json({
+        message:
+          "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
+        details: "Previous booking returned instead of creating a duplicate booking.",
+        previousBooking: getBookingSummaryRow(duplicateBooking),
+        dailyCommittedCount: committedTodayCount,
+        apiFlowLogs,
       });
     }
 
@@ -3382,51 +3438,6 @@ export default async function handler(
         bookingFlowKey: activeBookingFlowKey || null,
         bookingOfferKey: activeBookingOfferKey || null,
         bookingFlowExpiresAt: activeBookingFlowExpiresAt || null,
-        apiFlowLogs,
-      });
-    }
-
-    const { start: dayStart, end: dayEnd } = toUtcDayBounds(new Date());
-    const committedTodayCount = await prisma.booking.count({
-      where: {
-        userId: sessionUser.id,
-        status: "COMMITTED",
-        createdAt: {
-          gte: dayStart,
-          lt: dayEnd,
-        },
-      },
-    });
-
-    if (committedTodayCount >= 10) {
-      return res.status(429).json({
-        message: "Daily booking limit reached. Maximum 10 committed bookings per day.",
-        details: "Try again tomorrow or contact support for exception handling.",
-        dailyCommittedCount: committedTodayCount,
-        apiFlowLogs,
-      });
-    }
-
-    const commitFingerprint = resolveBookingFingerprint(selectedOffer);
-    const duplicateBooking = await prisma.booking.findFirst({
-      where: {
-        userId: sessionUser.id,
-        status: "COMMITTED",
-        flightSignature: commitFingerprint.flightSignature,
-        routeKey: commitFingerprint.routeKey,
-        airlineCode: commitFingerprint.airlineCode,
-        travelDate: commitFingerprint.travelDate,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (duplicateBooking) {
-      return res.status(409).json({
-        message:
-          "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
-        details: "Previous booking returned instead of creating a duplicate booking.",
-        previousBooking: getBookingSummaryRow(duplicateBooking),
-        dailyCommittedCount: committedTodayCount,
         apiFlowLogs,
       });
     }

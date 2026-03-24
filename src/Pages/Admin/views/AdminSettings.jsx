@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
     Box,
     Card,
@@ -14,11 +14,19 @@ import {
     Alert,
     Stack,
     Chip,
+    Table,
+    TableBody,
+    TableCell,
+    TableContainer,
+    TableHead,
+    TableRow,
+    MenuItem,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import SecurityIcon from "@mui/icons-material/Security";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import TuneIcon from "@mui/icons-material/Tune";
+import GroupIcon from "@mui/icons-material/Group";
 
 const sectionStyle = {
     borderRadius: "16px",
@@ -28,6 +36,17 @@ const sectionStyle = {
 
 export default function AdminSettings() {
     const [saved, setSaved] = useState(false);
+    const [teamUsers, setTeamUsers] = useState([]);
+    const [teamLoading, setTeamLoading] = useState(true);
+    const [teamAlert, setTeamAlert] = useState({ type: "", message: "" });
+    const [currentUser, setCurrentUser] = useState(null);
+    const [newTeamUser, setNewTeamUser] = useState({
+        name: "",
+        email: "",
+        password: "",
+        role: "STAFF",
+    });
+    const [creatingUser, setCreatingUser] = useState(false);
 
     const [general, setGeneral] = useState({
         siteName: "FlyJatt",
@@ -53,6 +72,71 @@ export default function AdminSettings() {
         // In a real implementation, POST to /api/cms/settings with section="admin"
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
+    };
+
+    const loadTeamUsers = async () => {
+        try {
+            setTeamLoading(true);
+            const [meRes, usersRes] = await Promise.all([
+                fetch("/api/auth/me", { credentials: "include" }),
+                fetch("/api/admin/users", { credentials: "include" }),
+            ]);
+
+            const meData = await meRes.json().catch(() => ({}));
+            const usersData = await usersRes.json().catch(() => ({}));
+
+            if (meRes.ok && meData?.user) {
+                setCurrentUser(meData.user);
+            }
+
+            if (usersRes.ok) {
+                setTeamUsers(Array.isArray(usersData?.users) ? usersData.users : []);
+            } else {
+                setTeamUsers([]);
+            }
+        } catch {
+            setTeamUsers([]);
+        } finally {
+            setTeamLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadTeamUsers();
+    }, []);
+
+    const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
+
+    const handleCreateTeamUser = async () => {
+        if (!newTeamUser.email.trim() || !newTeamUser.password.trim()) {
+            setTeamAlert({ type: "error", message: "Email and password are required." });
+            return;
+        }
+
+        try {
+            setCreatingUser(true);
+            setTeamAlert({ type: "", message: "" });
+            const response = await fetch("/api/admin/users", {
+                method: "POST",
+                credentials: "include",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(newTeamUser),
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Failed to create user");
+            }
+            setTeamAlert({ type: "success", message: "Team user created successfully." });
+            setNewTeamUser({ name: "", email: "", password: "", role: "STAFF" });
+            loadTeamUsers();
+        } catch (error) {
+            setTeamAlert({
+                type: "error",
+                message: error instanceof Error ? error.message : "Failed to create user",
+            });
+        } finally {
+            setCreatingUser(false);
+        }
     };
 
     return (
@@ -182,6 +266,134 @@ export default function AdminSettings() {
                             />
                         </Grid>
                     </Grid>
+                </CardContent>
+            </Card>
+
+            {/* Team Access / Roles */}
+            <Card sx={sectionStyle} elevation={0}>
+                <CardHeader
+                    avatar={<GroupIcon sx={{ color: "#0ea5e9" }} />}
+                    title={
+                        <Typography fontWeight={700} fontSize={15} color="#1e293b">
+                            Team Access & Roles
+                        </Typography>
+                    }
+                    sx={{ pb: 0, pt: 2.5, px: 3 }}
+                />
+                <Divider sx={{ mt: 1 }} />
+                <CardContent sx={{ px: 3, pt: 2.5 }}>
+                    {teamAlert.message ? (
+                        <Alert severity={teamAlert.type || "info"} sx={{ mb: 2, borderRadius: "10px" }}>
+                            {teamAlert.message}
+                        </Alert>
+                    ) : null}
+
+                    <Typography sx={{ color: "#64748b", fontSize: 13, mb: 2 }}>
+                        Only one Super Admin is allowed and protected from edit/delete. Super Admin can create Admin, Manager, Staff, Accountant, and Reservation users.
+                    </Typography>
+
+                    {isSuperAdmin ? (
+                        <Grid container spacing={1.4} sx={{ mb: 2.2 }}>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Name"
+                                    value={newTeamUser.name}
+                                    onChange={(e) => setNewTeamUser((p) => ({ ...p, name: e.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Email"
+                                    value={newTeamUser.email}
+                                    onChange={(e) => setNewTeamUser((p) => ({ ...p, email: e.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={2}>
+                                <TextField
+                                    fullWidth
+                                    size="small"
+                                    label="Password"
+                                    type="password"
+                                    value={newTeamUser.password}
+                                    onChange={(e) => setNewTeamUser((p) => ({ ...p, password: e.target.value }))}
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={2}>
+                                <TextField
+                                    fullWidth
+                                    select
+                                    size="small"
+                                    label="Role"
+                                    value={newTeamUser.role}
+                                    onChange={(e) => setNewTeamUser((p) => ({ ...p, role: e.target.value }))}
+                                >
+                                    <MenuItem value="ADMIN">Admin</MenuItem>
+                                    <MenuItem value="MANAGER">Manager</MenuItem>
+                                    <MenuItem value="STAFF">Staff</MenuItem>
+                                    <MenuItem value="ACCOUNTANT">Accountant</MenuItem>
+                                    <MenuItem value="RESERVATION">Reservation</MenuItem>
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} sm={2}>
+                                <Button
+                                    fullWidth
+                                    variant="contained"
+                                    onClick={handleCreateTeamUser}
+                                    disabled={creatingUser}
+                                    sx={{ height: 40, textTransform: "none", fontWeight: 700 }}
+                                >
+                                    {creatingUser ? "Adding..." : "Add User"}
+                                </Button>
+                            </Grid>
+                        </Grid>
+                    ) : (
+                        <Alert severity="info" sx={{ mb: 2, borderRadius: "10px" }}>
+                            You can view team access, but only Super Admin can create/update/delete team users.
+                        </Alert>
+                    )}
+
+                    <TableContainer>
+                        <Table size="small">
+                            <TableHead>
+                                <TableRow sx={{ bgcolor: "#f8fafc" }}>
+                                    <TableCell sx={{ fontWeight: 700 }}>Name</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Email</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Role</TableCell>
+                                    <TableCell sx={{ fontWeight: 700 }}>Type</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {teamLoading ? (
+                                    <TableRow>
+                                        <TableCell colSpan={4} align="center">Loading team users...</TableCell>
+                                    </TableRow>
+                                ) : !teamUsers.length ? (
+                                    <TableRow>
+                                        <TableCell colSpan={4} align="center">No admin users found.</TableCell>
+                                    </TableRow>
+                                ) : (
+                                    teamUsers.map((item) => (
+                                        <TableRow key={item.id} hover>
+                                            <TableCell>{item.name || "-"}</TableCell>
+                                            <TableCell>{item.email}</TableCell>
+                                            <TableCell>{item.role}</TableCell>
+                                            <TableCell>
+                                                {item.role === "SUPER_ADMIN" ? (
+                                                    <Chip size="small" label="Protected" sx={{ bgcolor: "rgba(239,68,68,0.14)", color: "#dc2626", fontWeight: 700 }} />
+                                                ) : (
+                                                    <Chip size="small" label="Editable" sx={{ bgcolor: "rgba(14,165,233,0.14)", color: "#0284c7", fontWeight: 700 }} />
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))
+                                )}
+                            </TableBody>
+                        </Table>
+                    </TableContainer>
                 </CardContent>
             </Card>
 

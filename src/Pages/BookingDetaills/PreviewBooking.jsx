@@ -1056,41 +1056,35 @@ const PreviewBooking = () => {
       }
       if (error?.status === 409 && error?.payload?.previousBooking) {
         const previous = error.payload.previousBooking || {};
+        const dailyCommittedCount = Number(error?.payload?.dailyCommittedCount || 0);
+        const travelDate = previous?.travelDate || "N/A";
+        const createdAt = previous?.createdAt
+          ? new Date(previous.createdAt).toLocaleString()
+          : "N/A";
         const result = await Swal.fire({
           icon: "info",
           title: "Duplicate Booking Blocked",
-          html: `Previous booking found for same flight/date.<br/>Locator: <b>${previous?.locator || "N/A"
-            }</b><br/>Reservation: <b>${previous?.reservationId || "N/A"}</b><br/>Booking ID: <b>${previous?.id || "N/A"
-            }</b>`,
+          html: `A matching booking already exists, so a new booking session was not started.<br/><br/>Booking ID: <b>${previous?.id || "N/A"
+            }</b><br/>Locator: <b>${previous?.locator || "N/A"}</b><br/>Reservation: <b>${previous?.reservationId || "N/A"
+            }</b><br/>Route: <b>${previous?.routeKey || "N/A"}</b><br/>Airline: <b>${previous?.airlineCode || "N/A"
+            }</b><br/>Travel date: <b>${travelDate}</b><br/>Booked at: <b>${createdAt}</b><br/>Today's committed bookings: <b>${dailyCommittedCount}</b>`,
           showCancelButton: true,
           confirmButtonText: "Open Previous Booking",
           cancelButtonText: "Close",
+          width: 640,
         });
 
         if (result.isConfirmed) {
           const locator = String(previous?.locator || "").trim();
           const reservationId = String(previous?.reservationId || "").trim();
           const bookingId = String(previous?.id || "").trim();
-          const queryId = encodeURIComponent(bookingId || locator || reservationId);
-
-          if (!locator && !reservationId) {
-            // Fallback route for account details when no locator/reservation id is available.
-            navigate(`/my-account/bookingdetails?id=${queryId}`);
-          } else {
-            navigate(
-              `/bookingconfirmation?pnr=${encodeURIComponent(
-                locator || reservationId
-              )}&reservationId=${encodeURIComponent(
-                reservationId
-              )}&bookingId=${encodeURIComponent(bookingId)}`,
-              {
-                state: {
-                  duplicateBooking: true,
-                  previousBooking: previous,
-                },
-              }
-            );
-          }
+          const queryId = encodeURIComponent(bookingId || locator || reservationId || "");
+          navigate(`/my-account/bookingdetails?id=${queryId}`, {
+            state: {
+              duplicateBooking: true,
+              previousBooking: previous,
+            },
+          });
         }
         return;
       }

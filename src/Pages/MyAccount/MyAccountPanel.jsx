@@ -19,6 +19,7 @@ import {
     TableHead,
     TableRow,
     TextField,
+    MenuItem,
     Typography,
 } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
@@ -35,7 +36,8 @@ import PaymentIcon from "@mui/icons-material/Payment";
 import GroupIcon from "@mui/icons-material/Group";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import HelpCenterIcon from "@mui/icons-material/HelpCenter";
-import { fetchTravelBuddies } from "../../utils/travelBuddyApi";
+import { fetchTravelBuddies, saveTravelBuddy } from "../../utils/travelBuddyApi";
+import CountryList from "../fakeData/CountryList";
 
 const TABS = [
     { id: "Dashboard", label: "Dashboard", icon: DashboardIcon },
@@ -374,6 +376,23 @@ export default function MyAccountPanel() {
     const [bookings, setBookings] = useState([]);
     const [transactions, setTransactions] = useState([]);
     const [travelBuddies, setTravelBuddies] = useState([]);
+    const [showAddTravelBuddy, setShowAddTravelBuddy] = useState(false);
+    const [addTravelBuddyForm, setAddTravelBuddyForm] = useState({
+        title: "Mr",
+        paxtype: "ADT",
+        firstName: "",
+        lastName: "",
+        gender: "Male",
+        nationality: "BD",
+        dob: "",
+        passport: "",
+        passportexp: "",
+    });
+    const [addTravelBuddyState, setAddTravelBuddyState] = useState({
+        saving: false,
+        error: "",
+        success: "",
+    });
 
     const [selectedDateKey, setSelectedDateKey] = useState(moment().format("YYYY-MM-DD"));
     const [currentMonth, setCurrentMonth] = useState(() => {
@@ -412,6 +431,7 @@ export default function MyAccountPanel() {
         if (normalized === "bookings") setActiveTab("Booking History");
         if (normalized === "profile") setActiveTab("Personal Information");
         if (normalized === "payments") setActiveTab("Payment History");
+        if (normalized === "travelbuddy") setActiveTab("Travel Buddy");
     }, [location.search]);
 
     useEffect(() => {
@@ -1455,16 +1475,194 @@ export default function MyAccountPanel() {
         </Paper>
     );
 
+    const handleSaveTravelBuddy = async (event) => {
+        event.preventDefault();
+        setAddTravelBuddyState({ saving: false, error: "", success: "" });
+
+        if (!toText(addTravelBuddyForm.title) || !toText(addTravelBuddyForm.firstName) || !toText(addTravelBuddyForm.lastName) || !toText(addTravelBuddyForm.paxtype)) {
+            setAddTravelBuddyState({
+                saving: false,
+                error: "Title, first name, last name and passenger type are required.",
+                success: "",
+            });
+            return;
+        }
+
+        try {
+            setAddTravelBuddyState({ saving: true, error: "", success: "" });
+            await saveTravelBuddy({ token, payload: addTravelBuddyForm });
+            const buddyData = await fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] }));
+            setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
+            setAddTravelBuddyForm({
+                title: "Mr",
+                paxtype: "ADT",
+                firstName: "",
+                lastName: "",
+                gender: "Male",
+                nationality: "BD",
+                dob: "",
+                passport: "",
+                passportexp: "",
+            });
+            setAddTravelBuddyState({ saving: false, error: "", success: "Travel buddy added successfully." });
+            setShowAddTravelBuddy(false);
+        } catch (error) {
+            setAddTravelBuddyState({
+                saving: false,
+                error: error instanceof Error ? error.message : "Unable to save travel buddy.",
+                success: "",
+            });
+        }
+    };
+
     const renderTravelBuddy = () => (
         <Paper sx={{ ...panelStyle, p: 2.2 }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                 <Typography sx={sectionTitleStyle}>
                     Travel Buddy
                 </Typography>
-                <Button variant="contained" onClick={() => navigate("/myprofile/addtravler")}>
-                    Add Travel Buddy
+                <Button variant="contained" onClick={() => setShowAddTravelBuddy((prev) => !prev)}>
+                    {showAddTravelBuddy ? "Close Form" : "Add Travel Buddy"}
                 </Button>
             </Box>
+
+            {addTravelBuddyState.success ? <Alert sx={{ mb: 1.2 }}>{addTravelBuddyState.success}</Alert> : null}
+            {addTravelBuddyState.error ? <Alert severity="error" sx={{ mb: 1.2 }}>{addTravelBuddyState.error}</Alert> : null}
+
+            {showAddTravelBuddy ? (
+                <Paper sx={{ p: 1.6, mb: 1.5, border: "1px solid rgba(0, 154, 214, 0.2)", borderRadius: "12px" }}>
+                    <Box component="form" onSubmit={handleSaveTravelBuddy} sx={{ display: "grid", gap: 1.1 }}>
+                        <Grid container spacing={1.2}>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Title"
+                                    value={addTravelBuddyForm.title}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, title: event.target.value }))
+                                    }
+                                >
+                                    {["Mr", "Mrs", "Miss", "Ms"].map((title) => (
+                                        <MenuItem key={title} value={title}>{title}</MenuItem>
+                                    ))}
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Passenger Type"
+                                    value={addTravelBuddyForm.paxtype}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, paxtype: event.target.value }))
+                                    }
+                                >
+                                    <MenuItem value="ADT">Adult</MenuItem>
+                                    <MenuItem value="CHD">Child</MenuItem>
+                                    <MenuItem value="INF">Infant</MenuItem>
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    label="First Name"
+                                    value={addTravelBuddyForm.firstName}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, firstName: event.target.value }))
+                                    }
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    label="Last Name"
+                                    value={addTravelBuddyForm.lastName}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, lastName: event.target.value }))
+                                    }
+                                />
+                            </Grid>
+
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Gender"
+                                    value={addTravelBuddyForm.gender}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, gender: event.target.value }))
+                                    }
+                                >
+                                    <MenuItem value="Male">Male</MenuItem>
+                                    <MenuItem value="Female">Female</MenuItem>
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    select
+                                    fullWidth
+                                    label="Nationality"
+                                    value={addTravelBuddyForm.nationality}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, nationality: event.target.value }))
+                                    }
+                                >
+                                    {CountryList.map((country) => (
+                                        <MenuItem key={country.code} value={country.code}>
+                                            {country.name} ({country.code})
+                                        </MenuItem>
+                                    ))}
+                                </TextField>
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    type="date"
+                                    fullWidth
+                                    label="Date Of Birth"
+                                    InputLabelProps={{ shrink: true }}
+                                    value={addTravelBuddyForm.dob}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, dob: event.target.value }))
+                                    }
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    fullWidth
+                                    label="Passport Number"
+                                    value={addTravelBuddyForm.passport}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, passport: event.target.value }))
+                                    }
+                                />
+                            </Grid>
+                            <Grid item xs={12} sm={3}>
+                                <TextField
+                                    type="date"
+                                    fullWidth
+                                    label="Passport Expiry"
+                                    InputLabelProps={{ shrink: true }}
+                                    value={addTravelBuddyForm.passportexp}
+                                    onChange={(event) =>
+                                        setAddTravelBuddyForm((prev) => ({ ...prev, passportexp: event.target.value }))
+                                    }
+                                />
+                            </Grid>
+                        </Grid>
+
+                        <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
+                            <Button variant="outlined" onClick={() => setShowAddTravelBuddy(false)}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" variant="contained" disabled={addTravelBuddyState.saving}>
+                                {addTravelBuddyState.saving ? "Saving..." : "Save Traveler"}
+                            </Button>
+                        </Box>
+                    </Box>
+                </Paper>
+            ) : null}
+
             <TableContainer sx={{ mt: 1.4 }}>
                 <Table size="small">
                     <TableHead>

@@ -10,6 +10,8 @@ type SessionUser = {
   id: number;
   email: string;
   name: string;
+  admin: boolean;
+  role: string;
 };
 
 type SessionPayload = {

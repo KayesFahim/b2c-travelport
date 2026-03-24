@@ -39,6 +39,7 @@ import ArticleIcon from "@mui/icons-material/Article";
 import ContactMailIcon from "@mui/icons-material/ContactMail";
 import InfoIcon from "@mui/icons-material/Info";
 import HomeIcon from "@mui/icons-material/Home";
+import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 
 const BLOG_TAGS = ["Travel Tips", "Fare Rules", "Airline Updates", "Visa Insights", "Travel Tech", "Destination", "News"];
 
@@ -642,6 +643,13 @@ export default function CmsManagement() {
         { label: "Homepage", icon: <HomeIcon fontSize="small" /> },
     ];
 
+    const previewLinks = [
+        { label: "Blogs", href: "/blogs", tabIndex: 0 },
+        { label: "Contact", href: "/contact", tabIndex: 1 },
+        { label: "About Us", href: "/about-us", tabIndex: 2 },
+        { label: "Homepage", href: "/", tabIndex: 3 },
+    ];
+
     return (
         <Box>
             <Stack direction="row" alignItems="center" spacing={1} mb={3}>
@@ -665,6 +673,58 @@ export default function CmsManagement() {
                     ))}
                 </Tabs>
             </Box>
+
+            <Card elevation={0} sx={{ ...cardStyle, mb: 2.2 }}>
+                <CardContent sx={{ py: 1.8 }}>
+                    <Stack
+                        direction={{ xs: "column", md: "row" }}
+                        alignItems={{ xs: "flex-start", md: "center" }}
+                        justifyContent="space-between"
+                        spacing={1.2}
+                    >
+                        <Typography sx={{ fontWeight: 700, color: "#334155", fontSize: 14 }}>
+                            Live Preview Links
+                        </Typography>
+                        <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1}>
+                            {previewLinks.map((item) => {
+                                const isActive = tab === item.tabIndex;
+                                return (
+                                    <Button
+                                        key={item.label}
+                                        component="a"
+                                        href={item.href}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        size="small"
+                                        endIcon={<OpenInNewIcon sx={{ fontSize: 14 }} />}
+                                        variant={isActive ? "contained" : "outlined"}
+                                        sx={{
+                                            borderRadius: "999px",
+                                            textTransform: "none",
+                                            fontWeight: 700,
+                                            ...(isActive
+                                                ? {
+                                                    bgcolor: "#0d9488",
+                                                    "&:hover": { bgcolor: "#0b8177" },
+                                                }
+                                                : {
+                                                    color: "#0f766e",
+                                                    borderColor: "rgba(13,148,136,0.35)",
+                                                    "&:hover": {
+                                                        borderColor: "#0f766e",
+                                                        bgcolor: "rgba(13,148,136,0.05)",
+                                                    },
+                                                }),
+                                        }}
+                                    >
+                                        {item.label}
+                                    </Button>
+                                );
+                            })}
+                        </Stack>
+                    </Stack>
+                </CardContent>
+            </Card>
 
             {tab === 0 && <BlogTab />}
             {tab === 1 && <ContactInfoTab />}

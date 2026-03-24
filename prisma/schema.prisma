@@ -16,6 +16,16 @@ enum BookingStatus {
   TICKETED
 }
 
+enum AccessRole {
+  CUSTOMER
+  SUPER_ADMIN
+  ADMIN
+  MANAGER
+  STAFF
+  ACCOUNTANT
+  RESERVATION
+}
+
 model User {
   id                     Int           @id @default(autoincrement())
   email                  String        @unique
@@ -30,11 +40,15 @@ model User {
   passportExpiryDate     DateTime?
   nationality            String?
   gender                 String?
+  admin                  Boolean       @default(false)
+  role                   AccessRole    @default(CUSTOMER)
   passwordHash           String
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
   bookings               Booking[]
   travelBuddies          TravelBuddy[]
+
+  @@index([admin, role])
 }
 
 model Booking {

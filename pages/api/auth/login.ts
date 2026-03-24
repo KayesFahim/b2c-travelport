@@ -14,6 +14,8 @@ type SuccessResponse = {
     id: number;
     email: string;
     name: string;
+    admin: boolean;
+    role: string;
   };
 };
 
@@ -40,7 +42,7 @@ export default async function handler(
       return res.status(400).json({ message: "Email and password are required." });
     }
 
-    const user = await prisma.user.findUnique({ where: { email } });
+    let user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
@@ -50,10 +52,32 @@ export default async function handler(
       return res.status(401).json({ message: "Invalid email or password." });
     }
 
+    const configuredSuperAdminEmail = normalizeEmail(process.env.SUPER_ADMIN_EMAIL);
+    if (configuredSuperAdminEmail && email === configuredSuperAdminEmail) {
+      const superAdminCount = await prisma.user.count({
+        where: { role: "SUPER_ADMIN", admin: true },
+      });
+
+      if (superAdminCount > 1) {
+        return res.status(500).json({
+          message: "System guard failed: more than one Super Admin exists.",
+        });
+      }
+
+      if (superAdminCount === 0 || user.role !== "SUPER_ADMIN" || user.admin !== true) {
+        user = await prisma.user.update({
+          where: { id: user.id },
+          data: { role: "SUPER_ADMIN", admin: true },
+        });
+      }
+    }
+
     const session = await createSession(req, res, {
       id: user.id,
       email: user.email,
       name: user.name || "Traveler",
+      admin: user.admin,
+      role: user.role,
     });
 
     return res.status(200).json({
@@ -63,6 +87,8 @@ export default async function handler(
         id: user.id,
         email: user.email,
         name: user.name || "Traveler",
+        admin: user.admin,
+        role: user.role,
       },
     });
   } catch (error) {

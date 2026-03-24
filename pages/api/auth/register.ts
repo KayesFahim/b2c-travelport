@@ -14,6 +14,8 @@ type SuccessResponse = {
     id: number;
     email: string;
     name: string;
+    admin: boolean;
+    role: string;
   };
 };
 
@@ -49,11 +51,30 @@ export default async function handler(
       return res.status(409).json({ message: "Account already exists for this email." });
     }
 
+    const configuredSuperAdminEmail = normalizeEmail(process.env.SUPER_ADMIN_EMAIL);
+    let role: "CUSTOMER" | "SUPER_ADMIN" = "CUSTOMER";
+    let admin = false;
+
+    if (configuredSuperAdminEmail && email === configuredSuperAdminEmail) {
+      const superAdminCount = await prisma.user.count({
+        where: { role: "SUPER_ADMIN", admin: true },
+      });
+
+      if (superAdminCount > 0) {
+        return res.status(409).json({ message: "Super Admin already exists." });
+      }
+
+      role = "SUPER_ADMIN";
+      admin = true;
+    }
+
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         email,
         name,
+        admin,
+        role,
         passwordHash,
       },
     });
@@ -62,6 +83,8 @@ export default async function handler(
       id: user.id,
       email: user.email,
       name: user.name || "Traveler",
+      admin: user.admin,
+      role: user.role,
     });
 
     return res.status(201).json({
@@ -71,6 +94,8 @@ export default async function handler(
         id: user.id,
         email: user.email,
         name: user.name || "Traveler",
+        admin: user.admin,
+        role: user.role,
       },
     });
   } catch (error) {

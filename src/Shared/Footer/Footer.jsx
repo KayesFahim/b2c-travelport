@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Box, Button, Chip, Container, TextField, Typography } from "@mui/material";
 import { Link as RouterLink } from "react-router-dom";
 import FacebookRoundedIcon from "@mui/icons-material/FacebookRounded";
@@ -19,6 +19,29 @@ const linkStyle = {
 
 const Footer = () => {
   const currentYear = new Date().getFullYear();
+  const [homepageSettings, setHomepageSettings] = useState({
+    contactEmail: "info@flyjatt.com",
+    contactPhone: "",
+    copyright: "",
+  });
+
+  useEffect(() => {
+    fetch("/api/homepage")
+      .then((response) => response.json())
+      .then((payload) => {
+        if (payload && typeof payload === "object") {
+          setHomepageSettings((prev) => ({
+            ...prev,
+            contactEmail: String(payload.contactEmail || prev.contactEmail),
+            contactPhone: String(payload.contactPhone || ""),
+            copyright: String(payload.copyright || ""),
+          }));
+        }
+      })
+      .catch(() => {
+        // Keep defaults when API is unavailable.
+      });
+  }, []);
 
   return (
     <Box
@@ -143,9 +166,14 @@ const Footer = () => {
               <RouterLink to="/privacypolicy" style={linkStyle}>
                 Privacy Policy
               </RouterLink>
-              <a href="mailto:info@flyjatt.com" style={linkStyle}>
-                info@flyjatt.com
+              <a href={`mailto:${homepageSettings.contactEmail}`} style={linkStyle}>
+                {homepageSettings.contactEmail}
               </a>
+              {homepageSettings.contactPhone ? (
+                <Typography sx={{ fontSize: "13px", color: "var(--footer-text-color)" }}>
+                  {homepageSettings.contactPhone}
+                </Typography>
+              ) : null}
               <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, mt: 0.6 }}>
                 <LanguageRoundedIcon sx={{ fontSize: 16, color: "var(--icons-color)" }} />
                 <Typography sx={{ fontSize: "13px", color: "var(--footer-text-color)" }}>
@@ -238,7 +266,7 @@ const Footer = () => {
           }}
         >
           <Typography sx={{ fontSize: "13px", color: "var(--footer-text-color)" }}>
-            Copyright © {currentYear} Fly Jatt. All rights reserved.
+            {homepageSettings.copyright || `Copyright © ${currentYear} Fly Jatt. All rights reserved.`}
           </Typography>
           <Box sx={{ display: "flex", gap: 2 }}>
             <RouterLink to="/privacypolicy" style={{ ...linkStyle, fontSize: "13px" }}>

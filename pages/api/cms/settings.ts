@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../src/server/prisma";
+import { canManageCms, deny, getActor } from "@/server/rbac";
 
 // GET  /api/cms/settings?section=contact|about|homepage
 // PUT  /api/cms/settings  body: { section, settings: { key: value, ... } }
@@ -25,6 +26,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     if (req.method === "PUT") {
         try {
+            const actor = await getActor(req);
+            if (!canManageCms(actor)) {
+                return deny(res, "Only Super Admin/Admin/Manager can update CMS settings");
+            }
             const { section, settings } = req.body ?? {};
             if (!section || typeof settings !== "object" || settings === null) {
                 return res.status(400).json({ message: "section and settings object required" });

@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
+import { isProtectedSuperAdmin } from "@/server/rbac";
 
 type SuccessResponse = {
     message: string;
@@ -33,6 +34,17 @@ export default async function handler(
         const sessionUser = await getSessionUser(req);
         if (!sessionUser?.id) {
             return res.status(401).json({ message: "Login required" });
+        }
+
+        const protectedUser = await prisma.user.findUnique({
+            where: { id: sessionUser.id },
+            select: { admin: true, role: true },
+        });
+
+        if (protectedUser && isProtectedSuperAdmin(protectedUser)) {
+            return res.status(403).json({
+                message: "Super Admin account is protected and cannot be edited",
+            });
         }
 
         const body = (req.body ?? {}) as Record<string, unknown>;

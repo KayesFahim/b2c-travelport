@@ -1,5 +1,5 @@
 import React from "react";
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import FlightIcon from "@mui/icons-material/Flight";
 import NavBar from "../../NavBar/NavBar";
 import { Box } from "@mui/material";
@@ -18,34 +18,34 @@ const NoBookingsFound = () => {
           height: "400px",
         }}
       >
-        
+
         <div
           style={{
             position: "relative",
             width: "200px",
             height: "200px",
             border: "3px solid var(--primary-button)",
-            borderRadius: "50%", 
+            borderRadius: "50%",
           }}
         >
-    
+
           <motion.div
             style={{
               position: "absolute",
               width: "20px",
               height: "20px",
-              top: "50%", 
-              left: "50%", 
-              transform: "translate(-50%, -50%)", 
+              top: "50%",
+              left: "50%",
+              transform: "translate(-50%, -50%)",
               color: "var(--primary-color)",
             }}
             animate={{
-              rotate: [0, 360], 
+              rotate: [0, 360],
             }}
             transition={{
-              duration: 4, 
-              ease: "linear", 
-              repeat: Infinity, 
+              duration: 4,
+              ease: "linear",
+              repeat: Infinity,
             }}
           >
             <FlightIcon
@@ -53,7 +53,7 @@ const NoBookingsFound = () => {
             />
           </motion.div>
 
-       
+
           <div
             style={{
               position: "absolute",
