@@ -209,6 +209,20 @@ const MEAL_SSR_OPTIONS = [
   { code: "RVML", label: "Vegetarian Raw Meal" },
 ];
 
+const getMealSsrLabel = (code) => {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) return "";
+  const row = MEAL_SSR_OPTIONS.find((item) => item.code === normalized);
+  return row ? `${row.code} - ${row.label}` : normalized;
+};
+
+const getDisabilitySsrLabel = (code) => {
+  const normalized = String(code || "").trim().toUpperCase();
+  if (!normalized) return "";
+  const row = DISABILITY_SSR_OPTIONS.find((item) => item.code === normalized);
+  return row ? `${row.code} - ${row.label}` : normalized;
+};
+
 const getMealSsrOptionsByPaxType = (paxTypeCode) => {
   const normalizedPaxType = normalizePaxTypeCode(paxTypeCode);
   return MEAL_SSR_OPTIONS.filter((item) => {
@@ -752,24 +766,42 @@ const PreviewBooking = () => {
     if (!specialRequestDialogOpen) return;
     setSpecialRequestSelections((prevState) => {
       const nextState = { ...prevState };
-      specialRequestTravelers.forEach((traveler) => {
+      specialRequestTravelers.forEach((traveler, index) => {
         const existing = nextState[traveler.travelerIdentifier] || {};
+        const passenger = passengers[index] || {};
         const allowedMealCodes = new Set(
           getMealSsrOptionsByPaxType(traveler.paxTypeCode).map((item) => item.code)
         );
-        const normalizedMealCode = String(existing.mealCode || "").trim();
+        const normalizedMealCode = String(
+          existing.mealCode ||
+          passenger?.MealSSRCode ||
+          passenger?.mealSSRCode ||
+          passenger?.specialMealCode ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
         const mealCodeToKeep =
           normalizedMealCode && allowedMealCodes.has(normalizedMealCode)
             ? normalizedMealCode
             : "";
+        const normalizedDisabilityCode = String(
+          existing.disabilityCode ||
+          passenger?.DisabilitySSRCode ||
+          passenger?.disabilitySSRCode ||
+          passenger?.specialDisabilityCode ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
         nextState[traveler.travelerIdentifier] = {
           mealCode: mealCodeToKeep,
-          disabilityCode: String(existing.disabilityCode || "").trim(),
+          disabilityCode: normalizedDisabilityCode,
         };
       });
       return nextState;
     });
-  }, [specialRequestDialogOpen, specialRequestTravelers]);
+  }, [specialRequestDialogOpen, specialRequestTravelers, passengers]);
 
   const isCommittedForCurrentPrecommit = Boolean(
     preCommitData?.reservationId &&
@@ -1016,25 +1048,7 @@ const PreviewBooking = () => {
         : dedupeIdentifiers(
           extractOfferIdentifiersFromAddOfferResponse(responseData?.addOfferResponse)
         );
-      const primaryOfferIdentifier = String(offerIdentifiers[0] || "").trim();
-      const automaticSpecialRequests = buildSpecialRequestsFromPassengers({
-        passengers,
-        travelerIdentifiers,
-        offerIdentifier: primaryOfferIdentifier,
-      });
-
-      if (String(reservationId).trim() && automaticSpecialRequests.length > 0) {
-        try {
-          const specialResponse = await addTravelportSpecialServices({
-            reservationId: String(reservationId),
-            offerIdentifier: primaryOfferIdentifier,
-            specialRequests: automaticSpecialRequests,
-          });
-          setSpecialRequestResponse(specialResponse || null);
-        } catch (specialError) {
-          console.warn("Automatic special service submission failed", specialError);
-        }
-      }
+      setSpecialRequestResponse(responseData?.specialServiceResponse || null);
 
       await Swal.fire({
         icon: "success",
@@ -1252,6 +1266,22 @@ const PreviewBooking = () => {
                   </Typography>
                   <Typography sx={{ fontSize: 12, color: "#63748E" }}>
                     Nationality: {passenger?.PassportNationality || "N/A"}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                    Meal SSR: {getMealSsrLabel(
+                      passenger?.MealSSRCode ||
+                      passenger?.mealSSRCode ||
+                      passenger?.specialMealCode ||
+                      ""
+                    ) || "None"}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#63748E" }}>
+                    Disability SSR: {getDisabilitySsrLabel(
+                      passenger?.DisabilitySSRCode ||
+                      passenger?.disabilitySSRCode ||
+                      passenger?.specialDisabilityCode ||
+                      ""
+                    ) || "None"}
                   </Typography>
                 </Box>
               </Grid>

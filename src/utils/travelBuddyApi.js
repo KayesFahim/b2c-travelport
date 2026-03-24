@@ -68,3 +68,33 @@ export async function saveTravelBuddy({ token, payload }) {
         return parseJson(response);
     }
 }
+
+export async function updateTravelBuddy({ token, payload }) {
+    const body = JSON.stringify(payload || {});
+
+    try {
+        const response = await fetch("/api/travel-buddy/updateTravelBuddy", {
+            method: "PATCH",
+            credentials: "include",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body,
+        });
+
+        return await parseJson(response);
+    } catch (localError) {
+        if (!token) throw localError;
+
+        const response = await fetch(`${normalizedBaseUrl()}/travel-buddy/updateTravelBuddy`, {
+            method: "PATCH",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+            },
+            body,
+        });
+
+        return parseJson(response);
+    }
+}

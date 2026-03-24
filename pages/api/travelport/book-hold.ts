@@ -71,6 +71,7 @@ type SuccessResponse = {
   addOfferResponse: Record<string, unknown> | null;
   travelerResponse: Record<string, unknown> | null;
   seatOfferResponse: Record<string, unknown> | null;
+  specialServiceResponse?: Record<string, unknown> | null;
   primaryContactResponse: Record<string, unknown> | null;
   documentOverrideResponse?: Record<string, unknown> | null;
   formOfPaymentResponse?: Record<string, unknown> | null;
@@ -1902,6 +1903,68 @@ function resolveTravelerRefIds(travelers: Array<Record<string, unknown>>): strin
   );
 }
 
+function normalizeSsrCode(value: unknown): string {
+  const code = toText(value).toUpperCase();
+  if (!code) return "";
+  return /^[A-Z0-9]{3,5}$/.test(code) ? code : "";
+}
+
+function buildSpecialRequestsFromPassengers(params: {
+  offerIdentifier: string;
+  travelerIdentifiers: string[];
+  passengers: Array<Record<string, unknown>>;
+}) {
+  const offerIdentifier = toText(params.offerIdentifier);
+  if (!offerIdentifier || !params.travelerIdentifiers.length || !params.passengers.length) {
+    return [] as Array<{
+      travelerIdentifier: string;
+      offerIdentifier: string;
+      ssrCode: string;
+    }>;
+  }
+
+  const requests: Array<{
+    travelerIdentifier: string;
+    offerIdentifier: string;
+    ssrCode: string;
+  }> = [];
+  const dedupe = new Set<string>();
+
+  params.travelerIdentifiers.forEach((travelerIdentifier, index) => {
+    const passenger = params.passengers[index] || {};
+    const mealCode = normalizeSsrCode(
+      getValueByKeys(passenger, [
+        "MealSSRCode",
+        "mealSSRCode",
+        "specialMealCode",
+        "mealCode",
+      ])
+    );
+    const disabilityCode = normalizeSsrCode(
+      getValueByKeys(passenger, [
+        "DisabilitySSRCode",
+        "disabilitySSRCode",
+        "specialDisabilityCode",
+        "disabilityCode",
+      ])
+    );
+
+    [mealCode, disabilityCode].forEach((ssrCode) => {
+      if (!ssrCode) return;
+      const key = `${travelerIdentifier}::${offerIdentifier}::${ssrCode}`;
+      if (dedupe.has(key)) return;
+      dedupe.add(key);
+      requests.push({
+        travelerIdentifier,
+        offerIdentifier,
+        ssrCode,
+      });
+    });
+  });
+
+  return requests;
+}
+
 function resolvePreparedTravelerRefIds(payload: Record<string, unknown>): string[] {
   const directRefIds = getArrayByKeys(payload, ["travelerRefIds", "TravelerRefIds"])
     .map((value) => toText(value))
@@ -2280,6 +2343,96 @@ async function applyDocumentOverrides(params: {
     errorMessage:
       extractTravelportErrorMessage(overridePayload) ||
       "Unable to apply document override commission.",
+  };
+}
+
+async function applySpecialServices(params: {
+  bookingBaseUrl: string;
+  reservationId: string;
+  headers: Record<string, string>;
+  specialRequests: Array<{
+    travelerIdentifier: string;
+    offerIdentifier: string;
+    ssrCode: string;
+  }>;
+  logs?: ApiFlowLog[];
+}) {
+  if (!params.specialRequests.length) {
+    return {
+      attempted: false,
+      ok: true,
+      status: 0,
+      payload: null,
+      errorMessage: "",
+    };
+  }
+
+  const specialUrl = `${params.bookingBaseUrl}/specialservices/reservationworkbench/${encodeURIComponent(
+    params.reservationId
+  )}/specialservices/list`;
+
+  const specialBody = {
+    "@type": "SpecialServiceListRequest",
+    SpecialServiceID: params.specialRequests.map((item, index) => ({
+      "@type": "SpecialService",
+      id: `specialService_${index + 1}`,
+      Identifier: {
+        authority: "Travelport",
+        value: `${params.reservationId}_specialService_${index + 1}`,
+      },
+      AppliesTo: {
+        "@type": "AppliesToOffer",
+        OfferIdentifier: [
+          {
+            id: `offer_${index + 1}`,
+            offerRef: `offer_${index + 1}`,
+            Identifier: {
+              authority: "Travelport",
+              value: item.offerIdentifier,
+            },
+          },
+        ],
+      },
+      TravelerIdentifier: {
+        id: `trav_${index + 1}`,
+        TravelerRef: `trav_${index + 1}`,
+        Identifier: {
+          authority: "Travelport",
+          value: item.travelerIdentifier,
+        },
+      },
+      SSRCode: item.ssrCode,
+    })),
+  };
+
+  const response = await fetch(specialUrl, {
+    method: "POST",
+    headers: params.headers,
+    body: JSON.stringify(specialBody),
+  });
+  const payload = (await parseJsonSafe(response)) as Record<string, unknown>;
+
+  if (params.logs) {
+    pushApiFlowLog({
+      logs: params.logs,
+      step: "precommit_special_services",
+      method: "POST",
+      url: specialUrl,
+      requestBody: specialBody,
+      status: response.status,
+      ok: response.ok && !hasTravelportErrors(payload),
+      responseBody: payload,
+    });
+  }
+
+  return {
+    attempted: true,
+    ok: response.ok && !hasTravelportErrors(payload),
+    status: response.status,
+    payload,
+    errorMessage:
+      extractTravelportErrorMessage(payload) ||
+      "Unable to add special service requests.",
   };
 }
 
@@ -3073,26 +3226,7 @@ export default async function handler(
         errorMessage: string;
       }
       | null = null;
-
-    documentOverrideResult = await applyDocumentOverrides({
-      bookingBaseUrl,
-      reservationId,
-      headers: commonHeaders,
-      travelerRefIds,
-      commissionPercent: resolveCommissionPercent(body),
-      logs: apiFlowLogs,
-    });
-
-    if (!documentOverrideResult.ok) {
-      return logAndRespondError({
-        status: 502,
-        message: `Travelport document override commission failed (${documentOverrideResult.status})`,
-        details: documentOverrideResult.errorMessage,
-        warnings,
-        stage: "precommit_document_override",
-        destroyFlowKey: true,
-      });
-    }
+    let specialServicePayloadResponse: Record<string, unknown> | null = null;
 
     let travelerReferences = resolveTravelerReferences(travelerPayloadResponse);
     if (!travelerReferences.length && travelerIdentifiers.length) {
@@ -3395,6 +3529,55 @@ export default async function handler(
       }
     }
 
+    const autoSpecialRequests = buildSpecialRequestsFromPassengers({
+      offerIdentifier: toText(activeOfferIdentifiers[0]),
+      travelerIdentifiers,
+      passengers: normalizePassengerRows(body),
+    });
+
+    if (autoSpecialRequests.length) {
+      const specialResult = await applySpecialServices({
+        bookingBaseUrl,
+        reservationId,
+        headers: commonHeaders,
+        specialRequests: autoSpecialRequests,
+        logs: apiFlowLogs,
+      });
+
+      if (!specialResult.ok) {
+        return logAndRespondError({
+          status: 502,
+          message: `Travelport special services failed (${specialResult.status})`,
+          details: specialResult.errorMessage,
+          warnings,
+          stage: "precommit_special_services",
+          destroyFlowKey: true,
+        });
+      }
+      specialServicePayloadResponse =
+        (specialResult.payload as Record<string, unknown>) || null;
+    }
+
+    documentOverrideResult = await applyDocumentOverrides({
+      bookingBaseUrl,
+      reservationId,
+      headers: commonHeaders,
+      travelerRefIds,
+      commissionPercent: resolveCommissionPercent(body),
+      logs: apiFlowLogs,
+    });
+
+    if (!documentOverrideResult.ok) {
+      return logAndRespondError({
+        status: 502,
+        message: `Travelport document override commission failed (${documentOverrideResult.status})`,
+        details: documentOverrideResult.errorMessage,
+        warnings,
+        stage: "precommit_document_override",
+        destroyFlowKey: true,
+      });
+    }
+
     const preCommitSnapshot: Record<string, unknown> = {
       reservationId,
       offerIdentifiers: activeOfferIdentifiers,
@@ -3403,6 +3586,7 @@ export default async function handler(
       addOfferResponse: addOfferPayloadResponse,
       travelerResponse: travelerPayloadResponse,
       seatOfferResponse: seatOfferPayloadResponse,
+      specialServiceResponse: specialServicePayloadResponse,
       primaryContactResponse: primaryContactPayloadResponse,
       documentOverrideResponse: documentOverrideResult?.payload || null,
       warnings,
@@ -3432,6 +3616,7 @@ export default async function handler(
         addOfferResponse: addOfferPayloadResponse,
         travelerResponse: travelerPayloadResponse,
         seatOfferResponse: seatOfferPayloadResponse,
+        specialServiceResponse: specialServicePayloadResponse,
         primaryContactResponse: primaryContactPayloadResponse,
         documentOverrideResponse: documentOverrideResult?.payload || null,
         commitResponse: null,
@@ -3503,6 +3688,7 @@ export default async function handler(
       addOfferResponse: addOfferPayloadResponse,
       travelerResponse: travelerPayloadResponse,
       seatOfferResponse: seatOfferPayloadResponse,
+      specialServiceResponse: specialServicePayloadResponse,
       primaryContactResponse: primaryContactPayloadResponse,
       documentOverrideResponse: documentOverrideResult?.payload || null,
       commitResponse: commitResult.payload,

@@ -1,6 +1,7 @@
 import type { FC } from 'react'
 import {
   BrowserRouter,
+  Navigate,
   Route,
   Routes,
 } from "react-router-dom"
@@ -72,7 +73,14 @@ const App: FC = () => {
                     <Route path="/blogs" element={<Blog />} />
           <Route path="/nobooking" element={<NoBookingsFound />} />
           <Route path="/signIn" element={<SignIn />} />
-          <Route path="/my-account" element={<MyAccountPanel />} />
+          <Route path="/my-account" element={<Navigate to="/my-account/dashboard" replace />} />
+          <Route path="/my-account/dashboard" element={<MyAccountPanel />} />
+          <Route path="/my-account/profile" element={<MyAccountPanel />} />
+          <Route path="/my-account/booking" element={<MyAccountPanel />} />
+          <Route path="/my-account/paymnet" element={<MyAccountPanel />} />
+          <Route path="/my-account/travelbuddy" element={<MyAccountPanel />} />
+          <Route path="/my-account/case" element={<MyAccountPanel />} />
+          <Route path="/my-account/help-center" element={<MyAccountPanel />} />
           <Route path="/my-account/bookingdetails" element={<BookingDetailsPage />} />
           <Route path="/admin" element={<AdminDashboard />} />
           {/* booking route  */}

@@ -44,6 +44,7 @@ function incrementMemoryValue(key: string, ttlSec?: number): number {
 type RedisHost = typeof globalThis & {
   __flyjattRedisClient?: Redis | null;
   __flyjattRedisUnavailable?: boolean;
+  __flyjattRedisRetryAt?: number;
 };
 
 async function getRedisClient(): Promise<Redis | null> {
@@ -57,7 +58,8 @@ async function getRedisClient(): Promise<Redis | null> {
   }
 
   const host = globalThis as RedisHost;
-  if (host.__flyjattRedisUnavailable) return null;
+  const retryAt = Number(host.__flyjattRedisRetryAt || 0);
+  if (retryAt > Date.now()) return null;
   if (host.__flyjattRedisClient && host.__flyjattRedisClient.status === "ready") {
     return host.__flyjattRedisClient;
   }
@@ -65,13 +67,13 @@ async function getRedisClient(): Promise<Redis | null> {
   if (!host.__flyjattRedisClient) {
     host.__flyjattRedisClient = new Redis(redisUrl, {
       lazyConnect: true,
-      maxRetriesPerRequest: 1,
-      enableOfflineQueue: false,
-      connectTimeout: 1500,
+      maxRetriesPerRequest: 2,
+      enableOfflineQueue: true,
+      connectTimeout: 5000,
     });
-    // Prevent noisy unhandled ioredis error events in serverless logs.
+    // Keep an error listener to avoid unhandled ioredis error events.
     host.__flyjattRedisClient.on("error", () => {
-      host.__flyjattRedisUnavailable = true;
+      // Do not permanently disable Redis for transient network/server hiccups.
     });
   }
 
@@ -79,9 +81,12 @@ async function getRedisClient(): Promise<Redis | null> {
     if (host.__flyjattRedisClient.status !== "ready") {
       await host.__flyjattRedisClient.connect();
     }
+    host.__flyjattRedisUnavailable = false;
+    host.__flyjattRedisRetryAt = 0;
     return host.__flyjattRedisClient;
   } catch {
     host.__flyjattRedisUnavailable = true;
+    host.__flyjattRedisRetryAt = Date.now() + 30_000;
     return null;
   }
 }

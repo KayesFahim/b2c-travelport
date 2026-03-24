@@ -888,25 +888,7 @@ export default async function handler(
             buildFromLocator.payload
         );
 
-        // ── Traveler enrichment ─────────────────────────────────────────────────
-        // Ensure every traveler in the workbench has birthDate + gender before
-        // commit, so Travelport does not reject with:
-        // "TRAVEL DOCUMENT REQUIRES CURRENT PASSPORT OR NAME, DATE OF BIRTH, AND GENDER"
-        // This is especially important for CHD/INF passengers.
-        const skipEnrichTravelers = parseBoolean(
-            process.env.TRAVELPORT_ISSUE_TICKET_SKIP_ENRICH_TRAVELERS,
-            false
-        );
-        if (!skipEnrichTravelers) {
-            const enrichWarnings = await enrichWorkbenchTravelers({
-                bookingBaseUrl,
-                reservationId: reservationIdForCommit,
-                headers: commonHeaders,
-                travelers: allTravelers,
-                logs: apiFlowLogs,
-            });
-            warnings.push(...enrichWarnings);
-        }
+        // Traveler enrichment flow removed from issue-ticket process by requirement.
 
         // Apply commission override before commit to avoid:
         // "COMMISSION PERCENTAGE MUST BE ENTERED"

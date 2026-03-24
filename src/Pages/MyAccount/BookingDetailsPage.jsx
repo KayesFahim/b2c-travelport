@@ -195,7 +195,7 @@ export default function BookingDetailsPage() {
                     <Alert severity="warning" sx={{ mb: 2 }}>
                         Booking details not found. Please open from My Account Booking History.
                     </Alert>
-                    <Button variant="contained" onClick={() => navigate("/my-account?tab=bookings")}>Back To Booking History</Button>
+                    <Button variant="contained" onClick={() => navigate("/my-account/booking")}>Back To Booking History</Button>
                 </Container>
             </Box>
         );
@@ -276,7 +276,7 @@ export default function BookingDetailsPage() {
                     <Typography sx={{ fontSize: 22, fontWeight: 800, color: "#10355b" }}>
                         Booking Details
                     </Typography>
-                    <Button variant="outlined" onClick={() => navigate("/my-account?tab=bookings")}>Back To Booking History</Button>
+                    <Button variant="outlined" onClick={() => navigate("/my-account/booking")}>Back To Booking History</Button>
                 </Box>
 
                 <Box sx={{ display: "grid", gap: 1.5 }}>

@@ -226,8 +226,9 @@ const NavBar = () => {
       let lastErrorMessage = "Error signing in. Please try again.";
 
       try {
-        const response = await fetch(`${config.baseUrl}/auth/signInUser`, {
+        const response = await fetch(`/api/auth/login`, {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
           },
@@ -236,34 +237,19 @@ const NavBar = () => {
 
         const data = await response.json().catch(() => ({}));
         if (response.ok) {
-          secureLocalStorage.setItem("access_token", data?.access_token || "");
-          secureLocalStorage.setItem("userData", data?.userData || {});
-          secureLocalStorage.setItem("data", data || {});
-
-          // Keep local booking session cookie in sync for /api/auth/me.
-          try {
-            const localLoginResponse = await fetch(`/api/auth/login`, {
-              method: "POST",
-              credentials: "include",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(body),
-            });
-            const localLoginData = await localLoginResponse.json().catch(() => ({}));
-            if (localLoginResponse.ok && localLoginData?.token) {
-              setBookingAuthToken(localLoginData.token);
-            }
-          } catch {
-            // External login still succeeds; local session will be retried as fallback.
+          secureLocalStorage.removeItem("access_token");
+          if (data?.token) {
+            setBookingAuthToken(data.token);
           }
+          secureLocalStorage.setItem("userData", data?.user || data?.userData || {});
+          secureLocalStorage.setItem("data", data || {});
 
           loginSucceeded = true;
         } else {
           lastErrorMessage = data?.message || lastErrorMessage;
         }
       } catch (networkError) {
-        // Fall back to local Next.js auth if external API is unavailable.
+        // Retry local login once more below if initial attempt fails.
       }
 
       if (!loginSucceeded) {
@@ -314,7 +300,6 @@ const NavBar = () => {
         closeOnClick: false,
       });
       setOpenSignIn(false);
-      navigate("/my-account");
     } catch (error) {
       toast.error("Unable to sign in. Please check server and try again.", {
         position: "top-right",
@@ -523,8 +508,6 @@ const NavBar = () => {
           title: "Success!",
           text: "User registered successfully!",
           confirmButtonText: "OK",
-        }).then(() => {
-          navigate("/my-account");
         });
       }
     } catch (error) {
@@ -871,7 +854,7 @@ const NavBar = () => {
                               fontWeight: 500,
                               fontSize: "18px",
                             }}
-                            to="/my-account?tab=profile"
+                            to="/my-account/profile"
                           >
                             <ListItemIcon>
                               <AccountCircle
@@ -892,7 +875,7 @@ const NavBar = () => {
                               color: "var(--primary-button)",
                               fontWeight: 500,
                             }}
-                            to="/my-account?tab=bookings"
+                            to="/my-account/booking"
                           >
                             <ListItemIcon>
                               <Bookmark
@@ -1026,7 +1009,7 @@ const NavBar = () => {
                                                       gap: "10px",
                                                       cursor: "pointer",
                                                     }}
-                                                    to="/my-account?tab=profile"
+                                                    to="/my-account/profile"
                                                   >
                                                     <PersonIcon
                                                       sx={{ fontSize: "20px" }}
@@ -1044,7 +1027,7 @@ const NavBar = () => {
                                                 {/* bookings */}
                                                 <Box>
                                                   <Link
-                                                    to="/my-account?tab=bookings"
+                                                    to="/my-account/booking"
                                                     style={{
                                                       textDecoration: "none",
                                                       backgroundColor:
@@ -1850,7 +1833,6 @@ const NavBar = () => {
               closeModal={() => setOpenSignIn(false)}
               onLoginSuccess={() => {
                 setOpenSignIn(false);
-                navigate("/my-account");
               }}
             />
 

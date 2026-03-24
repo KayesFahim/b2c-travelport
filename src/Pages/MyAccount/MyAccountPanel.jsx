@@ -36,18 +36,50 @@ import PaymentIcon from "@mui/icons-material/Payment";
 import GroupIcon from "@mui/icons-material/Group";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import HelpCenterIcon from "@mui/icons-material/HelpCenter";
-import { fetchTravelBuddies, saveTravelBuddy } from "../../utils/travelBuddyApi";
+import { fetchTravelBuddies, saveTravelBuddy, updateTravelBuddy } from "../../utils/travelBuddyApi";
 import CountryList from "../fakeData/CountryList";
 
 const TABS = [
     { id: "Dashboard", label: "Dashboard", icon: DashboardIcon },
-    { id: "Personal Information", label: "Personal Information", icon: PersonIcon },
-    { id: "Booking History", label: "Booking History", icon: HistoryIcon },
-    { id: "Payment History", label: "Payment History", icon: PaymentIcon },
-    { id: "Travel Buddy", label: "Travel Buddy", icon: GroupIcon },
-    { id: "Raise Case", label: "Raise Case", icon: SupportAgentIcon },
+    { id: "Profile", label: "Profile", icon: PersonIcon },
+    { id: "Booking", label: "Booking", icon: HistoryIcon },
+    { id: "Paymnet", label: "Paymnet", icon: PaymentIcon },
+    { id: "Travelbuddy", label: "Travelbuddy", icon: GroupIcon },
+    { id: "Case", label: "Case", icon: SupportAgentIcon },
     { id: "Help Center", label: "Help Center", icon: HelpCenterIcon },
 ];
+
+const ACCOUNT_TAB_PATHS = {
+    Dashboard: "/my-account/dashboard",
+    Profile: "/my-account/profile",
+    Booking: "/my-account/booking",
+    Paymnet: "/my-account/paymnet",
+    Travelbuddy: "/my-account/travelbuddy",
+    Case: "/my-account/case",
+    "Help Center": "/my-account/help-center",
+};
+
+function normalizeAccountTab(value) {
+    const normalized = String(value || "").trim().toLowerCase();
+    if (["dashboard", "home"].includes(normalized)) return "Dashboard";
+    if (normalized === "profile") return "Profile";
+    if (["booking", "bookings"].includes(normalized)) return "Booking";
+    if (["paymnet", "payment", "payments"].includes(normalized)) return "Paymnet";
+    if (normalized === "travelbuddy") return "Travelbuddy";
+    if (normalized === "case") return "Case";
+    if (["helpcenter", "help-center"].includes(normalized)) return "Help Center";
+    return "Dashboard";
+}
+
+function getAccountTabPath(tabId) {
+    return ACCOUNT_TAB_PATHS[tabId] || ACCOUNT_TAB_PATHS.Dashboard;
+}
+
+function getAccountTabFromPath(pathname) {
+    const normalizedPath = String(pathname || "").replace(/\/+$/, "");
+    const match = Object.entries(ACCOUNT_TAB_PATHS).find(([, path]) => path === normalizedPath);
+    return match ? match[0] : "Dashboard";
+}
 
 const STATUS_KEYS = ["Booked", "IssueInProcess", "Ticketed", "Cancelled"];
 
@@ -108,6 +140,21 @@ function formatDateTime(value) {
     return moment(date).format("ddd, DD MMM YYYY hh:mm A");
 }
 
+function buildProfileDraft(source = {}) {
+    return {
+        fullName: toText(source?.fullName) || `${toText(source?.firstName)} ${toText(source?.lastName)}`.trim(),
+        email: toText(source?.email),
+        phone: toText(source?.phone),
+        gender: toText(source?.gender),
+        dob: toText(source?.dob || source?.dateOfBirth),
+        nationality: toText(source?.nationality || "BD"),
+        passport: toText(source?.passport || source?.passportNumber),
+        address: toText(source?.address),
+        passportCountry: toText(source?.passportCountry || source?.passportIssuingCountry),
+        passportexp: toText(source?.passportexp || source?.passportExp || source?.passportExpiryDate),
+    };
+}
+
 function normalizeStatus(value) {
     return String(value || "").trim().toLowerCase();
 }
@@ -154,6 +201,70 @@ function bookingCostText(booking) {
     );
 
     return `${Math.round(amount).toLocaleString("en-US")} ${currency}`;
+}
+
+function getBookingSortTimestamp(booking) {
+    const candidates = [
+        booking?.createdAt,
+        booking?.updatedAt,
+        booking?.bookingDate,
+        booking?.BookingDate,
+        getDepDate(booking),
+    ];
+
+    for (const value of candidates) {
+        const parsed = parseDateValue(value);
+        if (parsed) return parsed.getTime();
+    }
+
+    return 0;
+}
+
+function getTransactionSortTimestamp(transaction) {
+    const candidates = [
+        transaction?.tranDate,
+        transaction?.createdAt,
+        transaction?.updatedAt,
+        transaction?.date,
+        transaction?.Date,
+    ];
+
+    for (const value of candidates) {
+        const parsed = parseDateValue(value);
+        if (parsed) return parsed.getTime();
+    }
+
+    return 0;
+}
+
+const INITIAL_TRAVEL_BUDDY_FORM = {
+    title: "Mr",
+    paxtype: "ADT",
+    firstName: "",
+    lastName: "",
+    gender: "Male",
+    nationality: "BD",
+    dob: "",
+    passport: "",
+    passportexp: "",
+};
+
+function toUpperInput(value) {
+    return String(value ?? "").toUpperCase();
+}
+
+function buildTravelBuddyForm(source = {}) {
+    return {
+        title: toText(source?.title, INITIAL_TRAVEL_BUDDY_FORM.title),
+        paxtype: toUpperInput(source?.paxtype || INITIAL_TRAVEL_BUDDY_FORM.paxtype),
+        firstName: toUpperInput(source?.firstName),
+        lastName: toUpperInput(source?.lastName),
+        gender: toText(source?.gender, INITIAL_TRAVEL_BUDDY_FORM.gender),
+        nationality: toUpperInput(source?.nationality || INITIAL_TRAVEL_BUDDY_FORM.nationality),
+        dob: toText(source?.dob || source?.dateOfBirth),
+        passport: toUpperInput(source?.passport || source?.passportNumber),
+        passportexp: toText(source?.passportexp || source?.passportExpiryDate),
+    };
 }
 
 function getInitials(name) {
@@ -377,17 +488,8 @@ export default function MyAccountPanel() {
     const [transactions, setTransactions] = useState([]);
     const [travelBuddies, setTravelBuddies] = useState([]);
     const [showAddTravelBuddy, setShowAddTravelBuddy] = useState(false);
-    const [addTravelBuddyForm, setAddTravelBuddyForm] = useState({
-        title: "Mr",
-        paxtype: "ADT",
-        firstName: "",
-        lastName: "",
-        gender: "Male",
-        nationality: "BD",
-        dob: "",
-        passport: "",
-        passportexp: "",
-    });
+    const [editingTravelBuddyId, setEditingTravelBuddyId] = useState(null);
+    const [addTravelBuddyForm, setAddTravelBuddyForm] = useState(INITIAL_TRAVEL_BUDDY_FORM);
     const [addTravelBuddyState, setAddTravelBuddyState] = useState({
         saving: false,
         error: "",
@@ -426,13 +528,17 @@ export default function MyAccountPanel() {
 
     useEffect(() => {
         const tabFromQuery = new URLSearchParams(location.search).get("tab");
-        if (!tabFromQuery) return;
-        const normalized = tabFromQuery.toLowerCase();
-        if (normalized === "bookings") setActiveTab("Booking History");
-        if (normalized === "profile") setActiveTab("Personal Information");
-        if (normalized === "payments") setActiveTab("Payment History");
-        if (normalized === "travelbuddy") setActiveTab("Travel Buddy");
-    }, [location.search]);
+        if (tabFromQuery) {
+            const nextTab = normalizeAccountTab(tabFromQuery);
+            const nextPath = getAccountTabPath(nextTab);
+            if (location.pathname !== nextPath) {
+                navigate(nextPath, { replace: true });
+                return;
+            }
+        }
+
+        setActiveTab(getAccountTabFromPath(location.pathname));
+    }, [location.pathname, location.search, navigate]);
 
     useEffect(() => {
         let cancelled = false;
@@ -543,15 +649,7 @@ export default function MyAccountPanel() {
                         : fallbackData.travelBuddies;
 
                     setProfile(sessionProfile);
-                    setProfileDraft({
-                        fullName: `${toText(sessionProfile?.firstName)} ${toText(sessionProfile?.lastName)}`.trim(),
-                        email: toText(sessionProfile?.email),
-                        phone: "",
-                        gender: "",
-                        dob: "",
-                        nationality: "BD",
-                        passport: "",
-                    });
+                    setProfileDraft(buildProfileDraft(sessionProfile));
                     setBookings(mergedBookings);
                     setTransactions(fallbackData.transactions);
                     setTravelBuddies(mergedTravelBuddies);
@@ -584,16 +682,13 @@ export default function MyAccountPanel() {
                     ...fallbackData.bookings,
                 ]);
 
-                setProfile(profileData || {});
-                setProfileDraft({
-                    fullName: `${toText(profileData?.firstName)} ${toText(profileData?.lastName)}`.trim(),
-                    email: toText(profileData?.email),
-                    phone: toText(profileData?.phone),
-                    gender: toText(profileData?.gender),
-                    dob: toText(profileData?.dob || profileData?.dateOfBirth),
-                    nationality: toText(profileData?.nationality || "BD"),
-                    passport: toText(profileData?.passport || profileData?.passportNumber),
-                });
+                const mergedProfile = {
+                    ...(sessionProfile || {}),
+                    ...(profileData || {}),
+                };
+
+                setProfile(mergedProfile);
+                setProfileDraft(buildProfileDraft(mergedProfile));
                 setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
                 setTransactions(Array.isArray(transactionData?.transactions) ? transactionData.transactions : []);
                 setBookings(mergedBookings);
@@ -645,6 +740,22 @@ export default function MyAccountPanel() {
             upcoming: upcomingCount,
         };
     }, [bookings]);
+
+    const sortedBookings = useMemo(
+        () =>
+            [...bookings].sort(
+                (left, right) => getBookingSortTimestamp(right) - getBookingSortTimestamp(left)
+            ),
+        [bookings]
+    );
+
+    const sortedTransactions = useMemo(
+        () =>
+            [...transactions].sort(
+                (left, right) => getTransactionSortTimestamp(right) - getTransactionSortTimestamp(left)
+            ),
+        [transactions]
+    );
 
     const bookingsByDate = useMemo(() => {
         return bookings.reduce((acc, booking) => {
@@ -701,6 +812,15 @@ export default function MyAccountPanel() {
         setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
     };
 
+    const handleAccountTabClick = (tabId) => {
+        const nextPath = getAccountTabPath(tabId);
+        if (location.pathname !== nextPath) {
+            navigate(nextPath);
+            return;
+        }
+        setActiveTab(tabId);
+    };
+
     const handleSaveProfile = async () => {
         try {
             setSavingProfile(true);
@@ -710,8 +830,11 @@ export default function MyAccountPanel() {
                 phone: profileDraft.phone,
                 dob: profileDraft.dob || null,
                 gender: profileDraft.gender,
+                address: profileDraft.address,
                 nationility: profileDraft.nationality,
                 passport: profileDraft.passport,
+                passportCountry: profileDraft.passportCountry,
+                passportexp: profileDraft.passportexp || null,
             };
 
             let response = await fetch(`/api/user/updateUserProfile`, {
@@ -745,15 +868,25 @@ export default function MyAccountPanel() {
             const resolvedProfile = payload?.profile || {};
             setProfile((prev) => ({
                 ...prev,
+                fullName: profileDraft.fullName,
                 firstName: toText(resolvedProfile.firstName) || toText(profileDraft.fullName).split(" ")[0] || "",
                 lastName: toText(resolvedProfile.lastName) || toText(profileDraft.fullName).split(" ").slice(1).join(" "),
                 email: toText(resolvedProfile.email) || profileDraft.email,
+                address: toText(resolvedProfile.address) || profileDraft.address,
                 phone: toText(resolvedProfile.phone) || profileDraft.phone,
                 gender: toText(resolvedProfile.gender) || profileDraft.gender,
                 dob: toText(resolvedProfile.dateOfBirth) || profileDraft.dob,
+                dateOfBirth: toText(resolvedProfile.dateOfBirth) || profileDraft.dob,
                 nationality: toText(resolvedProfile.nationality) || profileDraft.nationality,
                 passport: toText(resolvedProfile.passportNumber) || profileDraft.passport,
+                passportNumber: toText(resolvedProfile.passportNumber) || profileDraft.passport,
+                passportCountry: toText(resolvedProfile.passportIssuingCountry) || profileDraft.passportCountry,
+                passportIssuingCountry: toText(resolvedProfile.passportIssuingCountry) || profileDraft.passportCountry,
+                passportexp: toText(resolvedProfile.passportExpiryDate) || profileDraft.passportexp,
+                passportExp: toText(resolvedProfile.passportExpiryDate) || profileDraft.passportexp,
+                passportExpiryDate: toText(resolvedProfile.passportExpiryDate) || profileDraft.passportexp,
             }));
+            setProfileDraft((prev) => buildProfileDraft({ ...prev, ...profile, ...payload?.profile, ...requestBody }));
         } catch (error) {
             setErrorText(error instanceof Error ? error.message : "Failed to update profile.");
         } finally {
@@ -1118,6 +1251,15 @@ export default function MyAccountPanel() {
                                     fontWeight: 700,
                                 }}
                             />
+                            <Chip
+                                size="small"
+                                label={toText(profile?.role, "CUSTOMER")}
+                                sx={{
+                                    bgcolor: "rgba(255,255,255,0.18)",
+                                    color: "#fff",
+                                    fontWeight: 700,
+                                }}
+                            />
                         </Box>
 
                         <Divider sx={{ borderColor: "rgba(255,255,255,0.22)", my: 1.4 }} />
@@ -1157,6 +1299,40 @@ export default function MyAccountPanel() {
                                     </Typography>
                                 </Paper>
                             </Grid>
+                            <Grid item xs={6}>
+                                <Paper
+                                    sx={{
+                                        p: 1,
+                                        borderRadius: "12px",
+                                        bgcolor: "rgba(255,255,255,0.16)",
+                                        color: "#fff",
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: 11, color: "rgba(255,255,255,0.88)" }}>
+                                        Phone
+                                    </Typography>
+                                    <Typography sx={{ fontWeight: 700, fontSize: 14 }}>
+                                        {toText(profileDraft.phone, "-")}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                            <Grid item xs={6}>
+                                <Paper
+                                    sx={{
+                                        p: 1,
+                                        borderRadius: "12px",
+                                        bgcolor: "rgba(255,255,255,0.16)",
+                                        color: "#fff",
+                                    }}
+                                >
+                                    <Typography sx={{ fontSize: 11, color: "rgba(255,255,255,0.88)" }}>
+                                        Updated At
+                                    </Typography>
+                                    <Typography sx={{ fontWeight: 700, fontSize: 14 }}>
+                                        {formatDateTime(profile?.updatedAt)}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
                         </Grid>
                     </Paper>
                 </Grid>
@@ -1181,7 +1357,7 @@ export default function MyAccountPanel() {
                                         variant="outlined"
                                         onClick={() => {
                                             setEditingProfile(false);
-                                            setProfileDraft((prev) => ({ ...prev }));
+                                            setProfileDraft(buildProfileDraft(profile));
                                         }}
                                     >
                                         Cancel
@@ -1206,6 +1382,9 @@ export default function MyAccountPanel() {
                                 { key: "dob", label: "Date of Birth" },
                                 { key: "nationality", label: "Nationality" },
                                 { key: "passport", label: "Passport" },
+                                { key: "passportCountry", label: "Passport Country" },
+                                { key: "passportexp", label: "Passport Expiry" },
+                                { key: "address", label: "Address" },
                             ].map((field) => (
                                 <Grid item xs={12} sm={6} key={field.key}>
                                     <TextField
@@ -1220,6 +1399,30 @@ export default function MyAccountPanel() {
                                             }))
                                         }
                                         disabled={!editingProfile}
+                                        sx={{
+                                            "& .MuiOutlinedInput-root": {
+                                                borderRadius: "12px",
+                                            },
+                                        }}
+                                    />
+                                </Grid>
+                            ))}
+                        </Grid>
+
+                        <Grid container spacing={1.2} sx={{ mt: 0.2 }}>
+                            {[
+                                { label: "Role", value: toText(profile?.role, "-") },
+                                { label: "Admin", value: profile?.admin ? "YES" : "NO" },
+                                { label: "Created At", value: formatDateTime(profile?.createdAt) },
+                                { label: "Updated At", value: formatDateTime(profile?.updatedAt) },
+                            ].map((item) => (
+                                <Grid item xs={12} sm={6} key={item.label}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        label={item.label}
+                                        value={item.value}
+                                        disabled
                                         sx={{
                                             "& .MuiOutlinedInput-root": {
                                                 borderRadius: "12px",
@@ -1370,8 +1573,8 @@ export default function MyAccountPanel() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {bookings.length ? (
-                            bookings.map((item) => (
+                        {sortedBookings.length ? (
+                            sortedBookings.map((item) => (
                                 <TableRow key={item?.bookingId || item?.id} hover>
                                     <TableCell>{toText(item?.bookingId, "-")}</TableCell>
                                     <TableCell>{bookingPnrText(item)}</TableCell>
@@ -1452,8 +1655,8 @@ export default function MyAccountPanel() {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {transactions.length ? (
-                            transactions.map((item) => (
+                        {sortedTransactions.length ? (
+                            sortedTransactions.map((item) => (
                                 <TableRow key={item?.tranId || item?.id} hover>
                                     <TableCell>{toText(item?.tranId, "-")}</TableCell>
                                     <TableCell>{toText(item?.requestType, "-")}</TableCell>
@@ -1490,21 +1693,26 @@ export default function MyAccountPanel() {
 
         try {
             setAddTravelBuddyState({ saving: true, error: "", success: "" });
-            await saveTravelBuddy({ token, payload: addTravelBuddyForm });
+            const payload = {
+                ...addTravelBuddyForm,
+                ...(editingTravelBuddyId ? { id: editingTravelBuddyId } : {}),
+            };
+
+            if (editingTravelBuddyId) {
+                await updateTravelBuddy({ token, payload });
+            } else {
+                await saveTravelBuddy({ token, payload });
+            }
+
             const buddyData = await fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] }));
             setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
-            setAddTravelBuddyForm({
-                title: "Mr",
-                paxtype: "ADT",
-                firstName: "",
-                lastName: "",
-                gender: "Male",
-                nationality: "BD",
-                dob: "",
-                passport: "",
-                passportexp: "",
+            setAddTravelBuddyForm(INITIAL_TRAVEL_BUDDY_FORM);
+            setEditingTravelBuddyId(null);
+            setAddTravelBuddyState({
+                saving: false,
+                error: "",
+                success: editingTravelBuddyId ? "Travel buddy updated successfully." : "Travel buddy added successfully.",
             });
-            setAddTravelBuddyState({ saving: false, error: "", success: "Travel buddy added successfully." });
             setShowAddTravelBuddy(false);
         } catch (error) {
             setAddTravelBuddyState({
@@ -1515,13 +1723,49 @@ export default function MyAccountPanel() {
         }
     };
 
+    const handleTravelBuddyFieldChange = (field) => (event) => {
+        const rawValue = event.target.value;
+        const normalizedValue = ["firstName", "lastName", "passport", "nationality", "paxtype"].includes(field)
+            ? toUpperInput(rawValue)
+            : rawValue;
+
+        setAddTravelBuddyForm((prev) => ({ ...prev, [field]: normalizedValue }));
+    };
+
+    const handleEditTravelBuddy = (travelBuddy) => {
+        setEditingTravelBuddyId(travelBuddy?.id || null);
+        setAddTravelBuddyForm(buildTravelBuddyForm(travelBuddy || {}));
+        setAddTravelBuddyState({ saving: false, error: "", success: "" });
+        setShowAddTravelBuddy(true);
+    };
+
+    const handleCancelTravelBuddyForm = () => {
+        setShowAddTravelBuddy(false);
+        setEditingTravelBuddyId(null);
+        setAddTravelBuddyForm(INITIAL_TRAVEL_BUDDY_FORM);
+        setAddTravelBuddyState((prev) => ({ ...prev, saving: false, error: "" }));
+    };
+
     const renderTravelBuddy = () => (
         <Paper sx={{ ...panelStyle, p: 2.2 }}>
             <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>
                 <Typography sx={sectionTitleStyle}>
                     Travel Buddy
                 </Typography>
-                <Button variant="contained" onClick={() => setShowAddTravelBuddy((prev) => !prev)}>
+                <Button
+                    variant="contained"
+                    onClick={() => {
+                        if (showAddTravelBuddy) {
+                            handleCancelTravelBuddyForm();
+                            return;
+                        }
+
+                        setEditingTravelBuddyId(null);
+                        setAddTravelBuddyForm(INITIAL_TRAVEL_BUDDY_FORM);
+                        setAddTravelBuddyState({ saving: false, error: "", success: "" });
+                        setShowAddTravelBuddy(true);
+                    }}
+                >
                     {showAddTravelBuddy ? "Close Form" : "Add Travel Buddy"}
                 </Button>
             </Box>
@@ -1539,12 +1783,16 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="Title"
                                     value={addTravelBuddyForm.title}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, title: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("title")}
                                 >
-                                    {["Mr", "Mrs", "Miss", "Ms"].map((title) => (
-                                        <MenuItem key={title} value={title}>{title}</MenuItem>
+                                    {[
+                                        { label: "MR", value: "Mr" },
+                                        { label: "MRS", value: "Mrs" },
+                                        { label: "MISS", value: "Miss" },
+                                        { label: "MS", value: "Ms" },
+                                        { label: "MSTR", value: "MSTR" },
+                                    ].map((title) => (
+                                        <MenuItem key={title.value} value={title.value}>{title.label}</MenuItem>
                                     ))}
                                 </TextField>
                             </Grid>
@@ -1554,9 +1802,7 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="Passenger Type"
                                     value={addTravelBuddyForm.paxtype}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, paxtype: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("paxtype")}
                                 >
                                     <MenuItem value="ADT">Adult</MenuItem>
                                     <MenuItem value="CHD">Child</MenuItem>
@@ -1568,9 +1814,8 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="First Name"
                                     value={addTravelBuddyForm.firstName}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, firstName: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("firstName")}
+                                    inputProps={{ style: { textTransform: "uppercase" } }}
                                 />
                             </Grid>
                             <Grid item xs={12} sm={3}>
@@ -1578,9 +1823,8 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="Last Name"
                                     value={addTravelBuddyForm.lastName}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, lastName: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("lastName")}
+                                    inputProps={{ style: { textTransform: "uppercase" } }}
                                 />
                             </Grid>
 
@@ -1590,12 +1834,10 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="Gender"
                                     value={addTravelBuddyForm.gender}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, gender: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("gender")}
                                 >
-                                    <MenuItem value="Male">Male</MenuItem>
-                                    <MenuItem value="Female">Female</MenuItem>
+                                    <MenuItem value="Male">MALE</MenuItem>
+                                    <MenuItem value="Female">FEMALE</MenuItem>
                                 </TextField>
                             </Grid>
                             <Grid item xs={12} sm={3}>
@@ -1604,13 +1846,11 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="Nationality"
                                     value={addTravelBuddyForm.nationality}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, nationality: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("nationality")}
                                 >
                                     {CountryList.map((country) => (
                                         <MenuItem key={country.code} value={country.code}>
-                                            {country.name} ({country.code})
+                                            {country.name.toUpperCase()} ({country.code})
                                         </MenuItem>
                                     ))}
                                 </TextField>
@@ -1622,9 +1862,7 @@ export default function MyAccountPanel() {
                                     label="Date Of Birth"
                                     InputLabelProps={{ shrink: true }}
                                     value={addTravelBuddyForm.dob}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, dob: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("dob")}
                                 />
                             </Grid>
                             <Grid item xs={12} sm={3}>
@@ -1632,9 +1870,8 @@ export default function MyAccountPanel() {
                                     fullWidth
                                     label="Passport Number"
                                     value={addTravelBuddyForm.passport}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, passport: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("passport")}
+                                    inputProps={{ style: { textTransform: "uppercase" } }}
                                 />
                             </Grid>
                             <Grid item xs={12} sm={3}>
@@ -1644,19 +1881,17 @@ export default function MyAccountPanel() {
                                     label="Passport Expiry"
                                     InputLabelProps={{ shrink: true }}
                                     value={addTravelBuddyForm.passportexp}
-                                    onChange={(event) =>
-                                        setAddTravelBuddyForm((prev) => ({ ...prev, passportexp: event.target.value }))
-                                    }
+                                    onChange={handleTravelBuddyFieldChange("passportexp")}
                                 />
                             </Grid>
                         </Grid>
 
                         <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1 }}>
-                            <Button variant="outlined" onClick={() => setShowAddTravelBuddy(false)}>
+                            <Button variant="outlined" onClick={handleCancelTravelBuddyForm}>
                                 Cancel
                             </Button>
                             <Button type="submit" variant="contained" disabled={addTravelBuddyState.saving}>
-                                {addTravelBuddyState.saving ? "Saving..." : "Save Traveler"}
+                                {addTravelBuddyState.saving ? "Saving..." : editingTravelBuddyId ? "Update Traveler" : "Save Traveler"}
                             </Button>
                         </Box>
                     </Box>
@@ -1672,22 +1907,28 @@ export default function MyAccountPanel() {
                             <TableCell>Gender</TableCell>
                             <TableCell>Nationality</TableCell>
                             <TableCell>DOB</TableCell>
+                            <TableCell align="right">Action</TableCell>
                         </TableRow>
                     </TableHead>
                     <TableBody>
                         {travelBuddies.length ? (
                             travelBuddies.map((item, index) => (
                                 <TableRow key={`${item?.passport || "buddy"}-${index}`} hover>
-                                    <TableCell>{`${toText(item?.title)} ${toText(item?.firstName)} ${toText(item?.lastName)}`.trim()}</TableCell>
-                                    <TableCell>{toText(item?.passport, "-")}</TableCell>
-                                    <TableCell>{toText(item?.gender, "-")}</TableCell>
-                                    <TableCell>{toText(item?.nationality, "-")}</TableCell>
+                                    <TableCell>{`${toText(item?.title).toUpperCase()} ${toText(item?.firstName).toUpperCase()} ${toText(item?.lastName).toUpperCase()}`.trim()}</TableCell>
+                                    <TableCell>{toText(item?.passport, "-").toUpperCase()}</TableCell>
+                                    <TableCell>{toText(item?.gender, "-").toUpperCase()}</TableCell>
+                                    <TableCell>{toText(item?.nationality, "-").toUpperCase()}</TableCell>
                                     <TableCell>{formatDateTime(item?.dob)}</TableCell>
+                                    <TableCell align="right">
+                                        <Button size="small" variant="outlined" onClick={() => handleEditTravelBuddy(item)}>
+                                            Edit
+                                        </Button>
+                                    </TableCell>
                                 </TableRow>
                             ))
                         ) : (
                             <TableRow>
-                                <TableCell colSpan={5} align="center">
+                                <TableCell colSpan={6} align="center">
                                     No travel buddies found.
                                 </TableCell>
                             </TableRow>
@@ -1818,7 +2059,7 @@ export default function MyAccountPanel() {
                                     return (
                                         <Box
                                             key={tabObj.id}
-                                            onClick={() => setActiveTab(tabObj.id)}
+                                            onClick={() => handleAccountTabClick(tabObj.id)}
                                             sx={{
                                                 px: 2,
                                                 py: 1.5,
@@ -1858,11 +2099,11 @@ export default function MyAccountPanel() {
                         ) : (
                             <>
                                 {activeTab === "Dashboard" ? renderDashboard() : null}
-                                {activeTab === "Personal Information" ? renderPersonalInformation() : null}
-                                {activeTab === "Booking History" ? renderBookingHistory() : null}
-                                {activeTab === "Payment History" ? renderPaymentHistory() : null}
-                                {activeTab === "Travel Buddy" ? renderTravelBuddy() : null}
-                                {activeTab === "Raise Case" ? renderRaiseCase() : null}
+                                {activeTab === "Profile" ? renderPersonalInformation() : null}
+                                {activeTab === "Booking" ? renderBookingHistory() : null}
+                                {activeTab === "Paymnet" ? renderPaymentHistory() : null}
+                                {activeTab === "Travelbuddy" ? renderTravelBuddy() : null}
+                                {activeTab === "Case" ? renderRaiseCase() : null}
                                 {activeTab === "Help Center" ? renderHelpCenter() : null}
                             </>
                         )}

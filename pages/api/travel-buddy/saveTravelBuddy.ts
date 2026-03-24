@@ -5,6 +5,7 @@ import {
     buildTravelBuddyPayload,
     parseOptionalDate,
     toText,
+    toUpperText,
 } from "@/server/travel-buddy";
 
 type SuccessResponse = {
@@ -35,13 +36,13 @@ export default async function handler(
 
         const body = (req.body ?? {}) as Record<string, unknown>;
         const title = toText(body.title);
-        const firstName = toText(body.firstName);
-        const lastName = toText(body.lastName);
-        const paxtype = toText(body.paxtype);
+        const firstName = toUpperText(body.firstName);
+        const lastName = toUpperText(body.lastName);
+        const paxtype = toUpperText(body.paxtype);
         const gender = toText(body.gender);
-        const nationality = toText(body.nationality || body.nationility);
+        const nationality = toUpperText(body.nationality || body.nationility);
         const dateOfBirth = parseOptionalDate(body.dob || body.dateOfBirth);
-        const passportNumber = toText(body.passport || body.passportNumber);
+        const passportNumber = toUpperText(body.passport || body.passportNumber);
         const passportExpiryDate = parseOptionalDate(body.passportexp || body.passportExpiryDate);
 
         if (!title || !firstName || !lastName || !paxtype) {

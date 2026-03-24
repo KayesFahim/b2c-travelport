@@ -193,41 +193,24 @@ const SingleOnewayFlight = ({ data, className }) => {
     };
 
     try {
-      const response = await fetch(
-        `${config.baseUrl}/auth/signInUser`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        }
-      );
+      const response = await fetch(`/api/auth/login`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      });
 
-      const datas = await response.json();
+      const datas = await response.json().catch(() => ({}));
 
       if (response.ok) {
-        secureLocalStorage.setItem("access_token", datas?.access_token);
-        secureLocalStorage.setItem("userData", datas?.userData);
-        secureLocalStorage.setItem("data", datas);
-
-        // Keep local booking session cookie in sync for /api/auth/me.
-        try {
-          const localLoginResponse = await fetch(`/api/auth/login`, {
-            method: "POST",
-            credentials: "include",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify(body),
-          });
-          const localLoginData = await localLoginResponse.json().catch(() => ({}));
-          if (localLoginResponse.ok && localLoginData?.token) {
-            setBookingAuthToken(localLoginData.token);
-          }
-        } catch {
-          // Ignore sync failures and keep external login success.
+        secureLocalStorage.removeItem("access_token");
+        if (datas?.token) {
+          setBookingAuthToken(datas.token);
         }
+        secureLocalStorage.setItem("userData", datas?.user || datas?.userData || {});
+        secureLocalStorage.setItem("data", datas);
 
         // Reset the form fields
         setUserSignInInfo({

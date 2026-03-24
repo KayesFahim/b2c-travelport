@@ -20,6 +20,10 @@ export function toText(value: unknown): string {
     return "";
 }
 
+export function toUpperText(value: unknown): string {
+    return toText(value).toUpperCase();
+}
+
 export function parseOptionalDate(value: unknown): Date | null {
     const raw = toText(value);
     if (!raw) return null;
