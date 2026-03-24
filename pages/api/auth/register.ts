@@ -9,6 +9,7 @@ type ErrorResponse = {
 
 type SuccessResponse = {
   success: true;
+  token: string;
   user: {
     id: number;
     email: string;
@@ -57,7 +58,7 @@ export default async function handler(
       },
     });
 
-    await createSession(req, res, {
+    const session = await createSession(req, res, {
       id: user.id,
       email: user.email,
       name: user.name || "Traveler",
@@ -65,6 +66,7 @@ export default async function handler(
 
     return res.status(201).json({
       success: true,
+      token: session.token,
       user: {
         id: user.id,
         email: user.email,

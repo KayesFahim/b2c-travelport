@@ -31,6 +31,21 @@ type BookHoldBody = {
   };
 };
 
+type ApiFlowLog = {
+  timestamp: string;
+  step: string;
+  request: {
+    method: string;
+    url: string;
+    body?: Record<string, unknown> | null;
+  };
+  response: {
+    status: number;
+    ok: boolean;
+    body?: Record<string, unknown> | null;
+  };
+};
+
 type ErrorResponse = {
   message: string;
   details?: string;
@@ -38,6 +53,7 @@ type ErrorResponse = {
   requiresLogin?: boolean;
   previousBooking?: Record<string, unknown>;
   dailyCommittedCount?: number;
+  apiFlowLogs?: ApiFlowLog[];
 };
 
 type SuccessResponse = {
@@ -62,6 +78,7 @@ type SuccessResponse = {
   bookingFlowKey?: string | null;
   bookingOfferKey?: string | null;
   bookingFlowExpiresAt?: number | null;
+  apiFlowLogs?: ApiFlowLog[];
 };
 
 type BookingFlowRecord = {
@@ -1250,25 +1267,37 @@ function buildSeatAncillaryOffersPayload(params: {
   };
 }
 
-async function persistLocatorToLocalFile(params: {
-  locator: string;
-  reservationId: string;
-  offerIdentifiers: string[];
-}) {
-  const normalizedLocator = toText(params.locator);
-  if (!normalizedLocator) return;
-
-  const filePath = path.join(process.cwd(), "atpn.txt");
-  const line = `${new Date().toISOString()} | Locator=${normalizedLocator} | ReservationId=${params.reservationId
-    } | OfferIdentifiers=${params.offerIdentifiers.join(",") || "N/A"}\n`;
-  await appendFile(filePath, line, "utf8");
-}
-
 function truncateForLog(value: unknown, maxLength: number): string {
   const text = toText(value).replace(/\s+/g, " ").trim();
   if (!text) return "";
   if (text.length <= maxLength) return text;
   return `${text.slice(0, maxLength - 3)}...`;
+}
+
+function pushApiFlowLog(params: {
+  logs: ApiFlowLog[];
+  step: string;
+  method: string;
+  url: string;
+  requestBody?: Record<string, unknown> | null;
+  status: number;
+  ok: boolean;
+  responseBody?: Record<string, unknown> | null;
+}) {
+  params.logs.push({
+    timestamp: new Date().toISOString(),
+    step: params.step,
+    request: {
+      method: params.method,
+      url: params.url,
+      ...(params.requestBody !== undefined ? { body: params.requestBody } : {}),
+    },
+    response: {
+      status: params.status,
+      ok: params.ok,
+      ...(params.responseBody !== undefined ? { body: params.responseBody } : {}),
+    },
+  });
 }
 
 async function persistBookingFailureToLocalFile(params: {
@@ -1330,6 +1359,7 @@ async function respondWithLoggedError(
     bookingOfferKey?: string;
     commitRequested?: boolean;
     commitOnlyRequested?: boolean;
+    apiFlowLogs?: ApiFlowLog[];
   }
 ) {
   try {
@@ -1354,6 +1384,7 @@ async function respondWithLoggedError(
     message: params.message,
     ...(params.details ? { details: params.details } : {}),
     ...(params.warnings?.length ? { warnings: params.warnings } : {}),
+    ...(params.apiFlowLogs ? { apiFlowLogs: params.apiFlowLogs } : {}),
   };
   return res.status(params.status).json(responseBody);
 }
@@ -2053,6 +2084,7 @@ async function commitReservation(params: {
   bookingBaseUrl: string;
   reservationId: string;
   headers: Record<string, string>;
+  logs?: ApiFlowLog[];
 }) {
   const commitUrl = `${params.bookingBaseUrl}/reservation/reservations/${encodeURIComponent(
     params.reservationId
@@ -2066,6 +2098,19 @@ async function commitReservation(params: {
     string,
     unknown
   >;
+
+  if (params.logs) {
+    pushApiFlowLog({
+      logs: params.logs,
+      step: "booking_commit",
+      method: "POST",
+      url: commitUrl,
+      requestBody: { "@type": "ReservationQueryCommitReservation" },
+      status: commitResponse.status,
+      ok: commitResponse.ok && !hasTravelportErrors(commitPayloadResponse),
+      responseBody: commitPayloadResponse,
+    });
+  }
 
   return {
     ok: commitResponse.ok && !hasTravelportErrors(commitPayloadResponse),
@@ -2101,6 +2146,8 @@ async function runIssueTicketPaymentStep(params: {
   bookingBaseUrl: string;
   reservationId: string;
   headers: Record<string, string>;
+  stepName?: string;
+  logs?: ApiFlowLog[];
   enabled: boolean;
   pathTemplate: string;
   payloadEnvName: string;
@@ -2134,6 +2181,19 @@ async function runIssueTicketPaymentStep(params: {
   });
   const payload = (await parseJsonSafe(response)) as Record<string, unknown>;
 
+  if (params.logs) {
+    pushApiFlowLog({
+      logs: params.logs,
+      step: params.stepName || "booking_payment_step",
+      method: httpMethod,
+      url,
+      requestBody: payloadBody,
+      status: response.status,
+      ok: response.ok && !hasTravelportErrors(payload),
+      responseBody: payload,
+    });
+  }
+
   return {
     attempted: true,
     ok: response.ok && !hasTravelportErrors(payload),
@@ -2150,6 +2210,7 @@ async function applyDocumentOverrides(params: {
   headers: Record<string, string>;
   travelerRefIds: string[];
   commissionPercent: number;
+  logs?: ApiFlowLog[];
 }) {
   const travelerRefs = Array.from(new Set(params.travelerRefIds.filter(Boolean))).map(
     (id) => ({ id })
@@ -2189,6 +2250,19 @@ async function applyDocumentOverrides(params: {
   });
   const overridePayload = (await parseJsonSafe(overrideResponse)) as Record<string, unknown>;
 
+  if (params.logs) {
+    pushApiFlowLog({
+      logs: params.logs,
+      step: "booking_document_override",
+      method: "POST",
+      url: overrideUrl,
+      requestBody: overrideBody,
+      status: overrideResponse.status,
+      ok: overrideResponse.ok && !hasTravelportErrors(overridePayload),
+      responseBody: overridePayload,
+    });
+  }
+
   return {
     ok: overrideResponse.ok && !hasTravelportErrors(overridePayload),
     status: overrideResponse.status,
@@ -2199,24 +2273,45 @@ async function applyDocumentOverrides(params: {
   };
 }
 
-async function persistPreparedBooking(params: {
+async function persistCommittedBooking(params: {
   userId: number;
   body: BookHoldBody;
-  bookingFlowKey: string;
-  bookingOfferKey: string;
+  bookingFlowKey?: string;
+  bookingOfferKey?: string;
   reservationId: string;
-  selectedOffer: Record<string, unknown>;
-  preCommitResponse: Record<string, unknown>;
+  locator?: string | null;
+  selectedOffer?: Record<string, unknown>;
+  preCommitResponse?: Record<string, unknown> | null;
+  commitResponse?: Record<string, unknown> | null;
 }) {
-  const fingerprint = resolveBookingFingerprint(params.selectedOffer);
+  const normalizedSelectedOffer =
+    params.selectedOffer && Object.keys(params.selectedOffer).length
+      ? params.selectedOffer
+      : ({} as Record<string, unknown>);
+  const hasSelectedOffer = Object.keys(normalizedSelectedOffer).length > 0;
+  const fingerprint = hasSelectedOffer
+    ? resolveBookingFingerprint(normalizedSelectedOffer)
+    : {
+      routeKey: params.reservationId || "UNKNOWN",
+      airlineCode: "UNKNOWN",
+      travelDate: new Date(),
+      flightSignature: `RES-${params.reservationId || params.locator || Date.now()}`,
+      departureCode: null,
+      arrivalCode: null,
+      totalFare: null,
+      currencyCode: null,
+    };
+
   const booking = await prisma.booking.upsert({
     where: {
-      bookingFlowKey: params.bookingFlowKey,
+      reservationId: params.reservationId,
     },
     update: {
+      bookingFlowKey: params.bookingFlowKey || null,
       bookingOfferKey: params.bookingOfferKey || null,
       reservationId: params.reservationId || null,
-      status: "PREPARED",
+      locator: toText(params.locator) || null,
+      status: "COMMITTED",
       routeKey: fingerprint.routeKey,
       airlineCode: fingerprint.airlineCode,
       travelDate: fingerprint.travelDate,
@@ -2225,15 +2320,25 @@ async function persistPreparedBooking(params: {
       arrivalCode: fingerprint.arrivalCode || null,
       totalFare: fingerprint.totalFare || null,
       currencyCode: fingerprint.currencyCode || null,
-      payloadSnapshot: params.selectedOffer as unknown as object,
-      rawPreview: params.preCommitResponse as unknown as object,
+      payloadSnapshot: hasSelectedOffer
+        ? (normalizedSelectedOffer as unknown as object)
+        : null,
+      rawPreview:
+        params.preCommitResponse && typeof params.preCommitResponse === "object"
+          ? (params.preCommitResponse as unknown as object)
+          : null,
+      rawCommit:
+        params.commitResponse && typeof params.commitResponse === "object"
+          ? (params.commitResponse as unknown as object)
+          : null,
     },
     create: {
       userId: params.userId,
       bookingFlowKey: params.bookingFlowKey || null,
       bookingOfferKey: params.bookingOfferKey || null,
       reservationId: params.reservationId || null,
-      status: "PREPARED",
+      locator: toText(params.locator) || null,
+      status: "COMMITTED",
       routeKey: fingerprint.routeKey,
       airlineCode: fingerprint.airlineCode,
       travelDate: fingerprint.travelDate,
@@ -2242,8 +2347,17 @@ async function persistPreparedBooking(params: {
       arrivalCode: fingerprint.arrivalCode || null,
       totalFare: fingerprint.totalFare || null,
       currencyCode: fingerprint.currencyCode || null,
-      payloadSnapshot: params.selectedOffer as unknown as object,
-      rawPreview: params.preCommitResponse as unknown as object,
+      payloadSnapshot: hasSelectedOffer
+        ? (normalizedSelectedOffer as unknown as object)
+        : null,
+      rawPreview:
+        params.preCommitResponse && typeof params.preCommitResponse === "object"
+          ? (params.preCommitResponse as unknown as object)
+          : null,
+      rawCommit:
+        params.commitResponse && typeof params.commitResponse === "object"
+          ? (params.commitResponse as unknown as object)
+          : null,
     },
   });
 
@@ -2310,39 +2424,15 @@ async function persistPreparedBooking(params: {
   return booking;
 }
 
-async function getPreparedBookingForCommit(params: {
-  userId: number;
-  bookingFlowKey: string;
-  reservationId: string;
-}) {
-  if (params.bookingFlowKey) {
-    const row = await prisma.booking.findFirst({
-      where: {
-        userId: params.userId,
-        bookingFlowKey: params.bookingFlowKey,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    if (row) return row;
-  }
-
-  if (!params.reservationId) return null;
-  return prisma.booking.findFirst({
-    where: {
-      userId: params.userId,
-      reservationId: params.reservationId,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-}
-
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
+  const apiFlowLogs: ApiFlowLog[] = [];
+
   if (req.method !== "POST") {
     res.setHeader("Allow", "POST");
-    return res.status(405).json({ message: "Method not allowed" });
+    return res.status(405).json({ message: "Method not allowed", apiFlowLogs });
   }
 
   try {
@@ -2354,11 +2444,13 @@ export default async function handler(
       return res.status(401).json({
         message: "Login is required before booking. Please sign in or register.",
         requiresLogin: true,
+        apiFlowLogs,
       });
     }
 
-    const commitRequested = parseBooleanFlag(body.commit, true);
-    const commitOnlyRequested = parseBooleanFlag(body.commitOnly, false);
+    // Enforce one-shot booking: always run full flow through commit in this endpoint.
+    const commitRequested = true;
+    const commitOnlyRequested = false;
     const explicitReservationId = toText(body.reservationId);
     const nowEpoch = Date.now();
     purgeExpiredBookingFlows(nowEpoch);
@@ -2451,6 +2543,7 @@ export default async function handler(
           bookingOfferKey: activeBookingOfferKey,
           commitRequested,
           commitOnlyRequested,
+          apiFlowLogs,
         });
       })();
 
@@ -2478,6 +2571,8 @@ export default async function handler(
       });
     }
 
+    const warnings: string[] = [];
+
     if (commitOnlyRequested) {
       const commitReservationId = explicitReservationId || activeReservationId;
       if (!commitReservationId) {
@@ -2488,15 +2583,11 @@ export default async function handler(
         });
       }
 
-      const preparedBooking = await getPreparedBookingForCommit({
-        userId: sessionUser.id,
-        bookingFlowKey: activeBookingFlowKey,
-        reservationId: commitReservationId,
-      });
-
-      const preparedBookingReady = Boolean(
-        preparedBooking && preparedBooking.status === "PREPARED"
-      );
+      const commitOnlySelectedOffer = resolveSelectedOffer(body);
+      const hasCommitOnlyOffer = Object.keys(commitOnlySelectedOffer).length > 0;
+      const commitOnlyFingerprint = hasCommitOnlyOffer
+        ? resolveBookingFingerprint(commitOnlySelectedOffer)
+        : null;
 
       const { start: dayStart, end: dayEnd } = toUtcDayBounds(new Date());
       const committedTodayCount = await prisma.booking.count({
@@ -2515,18 +2606,19 @@ export default async function handler(
           message: "Daily booking limit reached. Maximum 10 committed bookings per day.",
           details: "Try again tomorrow or contact support for exception handling.",
           dailyCommittedCount: committedTodayCount,
+          apiFlowLogs,
         });
       }
 
-      if (preparedBookingReady) {
+      if (commitOnlyFingerprint) {
         const duplicateBooking = await prisma.booking.findFirst({
           where: {
             userId: sessionUser.id,
             status: "COMMITTED",
-            flightSignature: preparedBooking.flightSignature,
-            routeKey: preparedBooking.routeKey,
-            airlineCode: preparedBooking.airlineCode,
-            travelDate: preparedBooking.travelDate,
+            flightSignature: commitOnlyFingerprint.flightSignature,
+            routeKey: commitOnlyFingerprint.routeKey,
+            airlineCode: commitOnlyFingerprint.airlineCode,
+            travelDate: commitOnlyFingerprint.travelDate,
           },
           orderBy: { createdAt: "desc" },
         });
@@ -2538,6 +2630,7 @@ export default async function handler(
             details: "Previous booking returned instead of creating a duplicate booking.",
             previousBooking: getBookingSummaryRow(duplicateBooking),
             dailyCommittedCount: committedTodayCount,
+            apiFlowLogs,
           });
         }
       }
@@ -2553,57 +2646,32 @@ export default async function handler(
       let formOfPaymentResult: Record<string, unknown> | null = null;
       let applyPaymentResult: Record<string, unknown> | null = null;
 
-      const previewPayload =
-        preparedBookingReady && preparedBooking?.rawPreview && typeof preparedBooking.rawPreview === "object"
-          ? (preparedBooking.rawPreview as Record<string, unknown>)
-          : {};
-      const existingDocumentOverrideResponse = getValueByKeys(previewPayload, [
-        "documentOverrideResponse",
-        "DocumentOverrideResponse",
-      ]) as Record<string, unknown> | undefined;
-
-      if (preparedBookingReady && !existingDocumentOverrideResponse) {
-        let travelerRefIds = resolvePreparedTravelerRefIds(previewPayload);
-        if (!travelerRefIds.length) {
-          const passengerCount = await prisma.bookingPassenger.count({
-            where: { bookingId: preparedBooking.id },
-          });
-          travelerRefIds = Array.from(
-            { length: passengerCount },
-            (_, index) => `trav_${index + 1}`
-          );
-        }
-
-        documentOverrideResult = await applyDocumentOverrides({
-          bookingBaseUrl,
-          reservationId: commitReservationId,
-          headers: commonHeaders,
-          travelerRefIds,
-          commissionPercent: resolveCommissionPercent(body),
-        });
-
-        if (!documentOverrideResult.ok) {
-          await prisma.booking.update({
-            where: { id: preparedBooking.id },
-            data: {
-              rawCommit: documentOverrideResult.payload as unknown as object,
-            },
-          });
-          return logAndRespondError({
-            status: 502,
-            message: `Travelport document override commission failed (${documentOverrideResult.status})`,
-            details: documentOverrideResult.errorMessage,
-            stage: "commit_only_document_override",
+      if (hasCommitOnlyOffer) {
+        const passengerRows = normalizePassengerRows(body);
+        const offerTravelerRefIds = Array.from(
+          { length: passengerRows.length },
+          (_, index) => `trav_${index + 1}`
+        );
+        if (offerTravelerRefIds.length) {
+          documentOverrideResult = await applyDocumentOverrides({
+            bookingBaseUrl,
             reservationId: commitReservationId,
+            headers: commonHeaders,
+            travelerRefIds: offerTravelerRefIds,
+            commissionPercent: resolveCommissionPercent(body),
+            logs: apiFlowLogs,
           });
+
+          if (!documentOverrideResult.ok) {
+            return logAndRespondError({
+              status: 502,
+              message: `Travelport document override commission failed (${documentOverrideResult.status})`,
+              details: documentOverrideResult.errorMessage,
+              stage: "commit_only_document_override",
+              reservationId: commitReservationId,
+            });
+          }
         }
-      } else if (existingDocumentOverrideResponse) {
-        documentOverrideResult = {
-          ok: true,
-          status: 200,
-          payload: existingDocumentOverrideResponse,
-          errorMessage: "",
-        };
       }
 
       const strictPaymentFlow = parseBooleanFlag(
@@ -2624,6 +2692,8 @@ export default async function handler(
           bookingBaseUrl,
           reservationId: commitReservationId,
           headers: commonHeaders,
+          stepName: "commit_only_form_of_payment",
+          logs: apiFlowLogs,
           enabled: true,
           pathTemplate: toText(process.env.TRAVELPORT_ISSUE_TICKET_FORM_OF_PAYMENT_PATH),
           payloadEnvName: "TRAVELPORT_ISSUE_TICKET_FORM_OF_PAYMENT_PAYLOAD",
@@ -2652,6 +2722,8 @@ export default async function handler(
           bookingBaseUrl,
           reservationId: commitReservationId,
           headers: commonHeaders,
+          stepName: "commit_only_apply_payment",
+          logs: apiFlowLogs,
           enabled: true,
           pathTemplate: toText(process.env.TRAVELPORT_ISSUE_TICKET_APPLY_PAYMENT_PATH),
           payloadEnvName: "TRAVELPORT_ISSUE_TICKET_APPLY_PAYMENT_PAYLOAD",
@@ -2679,17 +2751,9 @@ export default async function handler(
         bookingBaseUrl,
         reservationId: commitReservationId,
         headers: commonHeaders,
+        logs: apiFlowLogs,
       });
       if (!commitResult.ok) {
-        if (preparedBookingReady) {
-          await prisma.booking.update({
-            where: { id: preparedBooking.id },
-            data: {
-              status: "FAILED",
-              rawCommit: commitResult.payload as unknown as object,
-            },
-          });
-        }
         return logAndRespondError({
           status: 502,
           message: `Travelport commit reservation failed (${commitResult.status})`,
@@ -2699,28 +2763,30 @@ export default async function handler(
         });
       }
 
-      if (preparedBookingReady) {
-        await prisma.booking.update({
-          where: { id: preparedBooking.id },
-          data: {
-            status: "COMMITTED",
-            reservationId: commitReservationId,
-            locator: commitResult.locator || null,
-            rawCommit: commitResult.payload as unknown as object,
-          },
-        });
-      }
-
-      const locatorWarnings: string[] = [];
       if (commitResult.locator) {
         try {
-          await persistLocatorToLocalFile({
-            locator: commitResult.locator,
+          await persistCommittedBooking({
+            userId: sessionUser.id,
+            body,
+            bookingFlowKey: activeBookingFlowKey,
+            bookingOfferKey: activeBookingOfferKey,
             reservationId: commitReservationId,
-            offerIdentifiers: [],
+            locator: commitResult.locator,
+            selectedOffer: hasCommitOnlyOffer ? commitOnlySelectedOffer : undefined,
+            preCommitResponse: null,
+            commitResponse: commitResult.payload,
           });
-        } catch {
-          locatorWarnings.push("Unable to save locator in local atpn.txt");
+        } catch (persistError) {
+          return logAndRespondError({
+            status: 500,
+            message: "Booking committed but failed to save booking in database.",
+            details:
+              persistError instanceof Error
+                ? persistError.message
+                : "Database persistence failed after commit.",
+            stage: "commit_only_db_persist",
+            reservationId: commitReservationId,
+          });
         }
       }
       if (activeBookingFlowKey) {
@@ -2736,7 +2802,7 @@ export default async function handler(
         travelerIdentifiers: [],
         primaryContactIdentifier: null,
         locator: commitResult.locator,
-        warnings: locatorWarnings,
+        warnings,
         workbenchResponse: null,
         addOfferResponse: null,
         travelerResponse: null,
@@ -2749,14 +2815,42 @@ export default async function handler(
         bookingFlowKey: activeBookingFlowKey || null,
         bookingOfferKey: activeBookingOfferKey || null,
         bookingFlowExpiresAt: activeBookingFlowExpiresAt || null,
+        apiFlowLogs,
       });
     }
 
     const selectedOffer = resolveSelectedOffer(body);
-    if (!Object.keys(selectedOffer).length) {
+
+    // Check if this is a commitOnly request - if so, we don't need flight data
+    const isCommitOnly = body?.commitOnly === true && body?.commitRequested === true;
+
+    if (!Object.keys(selectedOffer).length && !isCommitOnly) {
+      const errorDetails = {
+        hasSelectedAirPrice: !!body?.selectedAirPrice && typeof body.selectedAirPrice === "object",
+        selectedAirPriceKeys: body?.selectedAirPrice ? Object.keys(body.selectedAirPrice) : [],
+        hasSelectedOffer: !!body?.selectedOffer && typeof body.selectedOffer === "object",
+        selectedOfferKeys: body?.selectedOffer ? Object.keys(body.selectedOffer) : [],
+        hasOffer: !!body?.offer && typeof body.offer === "object",
+        hasData: !!body?.data && typeof body.data === "object",
+      };
+
       return logAndRespondError({
         status: 400,
         message: "selectedAirPrice or selectedOffer is required",
+        stage: "precommit_validation",
+        destroyFlowKey: true,
+        details: JSON.stringify(errorDetails),
+      });
+    }
+
+    // For commitOnly, use existing reservation data
+    if (isCommitOnly && !Object.keys(selectedOffer).length) {
+      // This is OK - we already have the reservation from precommit
+      // Continue with commit-only flow
+    } else if (!Object.keys(selectedOffer).length) {
+      return logAndRespondError({
+        status: 400,
+        message: "Flight data not found in request",
         stage: "precommit_validation",
         destroyFlowKey: true,
       });
@@ -2787,6 +2881,16 @@ export default async function handler(
       string,
       unknown
     >;
+    pushApiFlowLog({
+      logs: apiFlowLogs,
+      step: "precommit_session",
+      method: "POST",
+      url: sessionUrl,
+      requestBody: { "@type": "ReservationID" },
+      status: sessionResponse.status,
+      ok: sessionResponse.ok && !hasTravelportErrors(sessionPayload),
+      responseBody: sessionPayload,
+    });
     if (!sessionResponse.ok) {
       return logAndRespondError({
         status: 502,
@@ -2815,8 +2919,6 @@ export default async function handler(
       });
     }
     activeReservationId = reservationId;
-
-    const warnings: string[] = [];
 
     const travelers = buildTravelersPayload(selectedOffer, body);
     const travelerRefIds = resolveTravelerRefIds(travelers);
@@ -2850,6 +2952,16 @@ export default async function handler(
       string,
       unknown
     >;
+    pushApiFlowLog({
+      logs: apiFlowLogs,
+      step: "precommit_add_traveler_list",
+      method: "POST",
+      url: travelerListUrl,
+      requestBody: travelerListPayload,
+      status: travelerListResponse.status,
+      ok: travelerListResponse.ok && !hasTravelportErrors(travelerListResponsePayload),
+      responseBody: travelerListResponsePayload,
+    });
     if (travelerListResponse.ok && !hasTravelportErrors(travelerListResponsePayload)) {
       travelerPayloadResponse = travelerListResponsePayload;
       travelerIdentifiers = resolveTravelerIdentifiers(travelerListResponsePayload);
@@ -2869,6 +2981,16 @@ export default async function handler(
           string,
           unknown
         >;
+        pushApiFlowLog({
+          logs: apiFlowLogs,
+          step: "precommit_add_traveler_single",
+          method: "POST",
+          url: travelerSingleUrl,
+          requestBody: traveler,
+          status: travelerResponse.status,
+          ok: travelerResponse.ok && !hasTravelportErrors(travelerResponsePayload),
+          responseBody: travelerResponsePayload,
+        });
         travelerResults.push(travelerResponsePayload);
 
         if (!travelerResponse.ok || hasTravelportErrors(travelerResponsePayload)) {
@@ -2913,6 +3035,7 @@ export default async function handler(
       headers: commonHeaders,
       travelerRefIds,
       commissionPercent: resolveCommissionPercent(body),
+      logs: apiFlowLogs,
     });
 
     if (!documentOverrideResult.ok) {
@@ -2959,6 +3082,18 @@ export default async function handler(
       const addCatalogOfferingsPayloadResponse = (await parseJsonSafe(
         addCatalogOfferingsResponse
       )) as Record<string, unknown>;
+      pushApiFlowLog({
+        logs: apiFlowLogs,
+        step: "precommit_add_offer_catalog_offerings",
+        method: "POST",
+        url: addCatalogOfferingsUrl,
+        requestBody: addCatalogOfferingsPayload,
+        status: addCatalogOfferingsResponse.status,
+        ok:
+          addCatalogOfferingsResponse.ok &&
+          !hasTravelportErrors(addCatalogOfferingsPayloadResponse),
+        responseBody: addCatalogOfferingsPayloadResponse,
+      });
 
       if (
         addCatalogOfferingsResponse.ok &&
@@ -2992,6 +3127,16 @@ export default async function handler(
         string,
         unknown
       >;
+      pushApiFlowLog({
+        logs: apiFlowLogs,
+        step: "precommit_add_offer_products",
+        method: "POST",
+        url: addOfferUrl,
+        requestBody: addOfferPayload,
+        status: addOfferResponse.status,
+        ok: addOfferResponse.ok && !hasTravelportErrors(addOfferPayloadResponse),
+        responseBody: addOfferPayloadResponse,
+      });
       addOfferMode = "products";
     }
 
@@ -3027,6 +3172,18 @@ export default async function handler(
         const relaxedAddOfferPayloadResponse = (await parseJsonSafe(
           relaxedAddOfferResponse
         )) as Record<string, unknown>;
+        pushApiFlowLog({
+          logs: apiFlowLogs,
+          step: "precommit_add_offer_products_relaxed_retry",
+          method: "POST",
+          url: addOfferUrl,
+          requestBody: relaxedAddOfferPayload,
+          status: relaxedAddOfferResponse.status,
+          ok:
+            relaxedAddOfferResponse.ok &&
+            !hasTravelportErrors(relaxedAddOfferPayloadResponse),
+          responseBody: relaxedAddOfferPayloadResponse,
+        });
 
         if (
           relaxedAddOfferResponse.ok &&
@@ -3111,6 +3268,18 @@ export default async function handler(
         const addSeatOfferPayloadResponse = (await parseJsonSafe(
           addSeatOfferResponse
         )) as Record<string, unknown>;
+        pushApiFlowLog({
+          logs: apiFlowLogs,
+          step: "precommit_add_seat_offer",
+          method: "POST",
+          url: addSeatOfferUrl,
+          requestBody: seatAncillaryPayload,
+          status: addSeatOfferResponse.status,
+          ok:
+            addSeatOfferResponse.ok &&
+            !hasTravelportErrors(addSeatOfferPayloadResponse),
+          responseBody: addSeatOfferPayloadResponse,
+        });
 
         if (
           !addSeatOfferResponse.ok ||
@@ -3153,6 +3322,18 @@ export default async function handler(
       const primaryContactResponsePayload = (await parseJsonSafe(
         primaryContactResponse
       )) as Record<string, unknown>;
+      pushApiFlowLog({
+        logs: apiFlowLogs,
+        step: "precommit_primary_contact",
+        method: "POST",
+        url: primaryContactUrl,
+        requestBody: primaryContactPayload,
+        status: primaryContactResponse.status,
+        ok:
+          primaryContactResponse.ok &&
+          !hasTravelportErrors(primaryContactResponsePayload),
+        responseBody: primaryContactResponsePayload,
+      });
 
       if (
         primaryContactResponse.ok &&
@@ -3169,50 +3350,18 @@ export default async function handler(
       }
     }
 
-    let preparedBookingRecord:
-      | {
-        id: number;
-        routeKey: string;
-        airlineCode: string;
-        travelDate: Date;
-        flightSignature: string;
-      }
-      | null = null;
-
-    try {
-      preparedBookingRecord = await persistPreparedBooking({
-        userId: sessionUser.id,
-        body,
-        bookingFlowKey: activeBookingFlowKey,
-        bookingOfferKey: activeBookingOfferKey,
-        reservationId,
-        selectedOffer,
-        preCommitResponse: {
-          reservationId,
-          offerIdentifiers: activeOfferIdentifiers,
-          travelerIdentifiers,
-          travelerRefIds,
-          addOfferResponse: addOfferPayloadResponse,
-          travelerResponse: travelerPayloadResponse,
-          seatOfferResponse: seatOfferPayloadResponse,
-          primaryContactResponse: primaryContactPayloadResponse,
-          documentOverrideResponse: documentOverrideResult?.payload || null,
-          warnings,
-        },
-      });
-    } catch (persistError) {
-      return logAndRespondError({
-        status: 500,
-        message: "Unable to save booking preview data in database.",
-        details:
-          persistError instanceof Error
-            ? persistError.message
-            : "Database persistence failed during pre-commit stage.",
-        warnings,
-        stage: "precommit_db_persist",
-        destroyFlowKey: true,
-      });
-    }
+    const preCommitSnapshot: Record<string, unknown> = {
+      reservationId,
+      offerIdentifiers: activeOfferIdentifiers,
+      travelerIdentifiers,
+      travelerRefIds,
+      addOfferResponse: addOfferPayloadResponse,
+      travelerResponse: travelerPayloadResponse,
+      seatOfferResponse: seatOfferPayloadResponse,
+      primaryContactResponse: primaryContactPayloadResponse,
+      documentOverrideResponse: documentOverrideResult?.payload || null,
+      warnings,
+    };
 
     if (!commitRequested) {
       if (activeBookingFlowKey) {
@@ -3244,6 +3393,7 @@ export default async function handler(
         bookingFlowKey: activeBookingFlowKey || null,
         bookingOfferKey: activeBookingOfferKey || null,
         bookingFlowExpiresAt: activeBookingFlowExpiresAt || null,
+        apiFlowLogs,
       });
     }
 
@@ -3264,47 +3414,39 @@ export default async function handler(
         message: "Daily booking limit reached. Maximum 10 committed bookings per day.",
         details: "Try again tomorrow or contact support for exception handling.",
         dailyCommittedCount: committedTodayCount,
+        apiFlowLogs,
       });
     }
 
-    if (preparedBookingRecord) {
-      const duplicateBooking = await prisma.booking.findFirst({
-        where: {
-          userId: sessionUser.id,
-          status: "COMMITTED",
-          flightSignature: preparedBookingRecord.flightSignature,
-          routeKey: preparedBookingRecord.routeKey,
-          airlineCode: preparedBookingRecord.airlineCode,
-          travelDate: preparedBookingRecord.travelDate,
-        },
-        orderBy: { createdAt: "desc" },
+    const commitFingerprint = resolveBookingFingerprint(selectedOffer);
+    const duplicateBooking = await prisma.booking.findFirst({
+      where: {
+        userId: sessionUser.id,
+        status: "COMMITTED",
+        flightSignature: commitFingerprint.flightSignature,
+        routeKey: commitFingerprint.routeKey,
+        airlineCode: commitFingerprint.airlineCode,
+        travelDate: commitFingerprint.travelDate,
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (duplicateBooking) {
+      return res.status(409).json({
+        message:
+          "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
+        details: "Previous booking returned instead of creating a duplicate booking.",
+        previousBooking: getBookingSummaryRow(duplicateBooking),
+        dailyCommittedCount: committedTodayCount,
+        apiFlowLogs,
       });
-
-      if (duplicateBooking) {
-        return res.status(409).json({
-          message:
-            "Duplicate booking blocked. Same flight/route/airline/date was already booked.",
-          details: "Previous booking returned instead of creating a duplicate booking.",
-          previousBooking: getBookingSummaryRow(duplicateBooking),
-          dailyCommittedCount: committedTodayCount,
-        });
-      }
     }
-
-    const storedDocumentOverrideResponse = getValueByKeys(
-      preparedBookingRecord
-        ? ((await prisma.booking.findUnique({
-          where: { id: preparedBookingRecord.id },
-          select: { rawPreview: true },
-        }))?.rawPreview as Record<string, unknown> | null)
-        : null,
-      ["documentOverrideResponse", "DocumentOverrideResponse"]
-    ) as Record<string, unknown> | null;
 
     const commitResult = await commitReservation({
       bookingBaseUrl,
       reservationId,
       headers: commonHeaders,
+      logs: apiFlowLogs,
     });
     if (!commitResult.ok) {
       return logAndRespondError({
@@ -3316,27 +3458,31 @@ export default async function handler(
       });
     }
 
-    if (preparedBookingRecord) {
-      await prisma.booking.update({
-        where: { id: preparedBookingRecord.id },
-        data: {
-          status: "COMMITTED",
-          locator: commitResult.locator || null,
-          reservationId,
-          rawCommit: commitResult.payload as unknown as object,
-        },
-      });
-    }
-
     if (commitResult.locator) {
       try {
-        await persistLocatorToLocalFile({
-          locator: commitResult.locator,
+        await persistCommittedBooking({
+          userId: sessionUser.id,
+          body,
+          bookingFlowKey: activeBookingFlowKey,
+          bookingOfferKey: activeBookingOfferKey,
           reservationId,
-          offerIdentifiers: activeOfferIdentifiers,
+          locator: commitResult.locator,
+          selectedOffer,
+          preCommitResponse: preCommitSnapshot,
+          commitResponse: commitResult.payload,
         });
-      } catch {
-        warnings.push("Unable to save locator in local atpn.txt");
+      } catch (persistError) {
+        return logAndRespondError({
+          status: 500,
+          message: "Booking committed but failed to save booking in database.",
+          details:
+            persistError instanceof Error
+              ? persistError.message
+              : "Database persistence failed after commit.",
+          warnings,
+          stage: "commit_db_persist",
+          reservationId,
+        });
       }
     }
     if (activeBookingFlowKey) {
@@ -3358,17 +3504,19 @@ export default async function handler(
       travelerResponse: travelerPayloadResponse,
       seatOfferResponse: seatOfferPayloadResponse,
       primaryContactResponse: primaryContactPayloadResponse,
-      documentOverrideResponse: storedDocumentOverrideResponse || null,
+      documentOverrideResponse: documentOverrideResult?.payload || null,
       commitResponse: commitResult.payload,
       bookingFlowKey: activeBookingFlowKey || null,
       bookingOfferKey: activeBookingOfferKey || null,
       bookingFlowExpiresAt: activeBookingFlowExpiresAt || null,
+      apiFlowLogs,
     });
   } catch (error) {
     return respondWithLoggedError(res, {
       status: 500,
       message: error instanceof Error ? error.message : "Unexpected server error",
       stage: "unexpected",
+      apiFlowLogs,
     });
   }
 }

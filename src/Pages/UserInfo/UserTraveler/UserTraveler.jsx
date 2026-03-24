@@ -5,7 +5,7 @@ import AddTraveler from "./AddTraveler";
 import secureLocalStorage from "react-secure-storage";
 import moment from "moment";
 import { useNavigate } from "react-router-dom";
-import { config } from "../../../config";
+import { fetchTravelBuddies } from "../../../utils/travelBuddyApi";
 
 const UserTraveler = () => {
   const [travelData, setTravelData] = useState([]);
@@ -22,35 +22,14 @@ const UserTraveler = () => {
 
   useEffect(() => {
     const fetchTransactions = async () => {
-      if (!token) {
-        setTravelData([]);
-        setLoading(false);
-        return;
-      }
-
       try {
         setErrorText("");
-        const normalizedBaseUrl = String(config?.baseUrl || "").trim().replace(/\/+$/, "");
-        const endpoint = `${normalizedBaseUrl}/user/findAllTravelBuddy`;
-
-        const response = await fetch(endpoint, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setTravelData(Array.isArray(data?.travelBuddies) ? data.travelBuddies : []);
-        } else {
-          setTravelData([]);
-          setErrorText("Unable to load travellers right now. Please try again.");
-        }
+        setLoading(true);
+        const data = await fetchTravelBuddies({ token });
+        setTravelData(Array.isArray(data?.travelBuddies) ? data.travelBuddies : []);
       } catch (error) {
         setTravelData([]);
-        setErrorText("Unable to connect to server. Please check API URL/server and try again.");
+        setErrorText("Unable to load travellers right now. Please try again.");
       } finally {
         setLoading(false);
       }

@@ -43,6 +43,7 @@ import BrandWordmark from "../../BrandWordmark/BrandWordmark";
 
 import axios from "axios";
 import { config } from "../../../config";
+import { setBookingAuthToken } from "../../../utils/bookingAuth";
 const isMobile = window.innerWidth <= 768;
 
 const Transition = React.forwardRef(function Transition(props, ref) {
@@ -143,41 +144,6 @@ const PageNotFound = () => {
   const handleSignUpOtpClose = () => {
     setOpenSignUpOtp(false);
   };
-  // blanced funcatinolity
-  const [isEditing, setIsEditing] = useState(false);
-  const [balance, setBlance] = useState([]);
-  const token = secureLocalStorage.getItem("access_token");
-  const handleIconClick = () => {
-    setIsEditing((prev) => !prev);
-  };
-  useEffect(() => {
-    const fetchTransactions = async () => {
-      setLoading(true);
-      try {
-        const response = await fetch(`${config.baseUrl}/deposit/user/wallet`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-          },
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          setBlance(data);
-        } else {
-          console.error("Failed to fetch data:", response.statusText);
-        }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTransactions();
-  }, [token]);
-
   // login funcatinolity
   const [lodaing, setLoading] = useState(false);
   const [userSignInInfo, setUserSignInInfo] = useState({
@@ -274,6 +240,24 @@ const PageNotFound = () => {
         secureLocalStorage.setItem("access_token", data?.access_token);
         secureLocalStorage.setItem("userData", data?.userData);
         secureLocalStorage.setItem("data", data);
+
+        // Keep local booking session cookie in sync for /api/auth/me.
+        try {
+          const localLoginResponse = await fetch(`/api/auth/login`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const localLoginData = await localLoginResponse.json().catch(() => ({}));
+          if (localLoginResponse.ok && localLoginData?.token) {
+            setBookingAuthToken(localLoginData.token);
+          }
+        } catch {
+          // Ignore sync failures and keep external login success.
+        }
 
         // Reset the form fields
         setUserSignInInfo({
@@ -917,13 +901,13 @@ const PageNotFound = () => {
                                                         textDecoration: "none",
                                                         backgroundColor:
                                                           location?.pathname ===
-                                                          "/userinfov2/userprofile"
+                                                            "/userinfov2/userprofile"
                                                             ? "var(--primary-color)"
                                                             : "#E6ECF5",
                                                         display: "flex",
                                                         color:
                                                           location?.pathname ===
-                                                          "/userinfov2/userprofile"
+                                                            "/userinfov2/userprofile"
                                                             ? "#3D3A49"
                                                             : "#003E6B",
                                                         alignItems: "center",
@@ -959,13 +943,13 @@ const PageNotFound = () => {
                                                         textDecoration: "none",
                                                         backgroundColor:
                                                           location?.pathname ===
-                                                          "/userinfov2/userbooking"
+                                                            "/userinfov2/userbooking"
                                                             ? "var(--primary-color)"
                                                             : "#E6ECF5",
                                                         display: "flex",
                                                         color:
                                                           location.pathname ===
-                                                          "/userinfov2/userbooking"
+                                                            "/userinfov2/userbooking"
                                                             ? "#3D3A49"
                                                             : "#003E6B",
                                                         alignItems: "center",
@@ -1000,13 +984,13 @@ const PageNotFound = () => {
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location?.pathname ===
-                                                        "/userinfov2/userwallet"
+                                                          "/userinfov2/userwallet"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location?.pathname ===
-                                                        "/userinfov2/userwallet"
+                                                          "/userinfov2/userwallet"
                                                           ? "#3D3A49"
                                                           : "#003E6B",
                                                       alignItems: "center",
@@ -1037,13 +1021,13 @@ const PageNotFound = () => {
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location.pathname ===
-                                                        "/userinfov2/usertransctions"
+                                                          "/userinfov2/usertransctions"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location.pathname ===
-                                                        "/userinfov2/usertransctions"
+                                                          "/userinfov2/usertransctions"
                                                           ? "#3D3A49"
                                                           : "#003E6B",
                                                       alignItems: "center",
@@ -1074,13 +1058,13 @@ const PageNotFound = () => {
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location?.pathname ===
-                                                        "/userinfov2/usertraveler"
+                                                          "/userinfov2/usertraveler"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location?.pathname ===
-                                                        "/userinfov2/usertraveler"
+                                                          "/userinfov2/usertraveler"
                                                           ? "#3D3A49"
                                                           : "#003E6B",
                                                       alignItems: "center",
@@ -1682,7 +1666,7 @@ const PageNotFound = () => {
                     justifyContent: "center",
                     my: "10px",
                   }}
-                  >
+                >
                   <BrandWordmark width={120} height={100} fontSize={30} />
                 </Box>
                 <Typography

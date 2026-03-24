@@ -20,3 +20,7 @@
 2026-03-23T12:36:45.871Z | Locator=FRCT9H | ReservationId=dd0618a7-40c8-4ff8-ac61-7b3d96af16b9 | OfferIdentifiers=N/A2026-03-23T13:09:35.106Z | Locator=FRCTGB | ReservationId=bb32a0aa-9a9d-431c-b8ee-ddc6a4657a91 | OfferIdentifiers=N/A
 2026-03-23T14:32:16.587Z | Locator=FRCTW4 | ReservationId=bce62479-8e89-4e0a-8630-4dfbf59b34a6 | OfferIdentifiers=N/A
 2026-03-23T15:05:30.643Z | Locator=FRCTZZ | ReservationId=9bb9cd84-35b7-4c6c-8dd1-23f2417edc26 | OfferIdentifiers=N/A
+2026-03-23T16:16:50.666Z | Locator=FRCV7Q | ReservationId=dda6388a-3cb3-4fce-8b04-94cf670680fc | OfferIdentifiers=N/A
+2026-03-23T17:17:42.152Z | Locator=FRCVCZ | ReservationId=28a11a6b-9eb8-4d99-b8d6-dc18ce482d6c | OfferIdentifiers=N/A
+2026-03-23T18:11:31.264Z | Locator=FRCVJ9 | ReservationId=ff580dc4-ddb6-4377-9a8e-70a087ec8a32 | OfferIdentifiers=N/A
+2026-03-24T05:30:08.285Z | FAILED | Stage=precommit_validation | Status=400 | ReservationId=e5a2ba94-986a-4405-91ca-a3b5b4a55e58 | FlowKey=flow_0e473086-97b7-4aa1-83b0-b458d7903d8b | OfferKey=offer_2f21c443-45e8-4eca-abbf-d34c782c2fc1 | Message=selectedAirPrice or selectedOffer is required | Details={"hasSelectedAirPrice":false,"selectedAirPriceKeys":[],"hasSelectedOffer":false,"selectedOfferKeys":[],"hasOffer":false,"hasData":false}

@@ -12,12 +12,13 @@ enum BookingStatus {
   BOOKED
   FAILED
   CANCELLED
-  TICKTED
+  COMMITTED
+  TICKETED
 }
 
 model User {
-  id                     Int       @id @default(autoincrement())
-  email                  String    @unique
+  id                     Int           @id @default(autoincrement())
+  email                  String        @unique
   name                   String?
   givenName              String?
   surName                String?
@@ -30,9 +31,10 @@ model User {
   nationality            String?
   gender                 String?
   passwordHash           String
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
   bookings               Booking[]
+  travelBuddies          TravelBuddy[]
 }
 
 model Booking {
@@ -83,4 +85,24 @@ model BookingPassenger {
   createdAt              DateTime  @default(now())
 
   @@index([bookingId, paxType])
+}
+
+model TravelBuddy {
+  id                 Int       @id @default(autoincrement())
+  userId             Int
+  user               User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title              String?
+  firstName          String?
+  lastName           String?
+  paxtype            String?
+  gender             String?
+  nationality        String?
+  dateOfBirth        DateTime?
+  passportNumber     String?
+  passportExpiryDate DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+  @@index([userId, passportNumber])
 }

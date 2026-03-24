@@ -25,6 +25,7 @@ import { FaCcVisa } from "react-icons/fa";
 import HoldLoader from "../../../Shared/Loader/HoldLoader";
 import SearchableDropDown from "../SearchableDropDown/SearchableDropDown";
 import { config } from "../../../config";
+import { fetchTravelBuddies } from "../../../utils/travelBuddyApi";
 
 const PassengerInfo = ({ data, airPriceData }) => {
   const token = secureLocalStorage.getItem("access_token");
@@ -577,35 +578,22 @@ const PassengerInfo = ({ data, airPriceData }) => {
   const [travellers, setTravellers] = useState([]);
 
   useEffect(() => {
-    let url = `${config.baseUrl}/user/findAllTravelBuddy`;
-
-    fetch(url, {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-    })
-      .then((res) => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! Status: ${res.status}`);
-        }
-        return res.json();
-      })
+    fetchTravelBuddies({ token })
       .then((data) => {
         let uniqueTravelers = [
           ...new Map(
-            data?.travelBuddies?.map((item) => [item["document"], item])
+            (Array.isArray(data?.travelBuddies) ? data.travelBuddies : []).map((item) => [
+              item?.document || item?.passport || `${item?.firstName}-${item?.lastName}`,
+              item,
+            ])
           ).values(),
         ];
         setTravellers(uniqueTravelers);
       })
       .catch((error) => {
         console.error("Error fetching data:", error);
-        // Handle the error, show a message, or perform other actions
       });
-  }, []);
+  }, [token]);
   const handleAutoFill = (obj, index, category) => {
     const {
       dob,
@@ -1061,9 +1049,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                                 color: "#444542",
                               },
                               "&.Mui-focused .MuiOutlinedInput-notchedOutline":
-                                {
-                                  border: "none",
-                                },
+                              {
+                                border: "none",
+                              },
                             }}
                           >
                             <MenuItem value="" disabled>
@@ -1114,9 +1102,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                                 color: "#444542",
                               },
                               "&.Mui-focused .MuiOutlinedInput-notchedOutline":
-                                {
-                                  border: "none",
-                                },
+                              {
+                                border: "none",
+                              },
                             }}
                             MenuProps={{
                               PaperProps: {
@@ -1236,9 +1224,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                             >
                               {adultPax.apassEx
                                 ? format(
-                                    new Date(adultPax.apassEx),
-                                    "dd MMM yyy"
-                                  )
+                                  new Date(adultPax.apassEx),
+                                  "dd MMM yyy"
+                                )
                                 : "Select Date"}
                             </label>
                           </Box>
@@ -1877,9 +1865,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                                 color: "#444542",
                               },
                               "&.Mui-focused .MuiOutlinedInput-notchedOutline":
-                                {
-                                  border: "none",
-                                },
+                              {
+                                border: "none",
+                              },
                             }}
                           >
                             <MenuItem value="" disabled>
@@ -1933,9 +1921,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                                 color: "#444542",
                               },
                               "&.Mui-focused .MuiOutlinedInput-notchedOutline":
-                                {
-                                  border: "none",
-                                },
+                              {
+                                border: "none",
+                              },
                             }}
                             MenuProps={{
                               PaperProps: {
@@ -2703,9 +2691,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                                 color: "#444542",
                               },
                               "&.Mui-focused .MuiOutlinedInput-notchedOutline":
-                                {
-                                  border: "none",
-                                },
+                              {
+                                border: "none",
+                              },
                             }}
                           >
                             <MenuItem value="" disabled>
@@ -2759,9 +2747,9 @@ const PassengerInfo = ({ data, airPriceData }) => {
                                 color: "#444542",
                               },
                               "&.Mui-focused .MuiOutlinedInput-notchedOutline":
-                                {
-                                  border: "none",
-                                },
+                              {
+                                border: "none",
+                              },
                             }}
                             MenuProps={{
                               PaperProps: {

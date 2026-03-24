@@ -15,17 +15,12 @@ import PreviewBooking from "./Pages/BookingDetaills/PreviewBooking"
 import BookingConfirmation from "./Pages/BookingDetaills/BookingConfirmation"
 import BookingQueInfo from "./Pages/BookingQueInfo/BookingQueInfo"
 import UserProfileUpdated from "./Pages/UserInfo/UserProfile/UserProfileUpdated"
-import PaymentGateway from "./Pages/PaymentGateway/PaymentGateway"
-import UserInfoV2 from "./Pages/UserInfoV2/UserInfoV2"
 import UserProfile from "./Pages/UserInfo/UserProfile/UserProfile"
 import AddDeposite from "./Pages/UserInfo/UserWallet/AddDeposite"
 import UserTransactions from "./Pages/UserInfo/UserTransactions/UserTransactions"
 import UserTraveler from "./Pages/UserInfo/UserTraveler/UserTraveler"
 import AddTraveler from "./Pages/UserInfo/UserTraveler/AddTraveler"
-import PaymentSuccess from "./Pages/PaymentGateway/PaymentSuccess/PaymentSuccess"
-import PaymentCancelled from "./Pages/PaymentGateway/PaymentCancelled/PaymentCancelled"
 import ScrollToTop from "./ScrollToTop"
-import PaymentFailed from "./Pages/PaymentGateway/PaymentFailed/PaymentFailed"
 import OtpVerification from "./Pages/SignUp/OtpVerification"
 import ForgetEmail from "./Pages/SignUp/ForgetEmail"
 import ChangePassword from "./Pages/SignUp/ChangePassword"
@@ -34,7 +29,6 @@ import NoBookingsFound from "./Shared/AnimationError/NoBookingsFound/NoBookingsF
 import PageNotFound from "./Shared/AnimationError/NoBookingsFound/PageNotFound"
 import AboutUs from "./Pages/Policy/AboutUs/AboutUs"
 import FlightLoading from "./Pages/OneWay/FlightLoading"
-import Booking from "./Pages/UserInfo/UserBooking/Booking"
 import TermsConditions from "./Pages/TermsConditions/TermsConditions"
 import Test from "./Test"
 import Blog from "./Pages/Blog/Blog"
@@ -92,32 +86,14 @@ const App: FC = () => {
             <Route path="/previewbooking" element={<PreviewBooking />} />
             <Route path="/bookingconfirmation" element={<BookingConfirmation />} />
             <Route path="/bookingquedetails" element={<BookingQueInfo />} />
-            <Route path="/paymentgateway" element={<PaymentGateway />} />
-            <Route path="/paymentsuccess" element={<PaymentSuccess />} />
-            <Route path="/paymentcancelled" element={<PaymentCancelled />} />
-            <Route path="/paymentfailed" element={<PaymentFailed />} />
             {/* userDashbord Route  */}
             <Route  >
-              <Route path="/userinfov2" element={<UserInfoV2 />}>
-                <Route path="userprofile" element={<UserProfile />} />
-                {/* <Route path="userbooking" element={<UserBooking />} /> */}
-                <Route path="userbooking" element={<Booking />} />
-                {/* <Route path="userwallet" element={<UserWallet />} /> */}
-                <Route path="adddeposite" element={<AddDeposite />} />
-                <Route path="usertransctions" element={<UserTransactions />} />
-                <Route path="usertraveler" element={<UserTraveler />} />
-                <Route path="addtravler" element={<AddTraveler />} />
-                <Route path="updateprofilev2" element={<UserProfileUpdated />} />
-              </Route>
-              <Route path="/myprofile" element={<UserInfoV2 />}>
-                <Route path="userprofile" element={<UserProfile />} />
-                <Route path="userbooking" element={<Booking />} />
-                <Route path="adddeposite" element={<AddDeposite />} />
-                <Route path="usertransctions" element={<UserTransactions />} />
-                <Route path="usertraveler" element={<UserTraveler />} />
-                <Route path="addtravler" element={<AddTraveler />} />
-                <Route path="updateprofilev2" element={<UserProfileUpdated />} />
-              </Route>
+              <Route path="/myprofile" element={<UserProfile />} />
+              <Route path="/myprofile/adddeposite" element={<AddDeposite />} />
+              <Route path="/myprofile/usertransctions" element={<UserTransactions />} />
+              <Route path="/myprofile/usertraveler" element={<UserTraveler />} />
+              <Route path="/myprofile/addtravler" element={<AddTraveler />} />
+              <Route path="/myprofile/updateprofilev2" element={<UserProfileUpdated />} />
             </Route>
           </Route>
 

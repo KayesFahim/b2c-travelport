@@ -59,6 +59,7 @@ import axios from "axios";
 import ShowDetails from "../ShowDetails/FlightDetails";
 import { config } from "../../config";
 import BrandWordmark from "../../Shared/BrandWordmark/BrandWordmark";
+import { setBookingAuthToken } from "../../utils/bookingAuth";
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
@@ -257,6 +258,24 @@ const SingleMulticityFlight = ({ data }) => {
         secureLocalStorage.setItem("access_token", data?.access_token);
         secureLocalStorage.setItem("userData", data?.userData);
         secureLocalStorage.setItem("data", data);
+
+        // Keep local booking session cookie in sync for /api/auth/me.
+        try {
+          const localLoginResponse = await fetch(`/api/auth/login`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const localLoginData = await localLoginResponse.json().catch(() => ({}));
+          if (localLoginResponse.ok && localLoginData?.token) {
+            setBookingAuthToken(localLoginData.token);
+          }
+        } catch {
+          // Ignore sync failures and keep external login success.
+        }
 
         // Reset the form fields
         setUserSignInInfo({
@@ -814,12 +833,12 @@ const SingleMulticityFlight = ({ data }) => {
                         {info?.Segments?.length === 1
                           ? "Non Stop"
                           : info?.Segments?.length === 2
-                          ? "One Stop"
-                          : info?.Segments?.length === 3
-                          ? "Two Stops"
-                          : info?.Segments?.length === 4
-                          ? "Three Stops"
-                          : null}
+                            ? "One Stop"
+                            : info?.Segments?.length === 3
+                              ? "Two Stops"
+                              : info?.Segments?.length === 4
+                                ? "Three Stops"
+                                : null}
                       </Typography>
                     </Box>
                   </Box>
@@ -885,12 +904,12 @@ const SingleMulticityFlight = ({ data }) => {
                       >
                         {info?.Segments[info?.Segments.length - 1]?.ArrAirPort
                           ? info?.Segments[info?.Segments.length - 1]
-                              ?.ArrAirPort.length > 30
+                            ?.ArrAirPort.length > 30
                             ? info?.Segments[
-                                info?.Segments.length - 1
-                              ]?.ArrAirPort.slice(0, 30)
+                              info?.Segments.length - 1
+                            ]?.ArrAirPort.slice(0, 30)
                             : info?.Segments[info?.Segments.length - 1]
-                                ?.ArrAirPort
+                              ?.ArrAirPort
                           : ""}
                       </Typography>
                     </Tooltip>
@@ -1774,7 +1793,7 @@ const SingleMulticityFlight = ({ data }) => {
                   justifyContent: "center",
                   my: "10px",
                 }}
-                >
+              >
                 <BrandWordmark width={120} height={100} fontSize={30} />
               </Box>
               <Typography

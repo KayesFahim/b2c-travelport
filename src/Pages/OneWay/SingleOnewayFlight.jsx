@@ -37,6 +37,7 @@ import secureLocalStorage from "react-secure-storage";
 import { calculateTransitTime } from "../../Pages/common/funcation";
 import ShowDetails from "../ShowDetails/FlightDetails";
 import { config } from "../../config";
+import { setBookingAuthToken } from "../../utils/bookingAuth";
 const isMobile = window.innerWidth <= 768;
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -209,6 +210,24 @@ const SingleOnewayFlight = ({ data, className }) => {
         secureLocalStorage.setItem("access_token", datas?.access_token);
         secureLocalStorage.setItem("userData", datas?.userData);
         secureLocalStorage.setItem("data", datas);
+
+        // Keep local booking session cookie in sync for /api/auth/me.
+        try {
+          const localLoginResponse = await fetch(`/api/auth/login`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const localLoginData = await localLoginResponse.json().catch(() => ({}));
+          if (localLoginResponse.ok && localLoginData?.token) {
+            setBookingAuthToken(localLoginData.token);
+          }
+        } catch {
+          // Ignore sync failures and keep external login success.
+        }
 
         // Reset the form fields
         setUserSignInInfo({
@@ -796,12 +815,12 @@ const SingleOnewayFlight = ({ data, className }) => {
                     {alllegs?.Segments?.length === 1
                       ? "Non Stop"
                       : alllegs?.Segments?.length === 2
-                      ? "One Stop"
-                      : alllegs?.Segments?.length === 3
-                      ? "Two Stops"
-                      : alllegs?.Segments?.length === 4
-                      ? "Three Stops"
-                      : null}
+                        ? "One Stop"
+                        : alllegs?.Segments?.length === 3
+                          ? "Two Stops"
+                          : alllegs?.Segments?.length === 4
+                            ? "Three Stops"
+                            : null}
                   </Typography>
                 </Box>
               </Box>

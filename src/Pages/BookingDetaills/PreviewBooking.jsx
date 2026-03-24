@@ -23,10 +23,7 @@ import moment from "moment";
 import commaNumber from "comma-number";
 import Swal from "sweetalert2";
 import NavBar from "../../Shared/NavBar/NavBar";
-import {
-  commitTravelportBookHold,
-  prepareTravelportBookHold,
-} from "../../utils/travelportBookHold";
+import { createTravelportBookHold } from "../../utils/travelportBookHold";
 import { addTravelportSpecialServices } from "../../utils/travelportSpecialServices";
 import {
   fetchBookingAuthMe,
@@ -84,8 +81,8 @@ const extractOfferIdentifiersFromAddOfferResponse = (addOfferResponse) => {
     addOfferResponse?.OfferListResponse && typeof addOfferResponse.OfferListResponse === "object"
       ? addOfferResponse.OfferListResponse
       : addOfferResponse?.offerListResponse && typeof addOfferResponse.offerListResponse === "object"
-      ? addOfferResponse.offerListResponse
-      : addOfferResponse;
+        ? addOfferResponse.offerListResponse
+        : addOfferResponse;
   const offerRows = getArrayByKeys(offerListResponse, ["OfferID", "offerID", "offerId"]);
   return dedupeIdentifiers(
     offerRows.map((row) =>
@@ -110,10 +107,10 @@ const extractTravelerIdentifiersFromTravelerResponse = (travelerResponse) => {
 
   const travelerListResponse =
     travelerResponse?.TravelerListResponse &&
-    typeof travelerResponse.TravelerListResponse === "object"
+      typeof travelerResponse.TravelerListResponse === "object"
       ? travelerResponse.TravelerListResponse
       : travelerResponse?.travelerListResponse &&
-          typeof travelerResponse.travelerListResponse === "object"
+        typeof travelerResponse.travelerListResponse === "object"
         ? travelerResponse.travelerListResponse
         : travelerResponse;
 
@@ -221,6 +218,67 @@ const getMealSsrOptionsByPaxType = (paxTypeCode) => {
   });
 };
 
+const buildSpecialRequestsFromPassengers = ({
+  passengers = [],
+  travelerIdentifiers = [],
+  offerIdentifier = "",
+}) => {
+  const normalizedOfferIdentifier = String(offerIdentifier || "").trim();
+  if (!normalizedOfferIdentifier || !travelerIdentifiers.length) return [];
+
+  const requests = [];
+  const dedupe = new Set();
+
+  travelerIdentifiers.forEach((travelerIdentifier, index) => {
+    const passenger = passengers[index] || {};
+    const paxTypeCode = normalizePaxTypeCode(
+      passenger?.PaxType || passenger?.paxType || passenger?.type
+    );
+
+    const mealCode = String(
+      passenger?.MealSSRCode ||
+      passenger?.mealSSRCode ||
+      passenger?.specialMealCode ||
+      ""
+    )
+      .trim()
+      .toUpperCase();
+    const disabilityCode = String(
+      passenger?.DisabilitySSRCode ||
+      passenger?.disabilitySSRCode ||
+      passenger?.specialDisabilityCode ||
+      ""
+    )
+      .trim()
+      .toUpperCase();
+
+    const allowedMealCodes = new Set(
+      getMealSsrOptionsByPaxType(paxTypeCode).map((item) => item.code)
+    );
+
+    const pushRequest = (ssrCode) => {
+      if (!ssrCode) return;
+      const key = `${travelerIdentifier}::${normalizedOfferIdentifier}::${ssrCode}`;
+      if (dedupe.has(key)) return;
+      dedupe.add(key);
+      requests.push({
+        travelerIdentifier: String(travelerIdentifier),
+        offerIdentifier: normalizedOfferIdentifier,
+        ssrCode,
+      });
+    };
+
+    if (mealCode && allowedMealCodes.has(mealCode)) {
+      pushRequest(mealCode);
+    }
+    if (disabilityCode) {
+      pushRequest(disabilityCode);
+    }
+  });
+
+  return requests;
+};
+
 const buildPassengerCounts = (passengers = []) =>
   passengers.reduce(
     (acc, passenger) => {
@@ -240,8 +298,8 @@ const buildPreviewSessionKey = (payload) => {
   const passengers = Array.isArray(payload?.passengers)
     ? payload.passengers
     : Array.isArray(bookingBody?.Passengers)
-    ? bookingBody.Passengers
-    : [];
+      ? bookingBody.Passengers
+      : [];
   const selectedAirPrice = payload?.selectedAirPrice || {};
   const selectedOffer = payload?.selectedOffer || {};
 
@@ -329,6 +387,7 @@ const PreviewBooking = () => {
   const [authMode, setAuthMode] = useState("login");
   const [authError, setAuthError] = useState("");
   const [authUser, setAuthUser] = useState(null);
+  const [authChecking, setAuthChecking] = useState(false);
   const [pendingAuthAction, setPendingAuthAction] = useState(null);
   const [authForm, setAuthForm] = useState({
     name: "",
@@ -509,24 +568,32 @@ const PreviewBooking = () => {
     return () => window.clearInterval(timer);
   }, [flowContext]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const loadSession = async () => {
-      try {
-        const user = await fetchBookingAuthMe();
-        if (!cancelled) {
-          setAuthUser(user || null);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setAuthUser(null);
-        }
+  const refreshAuthSession = async ({ silent = false } = {}) => {
+    setAuthChecking(true);
+    try {
+      const user = await fetchBookingAuthMe();
+      setAuthUser(user || null);
+      return user || null;
+    } catch (error) {
+      setAuthUser(null);
+      if (!silent) {
         console.warn("Unable to load booking auth session", error);
       }
+      return null;
+    } finally {
+      setAuthChecking(false);
+    }
+  };
+
+  useEffect(() => {
+    let mounted = true;
+    const loadSession = async () => {
+      if (!mounted) return;
+      await refreshAuthSession({ silent: true });
     };
     loadSession();
     return () => {
-      cancelled = true;
+      mounted = false;
     };
   }, []);
 
@@ -583,8 +650,8 @@ const PreviewBooking = () => {
   const passengers = Array.isArray(previewPayload?.passengers)
     ? previewPayload.passengers
     : Array.isArray(bookingBody?.Passengers)
-    ? bookingBody.Passengers
-    : [];
+      ? bookingBody.Passengers
+      : [];
   const selectedAirPrice = previewPayload?.selectedAirPrice || {};
   const selectedOffer = previewPayload?.selectedOffer || {};
   const flightInfoSource =
@@ -667,8 +734,8 @@ const PreviewBooking = () => {
   );
   const canAddSpecialRequest = Boolean(
     preCommitData?.reservationId &&
-      preCommitOfferIdentifiers.length > 0 &&
-      specialRequestTravelers.length > 0
+    preCommitOfferIdentifiers.length > 0 &&
+    specialRequestTravelers.length > 0
   );
   const specialRequestBlockedReason = useMemo(() => {
     if (!preCommitData?.reservationId) return "Preview booking first.";
@@ -706,44 +773,19 @@ const PreviewBooking = () => {
 
   const isCommittedForCurrentPrecommit = Boolean(
     preCommitData?.reservationId &&
-      finalCommitData?.reservationId &&
-      finalCommitData?.locator &&
-      String(preCommitData.reservationId) === String(finalCommitData.reservationId)
+    finalCommitData?.reservationId &&
+    finalCommitData?.locator &&
+    String(preCommitData.reservationId) === String(finalCommitData.reservationId)
   );
   const bookingFlowSteps = useMemo(
     () => [
       {
-        key: "precommit",
-        label: "1. Pre-Commit API",
-        done: Boolean(preCommitData?.workbenchResponse || preCommitData?.reservationId),
-      },
-      {
-        key: "traveler",
-        label: "2. Add Traveller",
-        done: preCommitTravelerIdentifiers.length > 0,
-      },
-      {
-        key: "offer",
-        label: "3. Add Offer",
-        done: preCommitOfferIdentifiers.length > 0,
-      },
-      {
-        key: "preview",
-        label: "4. Preview Booking",
-        done: Boolean(preCommitData?.reservationId),
-      },
-      {
-        key: "confirm",
-        label: "5. Confirm Booking",
+        key: "final",
+        label: "Single Final Booking Flow",
         done: Boolean(finalCommitData?.locator),
       },
     ],
-    [
-      preCommitData,
-      finalCommitData,
-      preCommitTravelerIdentifiers.length,
-      preCommitOfferIdentifiers.length,
-    ]
+    [finalCommitData]
   );
 
   const getBookHoldBaseInput = () => {
@@ -760,119 +802,24 @@ const PreviewBooking = () => {
       return null;
     }
 
+    // For commitOnly flow, we don't need selectedAirPrice/selectedOffer
+    // For normal flow (precommit), ensure at least one has flight leg information
+    const hasFlightLegs =
+      getArrayByKeys(selectedOfferForBookHold, ["AllLegsInfo", "allLegsInfo", "legs"]).length > 0;
+
     return {
       selectedAirPrice: selectedOfferForBookHold,
-      selectedOffer,
+      selectedOffer: hasFlightLegs ? selectedOfferForBookHold : selectedOffer,
       passengers,
       seatSelections: Array.isArray(previewPayload?.seatSelections)
         ? previewPayload.seatSelections
         : Array.isArray(bookingBody?.SeatSelections)
-        ? bookingBody.SeatSelections
-        : [],
+          ? bookingBody.SeatSelections
+          : [],
       adultCount: passengerCounts.adultCount,
       childCount: passengerCounts.childCount,
       infantCount: passengerCounts.infantCount,
     };
-  };
-
-  const handlePrepareBooking = async () => {
-    if (!authUser?.id) {
-      openAuthDialogForAction("prepare");
-      return;
-    }
-
-    const baseInput = getBookHoldBaseInput();
-    if (!baseInput) {
-      Swal.fire("Missing data", "Preview booking payload is incomplete.", "error");
-      return;
-    }
-    const activeContext = ensureActiveFlowContext(false);
-    if (!activeContext) {
-      Swal.fire(
-        "Session key error",
-        "Unable to create booking session key. Please refresh and try again.",
-        "error"
-      );
-      return;
-    }
-
-    if (isFlowExpired(activeContext)) {
-      destroyFlowContext();
-      Swal.fire(
-        "Session expired",
-        "Booking preview session expired. Please start again.",
-        "warning"
-      );
-      return;
-    }
-
-    setSubmitting(true);
-    Swal.fire({
-      title: "Preparing booking preview...",
-      text: "Running pre-commit API, traveler and offer steps.",
-      allowOutsideClick: false,
-      allowEscapeKey: false,
-      showConfirmButton: false,
-      didOpen: () => {
-        Swal.showLoading();
-      },
-    });
-
-    try {
-      const responseData = await prepareTravelportBookHold({
-        ...baseInput,
-        bookingFlowKey: activeContext.bookingFlowKey,
-        bookingOfferKey: activeContext.bookingOfferKey,
-        bookingFlowExpiresAt: activeContext.expiresAt,
-      });
-      setPreCommitData(responseData || null);
-      setFinalCommitData(null);
-
-      try {
-        if (typeof window !== "undefined") {
-          window.sessionStorage.setItem(
-            PRECOMMIT_STORAGE_KEY,
-            JSON.stringify({
-              previewSessionKey,
-              bookingFlowKey: activeContext.bookingFlowKey,
-              bookingOfferKey: activeContext.bookingOfferKey,
-              expiresAt: activeContext.expiresAt,
-              data: responseData || {},
-            })
-          );
-          window.sessionStorage.removeItem(COMMIT_STORAGE_KEY);
-        }
-      } catch (storageError) {
-        console.warn("Unable to cache pre-commit response", storageError);
-      }
-
-      const reservationId = responseData?.reservationId || "N/A";
-      const offerId = Array.isArray(responseData?.offerIdentifiers)
-        ? responseData.offerIdentifiers[0] || "N/A"
-        : "N/A";
-
-      Swal.fire({
-        icon: "success",
-        title: "Booking Preview Ready",
-        html: `Reservation ID: <b>${reservationId}</b><br/>Offer ID: <b>${offerId}</b><br/>Now click <b>Confirm Booking</b> to get locator.`,
-      });
-    } catch (error) {
-      if (error?.requiresLogin || error?.status === 401) {
-        Swal.close();
-        openAuthDialogForAction("prepare");
-        return;
-      }
-      destroyFlowContext();
-      Swal.fire(
-        "Preview failed",
-        error instanceof Error
-          ? error.message
-          : "There was an error preparing booking preview.",
-        "error"
-      );
-    } finally {
-      setSubmitting(false);
-    }
   };
 
   const handleSpecialRequestValueChange = (travelerIdentifier, field, value) => {
@@ -971,45 +918,51 @@ const PreviewBooking = () => {
   };
 
   const handleFinalCommit = async () => {
-    if (!authUser?.id) {
+    if (authChecking) {
+      return;
+    }
+
+    const effectiveUser = authUser?.id
+      ? authUser
+      : await refreshAuthSession({ silent: true });
+
+    if (!effectiveUser?.id) {
       openAuthDialogForAction("commit");
       return;
     }
 
+    const baseInput = getBookHoldBaseInput();
+    if (!baseInput) {
+      Swal.fire(
+        "Missing flight information",
+        "Unable to find flight data. Please go back to booking details and try again.",
+        "error"
+      );
+      return;
+    }
+
+    const selectedOfferForValidation =
+      baseInput?.selectedAirPrice || baseInput?.selectedOffer || {};
+    const hasFlightLegs = getArrayByKeys(selectedOfferForValidation, [
+      "AllLegsInfo",
+      "allLegsInfo",
+      "legs",
+    ]).length > 0;
+    if (!hasFlightLegs) {
+      Swal.fire(
+        "Invalid flight data",
+        "Selected flight data is incomplete or corrupted. Please select the flight again.",
+        "error"
+      );
+      return;
+    }
+
     const activeContext = ensureActiveFlowContext(false);
-    if (!activeContext) {
-      Swal.fire(
-        "Session key error",
-        "Booking session key is missing. Please preview booking again.",
-        "warning"
-      );
-      return;
-    }
-
-    if (isFlowExpired(activeContext)) {
-      destroyFlowContext();
-      Swal.fire(
-        "Session expired",
-        "Booking session expired after 10 minutes. Please run preview again.",
-        "warning"
-      );
-      return;
-    }
-
-    const reservationId = String(preCommitData?.reservationId || "").trim();
-    if (!reservationId) {
-      Swal.fire(
-        "Preview required",
-        "Please preview booking first, then confirm booking.",
-        "warning"
-      );
-      return;
-    }
 
     setSubmitting(true);
     Swal.fire({
-      title: "Confirming booking...",
-      text: "Please wait while we commit reservation and fetch locator.",
+      title: "Booking in progress...",
+      text: "Please wait while we process final booking and fetch locator.",
       allowOutsideClick: false,
       allowEscapeKey: false,
       showConfirmButton: false,
@@ -1019,12 +972,15 @@ const PreviewBooking = () => {
     });
 
     try {
-      const responseData = await commitTravelportBookHold({
-        reservationId,
-        bookingFlowKey: activeContext.bookingFlowKey,
-        bookingOfferKey: activeContext.bookingOfferKey,
-        bookingFlowExpiresAt: activeContext.expiresAt,
+      const responseData = await createTravelportBookHold({
+        ...baseInput,
+        bookingFlowKey: activeContext?.bookingFlowKey || "",
+        bookingOfferKey: activeContext?.bookingOfferKey || "",
+        bookingFlowExpiresAt: activeContext?.expiresAt || 0,
+        commit: true,
+        commitOnly: false,
       });
+      setPreCommitData(responseData || null);
       setFinalCommitData(responseData || null);
 
       try {
@@ -1033,9 +989,9 @@ const PreviewBooking = () => {
             COMMIT_STORAGE_KEY,
             JSON.stringify({
               previewSessionKey,
-              bookingFlowKey: activeContext.bookingFlowKey,
-              bookingOfferKey: activeContext.bookingOfferKey,
-              expiresAt: activeContext.expiresAt,
+              bookingFlowKey: activeContext?.bookingFlowKey || "",
+              bookingOfferKey: activeContext?.bookingOfferKey || "",
+              expiresAt: activeContext?.expiresAt || 0,
               data: responseData || {},
             })
           );
@@ -1046,9 +1002,40 @@ const PreviewBooking = () => {
         console.warn("Unable to cache final commit response", storageError);
       }
       setFlowContext(null);
-      setPreCommitData(null);
 
+      const reservationId = responseData?.reservationId || "N/A";
       const locator = responseData?.locator || "N/A";
+
+      const travelerIdentifiers = Array.isArray(responseData?.travelerIdentifiers)
+        ? dedupeIdentifiers(responseData.travelerIdentifiers)
+        : dedupeIdentifiers(
+          extractTravelerIdentifiersFromTravelerResponse(responseData?.travelerResponse)
+        );
+      const offerIdentifiers = Array.isArray(responseData?.offerIdentifiers)
+        ? dedupeIdentifiers(responseData.offerIdentifiers)
+        : dedupeIdentifiers(
+          extractOfferIdentifiersFromAddOfferResponse(responseData?.addOfferResponse)
+        );
+      const primaryOfferIdentifier = String(offerIdentifiers[0] || "").trim();
+      const automaticSpecialRequests = buildSpecialRequestsFromPassengers({
+        passengers,
+        travelerIdentifiers,
+        offerIdentifier: primaryOfferIdentifier,
+      });
+
+      if (String(reservationId).trim() && automaticSpecialRequests.length > 0) {
+        try {
+          const specialResponse = await addTravelportSpecialServices({
+            reservationId: String(reservationId),
+            offerIdentifier: primaryOfferIdentifier,
+            specialRequests: automaticSpecialRequests,
+          });
+          setSpecialRequestResponse(specialResponse || null);
+        } catch (specialError) {
+          console.warn("Automatic special service submission failed", specialError);
+        }
+      }
+
       await Swal.fire({
         icon: "success",
         title: "Booking Confirmed",
@@ -1069,13 +1056,42 @@ const PreviewBooking = () => {
       }
       if (error?.status === 409 && error?.payload?.previousBooking) {
         const previous = error.payload.previousBooking || {};
-        await Swal.fire({
+        const result = await Swal.fire({
           icon: "info",
           title: "Duplicate Booking Blocked",
-          html: `Previous booking found for same flight/date.<br/>Locator: <b>${
-            previous?.locator || "N/A"
-          }</b><br/>Reservation: <b>${previous?.reservationId || "N/A"}</b>`,
+          html: `Previous booking found for same flight/date.<br/>Locator: <b>${previous?.locator || "N/A"
+            }</b><br/>Reservation: <b>${previous?.reservationId || "N/A"}</b><br/>Booking ID: <b>${previous?.id || "N/A"
+            }</b>`,
+          showCancelButton: true,
+          confirmButtonText: "Open Previous Booking",
+          cancelButtonText: "Close",
         });
+
+        if (result.isConfirmed) {
+          const locator = String(previous?.locator || "").trim();
+          const reservationId = String(previous?.reservationId || "").trim();
+          const bookingId = String(previous?.id || "").trim();
+          const queryId = encodeURIComponent(bookingId || locator || reservationId);
+
+          if (!locator && !reservationId) {
+            // Fallback route for account details when no locator/reservation id is available.
+            navigate(`/my-account/bookingdetails?id=${queryId}`);
+          } else {
+            navigate(
+              `/bookingconfirmation?pnr=${encodeURIComponent(
+                locator || reservationId
+              )}&reservationId=${encodeURIComponent(
+                reservationId
+              )}&bookingId=${encodeURIComponent(bookingId)}`,
+              {
+                state: {
+                  duplicateBooking: true,
+                  previousBooking: previous,
+                },
+              }
+            );
+          }
+        }
         return;
       }
       if (error?.status === 429) {
@@ -1103,7 +1119,7 @@ const PreviewBooking = () => {
     const action = pendingAuthAction;
     setPendingAuthAction(null);
     if (action === "prepare") {
-      handlePrepareBooking();
+      handleFinalCommit();
     } else if (action === "commit") {
       handleFinalCommit();
     }
@@ -1179,10 +1195,11 @@ const PreviewBooking = () => {
           {!authUser?.email ? (
             <Button
               variant="outlined"
+              disabled={authChecking}
               onClick={() => openAuthDialogForAction("prepare")}
               sx={{ textTransform: "none", borderRadius: "10px", fontWeight: 700 }}
             >
-              Login / Register
+              {authChecking ? "Checking session..." : "Login / Register"}
             </Button>
           ) : null}
         </Paper>
@@ -1283,17 +1300,17 @@ const PreviewBooking = () => {
               : [];
             const baggageText = bags.length
               ? Array.from(
-                  new Set(
-                    bags.map(
-                      (bag) =>
-                        bag?.Allowance ||
-                        bag?.allowance ||
-                        bag?.Baggage ||
-                        bag?.baggage ||
-                        "N/A"
-                    )
+                new Set(
+                  bags.map(
+                    (bag) =>
+                      bag?.Allowance ||
+                      bag?.allowance ||
+                      bag?.Baggage ||
+                      bag?.baggage ||
+                      "N/A"
                   )
-                ).join(" | ")
+                )
+              ).join(" | ")
               : "N/A";
             return (
               <Box
@@ -1354,49 +1371,20 @@ const PreviewBooking = () => {
           >
             Back
           </Button>
-          {!preCommitData?.reservationId || isCommittedForCurrentPrecommit ? (
-            <Button
-              variant="contained"
-              disabled={submitting}
-              onClick={handlePrepareBooking}
-              sx={{
-                textTransform: "none",
-                borderRadius: "10px",
-                fontWeight: 700,
-                bgcolor: "var(--primary-button)",
-                ":hover": { bgcolor: "var(--primary-button)" },
-              }}
-            >
-              {isCommittedForCurrentPrecommit
-                ? "Preview New Booking"
-                : "Preview Booking"}
-            </Button>
-          ) : (
-            <>
-              <Button
-                variant="outlined"
-                disabled={submitting || !canAddSpecialRequest}
-                onClick={() => setSpecialRequestDialogOpen(true)}
-                sx={{ textTransform: "none", borderRadius: "10px", fontWeight: 700 }}
-              >
-                Add Special Request
-              </Button>
-              <Button
-                variant="contained"
-                disabled={submitting}
-                onClick={handleFinalCommit}
-                sx={{
-                  textTransform: "none",
-                  borderRadius: "10px",
-                  fontWeight: 700,
-                  bgcolor: "var(--primary-button)",
-                  ":hover": { bgcolor: "var(--primary-button)" },
-                }}
-              >
-                Confirm Booking
-              </Button>
-            </>
-          )}
+          <Button
+            variant="contained"
+            disabled={submitting}
+            onClick={handleFinalCommit}
+            sx={{
+              textTransform: "none",
+              borderRadius: "10px",
+              fontWeight: 700,
+              bgcolor: "var(--primary-button)",
+              ":hover": { bgcolor: "var(--primary-button)" },
+            }}
+          >
+            Final Booking
+          </Button>
           {isCommittedForCurrentPrecommit && finalCommitData?.locator ? (
             <Button
               variant="outlined"
@@ -1420,14 +1408,6 @@ const PreviewBooking = () => {
             </Button>
           ) : null}
         </Box>
-        {!isCommittedForCurrentPrecommit &&
-        preCommitData?.reservationId &&
-        !canAddSpecialRequest ? (
-          <Alert severity="warning" sx={{ mb: 2 }}>
-            Special request is currently unavailable: {specialRequestBlockedReason}
-          </Alert>
-        ) : null}
-
         <Dialog
           open={specialRequestDialogOpen}
           onClose={() => setSpecialRequestDialogOpen(false)}
@@ -1653,8 +1633,8 @@ const PreviewBooking = () => {
               {authSubmitting
                 ? "Please wait..."
                 : authMode === "register"
-                ? "Register & Continue"
-                : "Login & Continue"}
+                  ? "Register & Continue"
+                  : "Login & Continue"}
             </Button>
           </DialogActions>
         </Dialog>

@@ -39,6 +39,7 @@ import axios from "axios";
 import { config } from "../../config";
 import SignInWithGoogle from "../../Pages/GoogleLogIn";
 import BrandWordmark from "../BrandWordmark/BrandWordmark";
+import { setBookingAuthToken } from "../../utils/bookingAuth";
 const isMobile = window.innerWidth <= 768;
 
 const Transition = React.forwardRef(function Transition(props, ref) {
@@ -238,6 +239,25 @@ const NavBar = () => {
           secureLocalStorage.setItem("access_token", data?.access_token || "");
           secureLocalStorage.setItem("userData", data?.userData || {});
           secureLocalStorage.setItem("data", data || {});
+
+          // Keep local booking session cookie in sync for /api/auth/me.
+          try {
+            const localLoginResponse = await fetch(`/api/auth/login`, {
+              method: "POST",
+              credentials: "include",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(body),
+            });
+            const localLoginData = await localLoginResponse.json().catch(() => ({}));
+            if (localLoginResponse.ok && localLoginData?.token) {
+              setBookingAuthToken(localLoginData.token);
+            }
+          } catch {
+            // External login still succeeds; local session will be retried as fallback.
+          }
+
           loginSucceeded = true;
         } else {
           lastErrorMessage = data?.message || lastErrorMessage;
@@ -259,6 +279,9 @@ const NavBar = () => {
         const data = await response.json().catch(() => ({}));
         if (response.ok) {
           secureLocalStorage.removeItem("access_token");
+          if (data?.token) {
+            setBookingAuthToken(data.token);
+          }
           secureLocalStorage.setItem("userData", data?.user || {});
           secureLocalStorage.setItem("data", {
             ...data,

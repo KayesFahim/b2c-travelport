@@ -32,6 +32,7 @@ import PaymentIcon from "@mui/icons-material/Payment";
 import GroupIcon from "@mui/icons-material/Group";
 import SupportAgentIcon from "@mui/icons-material/SupportAgent";
 import HelpCenterIcon from "@mui/icons-material/HelpCenter";
+import { fetchTravelBuddies } from "../../utils/travelBuddyApi";
 
 const TABS = [
     { id: "Dashboard", label: "Dashboard", icon: DashboardIcon },
@@ -74,6 +75,15 @@ function toText(value, fallback = "") {
 function parseDateValue(value) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function formatDateKey(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    const yyyy = date.getFullYear();
+    const mm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${yyyy}-${mm}-${dd}`;
 }
 
 function getDepDate(booking) {
@@ -346,7 +356,8 @@ function getSessionFallbackAccountData(email) {
 export default function MyAccountPanel() {
     const location = useLocation();
     const navigate = useNavigate();
-    const token = secureLocalStorage.getItem("access_token");
+    const token = toText(secureLocalStorage.getItem("access_token")) ||
+        (typeof window !== "undefined" ? toText(window.localStorage.getItem("access_token")) : "");
 
     const [activeTab, setActiveTab] = useState("Dashboard");
     const [loading, setLoading] = useState(true);
@@ -361,7 +372,11 @@ export default function MyAccountPanel() {
     const [transactions, setTransactions] = useState([]);
     const [travelBuddies, setTravelBuddies] = useState([]);
 
-    const [selectedDate, setSelectedDate] = useState(moment().format("YYYY-MM-DD"));
+    const [selectedDateKey, setSelectedDateKey] = useState(moment().format("YYYY-MM-DD"));
+    const [currentMonth, setCurrentMonth] = useState(() => {
+        const now = new Date();
+        return new Date(now.getFullYear(), now.getMonth(), 1);
+    });
 
     const [raiseCaseForm, setRaiseCaseForm] = useState({
         subject: "",
@@ -415,7 +430,7 @@ export default function MyAccountPanel() {
                 credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                     ...(options.headers || {}),
                 },
             });
@@ -473,16 +488,22 @@ export default function MyAccountPanel() {
                     if (cancelled) return;
 
                     const fallbackData = getSessionFallbackAccountData(sessionEmail);
-                    const bookingDataByStatus = await Promise.all(
-                        STATUS_KEYS.map((status) =>
-                            fetchBookingsByStatus(status).catch(() => [])
-                        )
-                    );
+                    const [bookingDataByStatus, buddyData] = await Promise.all([
+                        Promise.all(
+                            STATUS_KEYS.map((status) =>
+                                fetchBookingsByStatus(status).catch(() => [])
+                            )
+                        ),
+                        fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] })),
+                    ]);
                     const dbBookings = dedupeBookings(bookingDataByStatus.flat());
                     const mergedBookings = dedupeBookings([
                         ...dbBookings,
                         ...fallbackData.bookings,
                     ]);
+                    const mergedTravelBuddies = Array.isArray(buddyData?.travelBuddies) && buddyData.travelBuddies.length
+                        ? buddyData.travelBuddies
+                        : fallbackData.travelBuddies;
 
                     setProfile(sessionProfile);
                     setProfileDraft({
@@ -496,15 +517,15 @@ export default function MyAccountPanel() {
                     });
                     setBookings(mergedBookings);
                     setTransactions(fallbackData.transactions);
-                    setTravelBuddies(fallbackData.travelBuddies);
+                    setTravelBuddies(mergedTravelBuddies);
                     return;
                 }
 
                 const [profileData, buddyData, transactionData, bookingDataByStatus] =
                     await Promise.all([
-                        fetchProfileInfo(),
-                        fetchJson(`${config.baseUrl}/user/findAllTravelBuddy`),
-                        fetchJson(`${config.baseUrl}/user/oneUserAllTransection?page=1&limit=50`),
+                        fetchProfileInfo().catch(() => sessionProfile || {}),
+                        fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] })),
+                        fetchJson(`${config.baseUrl}/user/oneUserAllTransection?page=1&limit=50`).catch(() => ({ transactions: [] })),
                         Promise.all(
                             STATUS_KEYS.map((status) =>
                                 fetchBookingsByStatus(status).catch(() => [])
@@ -542,7 +563,8 @@ export default function MyAccountPanel() {
             } catch (error) {
                 if (!cancelled) {
                     const errorMessage = error instanceof Error ? error.message : "Failed to load account data.";
-                    if (!token && errorMessage === "Not authenticated") {
+                    if (errorMessage === "Not authenticated" || errorMessage === "Login required") {
+                        secureLocalStorage.removeItem("access_token");
                         navigate("/");
                         return;
                     }
@@ -587,13 +609,60 @@ export default function MyAccountPanel() {
         };
     }, [bookings]);
 
-    const calendarFlights = useMemo(() => {
-        return bookings.filter((item) => {
-            const depDate = parseDateValue(getDepDate(item));
-            if (!depDate) return false;
-            return moment(depDate).format("YYYY-MM-DD") === selectedDate;
-        });
-    }, [bookings, selectedDate]);
+    const bookingsByDate = useMemo(() => {
+        return bookings.reduce((acc, booking) => {
+            const depDate = parseDateValue(getDepDate(booking));
+            if (!depDate) return acc;
+            const key = formatDateKey(depDate);
+            if (!key) return acc;
+            if (!acc[key]) acc[key] = [];
+            acc[key].push(booking);
+            return acc;
+        }, {});
+    }, [bookings]);
+
+    const selectedDateBookings = useMemo(() => {
+        if (!selectedDateKey) return [];
+        return bookingsByDate[selectedDateKey] || [];
+    }, [bookingsByDate, selectedDateKey]);
+
+    useEffect(() => {
+        if (!bookings.length) {
+            setSelectedDateKey("");
+            return;
+        }
+
+        if (selectedDateKey && bookingsByDate[selectedDateKey]?.length) {
+            return;
+        }
+
+        const firstAvailableDate = Object.keys(bookingsByDate).sort()[0] || "";
+        setSelectedDateKey(firstAvailableDate);
+    }, [bookings, bookingsByDate, selectedDateKey]);
+
+    const todayKey = formatDateKey(new Date());
+    const currentMonthYearLabel = currentMonth.toLocaleDateString("en-US", {
+        month: "long",
+        year: "numeric",
+    });
+    const monthStartWeekday = new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth(),
+        1
+    ).getDay();
+    const daysInMonth = new Date(
+        currentMonth.getFullYear(),
+        currentMonth.getMonth() + 1,
+        0
+    ).getDate();
+
+    const goToPreviousMonth = () => {
+        setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+    };
+
+    const goToNextMonth = () => {
+        setCurrentMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+    };
 
     const handleSaveProfile = async () => {
         try {
@@ -714,42 +783,184 @@ export default function MyAccountPanel() {
 
             <Grid item xs={12}>
                 <Paper sx={{ ...panelStyle, p: 2.2, background: "linear-gradient(180deg,#ffffff 0%,#f6fbff 100%)" }}>
-                    <Box sx={{ display: "flex", flexWrap: "wrap", gap: 2, alignItems: "center", mb: 1.5 }}>
-                        <Typography sx={sectionTitleStyle}>
-                            Travel Calendar
-                        </Typography>
-                        <TextField
-                            size="small"
-                            type="date"
-                            value={selectedDate}
-                            onChange={(event) => setSelectedDate(event.target.value)}
-                        />
-                    </Box>
-                    {calendarFlights.length ? (
-                        calendarFlights.slice(0, 6).map((item) => (
+                    <Typography sx={sectionTitleStyle}>
+                        Travel Calendar
+                    </Typography>
+
+                    <Box
+                        sx={{
+                            display: "grid",
+                            gridTemplateColumns: { xs: "1fr", lg: "1.1fr 1fr" },
+                            gap: 2,
+                            mt: 1.4,
+                        }}
+                    >
+                        <Box
+                            sx={{
+                                border: "1px solid #D9E3EE",
+                                borderRadius: "10px",
+                                p: 1.6,
+                            }}
+                        >
                             <Box
-                                key={item?.bookingId || item?.id}
                                 sx={{
-                                    border: "1px solid rgba(0, 154, 214, 0.2)",
-                                    borderRadius: "12px",
-                                    p: 1.4,
-                                    mb: 1,
-                                    backgroundColor: "#fff",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "space-between",
+                                    mb: 1.5,
                                 }}
                             >
-                                <Typography sx={{ fontWeight: 600, color: "var(--primary-button)", fontSize: 13 }}>
-                                    {toText(item?.bookingId, "Booking")}: {bookingRouteText(item)}
+                                <Button size="small" onClick={goToPreviousMonth}>Prev</Button>
+                                <Typography sx={{ fontWeight: 700, color: "var(--primary-button)" }}>
+                                    {currentMonthYearLabel}
                                 </Typography>
-                                <Typography sx={{ fontSize: 12, color: "#3f4b57" }}>
-                                    {formatDateTime(getDepDate(item))}
-                                </Typography>
+                                <Button size="small" onClick={goToNextMonth}>Next</Button>
                             </Box>
-                        ))
-                    ) : (
-                        <Typography sx={{ color: "#637487", fontSize: 13 }}>
-                            No scheduled flights for selected date.
-                        </Typography>
-                    )}
+
+                            <Box
+                                sx={{
+                                    display: "flex",
+                                    flexWrap: "wrap",
+                                    alignItems: "center",
+                                    gap: 1,
+                                    mb: 1.3,
+                                }}
+                            >
+                                <Typography sx={{ fontSize: 12, color: "#5C6B7A", fontWeight: 700 }}>
+                                    Legend:
+                                </Typography>
+                                <Typography sx={{ fontSize: 11, color: "#5C6B7A" }}>
+                                    Number = total flights on that day
+                                </Typography>
+                                <Box
+                                    sx={{
+                                        width: 10,
+                                        height: 10,
+                                        borderRadius: "50%",
+                                        bgcolor: "#f59e0b",
+                                    }}
+                                />
+                                <Typography sx={{ fontSize: 11, color: "#5C6B7A" }}>Today</Typography>
+                            </Box>
+
+                            <Box
+                                sx={{
+                                    display: "grid",
+                                    gridTemplateColumns: "repeat(7, minmax(0,1fr))",
+                                    gap: 1,
+                                    mb: 1,
+                                }}
+                            >
+                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+                                    <Typography
+                                        key={day}
+                                        sx={{ textAlign: "center", fontSize: 12, color: "#5C6B7A", fontWeight: 700 }}
+                                    >
+                                        {day}
+                                    </Typography>
+                                ))}
+                            </Box>
+
+                            <Box
+                                sx={{
+                                    display: "grid",
+                                    gridTemplateColumns: "repeat(7, minmax(0,1fr))",
+                                    gap: 1,
+                                }}
+                            >
+                                {Array.from({ length: monthStartWeekday }).map((_, index) => (
+                                    <Box key={`empty-${index}`} sx={{ minHeight: 66 }} />
+                                ))}
+                                {Array.from({ length: daysInMonth }).map((_, index) => {
+                                    const day = index + 1;
+                                    const dateKey = formatDateKey(
+                                        new Date(currentMonth.getFullYear(), currentMonth.getMonth(), day)
+                                    );
+                                    const dayBookings = bookingsByDate[dateKey] || [];
+                                    const isActive = selectedDateKey === dateKey;
+                                    const isToday = dateKey === todayKey;
+                                    return (
+                                        <Button
+                                            key={dateKey}
+                                            onClick={() => setSelectedDateKey(dateKey)}
+                                            sx={{
+                                                minHeight: 66,
+                                                borderRadius: "10px",
+                                                border: isToday ? "1px solid #f59e0b" : "1px solid #D8E1EA",
+                                                color: "#0f2f4a",
+                                                backgroundColor: isActive
+                                                    ? "rgba(19,64,107,0.12)"
+                                                    : isToday
+                                                        ? "rgba(245,158,11,0.12)"
+                                                        : "#fff",
+                                                display: "flex",
+                                                flexDirection: "column",
+                                                alignItems: "center",
+                                                justifyContent: "center",
+                                                gap: 0.2,
+                                                textTransform: "none",
+                                                p: 0.4,
+                                            }}
+                                        >
+                                            <Typography sx={{ fontSize: 13, fontWeight: 700 }}>{day}</Typography>
+                                            <Typography sx={{ fontSize: 10, color: "#b46900", fontWeight: 700 }}>
+                                                {isToday ? "Today" : ""}
+                                            </Typography>
+                                            <Typography sx={{ fontSize: 11, color: "#2b7a4b", fontWeight: 700 }}>
+                                                {dayBookings.length > 0 ? dayBookings.length : ""}
+                                            </Typography>
+                                        </Button>
+                                    );
+                                })}
+                            </Box>
+                        </Box>
+
+                        <Box
+                            sx={{
+                                border: "1px solid #D9E3EE",
+                                borderRadius: "10px",
+                                p: 1.6,
+                                maxHeight: { xs: "none", lg: 560 },
+                                overflow: "auto",
+                            }}
+                        >
+                            <Typography sx={{ fontWeight: 700, color: "var(--primary-button)", mb: 1.2 }}>
+                                {selectedDateKey
+                                    ? `Bookings on ${new Date(selectedDateKey).toLocaleDateString("en-US", {
+                                        day: "2-digit",
+                                        month: "short",
+                                        year: "numeric",
+                                    })}`
+                                    : "Select a date to view bookings"}
+                            </Typography>
+
+                            {selectedDateBookings.length ? (
+                                selectedDateBookings.slice(0, 20).map((item) => (
+                                    <Box
+                                        key={item?.bookingId || item?.id}
+                                        sx={{
+                                            border: "1px solid rgba(0, 154, 214, 0.2)",
+                                            borderRadius: "12px",
+                                            p: 1.4,
+                                            mb: 1,
+                                            backgroundColor: "#fff",
+                                        }}
+                                    >
+                                        <Typography sx={{ fontWeight: 600, color: "var(--primary-button)", fontSize: 13 }}>
+                                            {toText(item?.bookingId, "Booking")}: {bookingRouteText(item)}
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#3f4b57" }}>
+                                            {formatDateTime(getDepDate(item))}
+                                        </Typography>
+                                    </Box>
+                                ))
+                            ) : (
+                                <Typography sx={{ color: "#637487", fontSize: 13 }}>
+                                    No scheduled flights for selected date.
+                                </Typography>
+                            )}
+                        </Box>
+                    </Box>
                 </Paper>
             </Grid>
         </Grid>

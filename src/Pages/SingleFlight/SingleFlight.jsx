@@ -53,6 +53,7 @@ import {
 } from "../../utils/flightPolicyUtils";
 import { resolveAirportInfo } from "../../utils/travelLookup";
 import { getFareOptionKey } from "../../utils/fareOptionKey";
+import { setBookingAuthToken } from "../../utils/bookingAuth";
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
@@ -148,10 +149,10 @@ const getFlightAmenities = (flightData) => {
       const amenityItems = Array.isArray(amenitiesObj?.items)
         ? amenitiesObj.items
         : Array.isArray(amenitiesObj?.amenities)
-        ? amenitiesObj.amenities
-        : Array.isArray(amenitiesObj)
-        ? amenitiesObj
-        : [];
+          ? amenitiesObj.amenities
+          : Array.isArray(amenitiesObj)
+            ? amenitiesObj
+            : [];
 
       for (const item of amenityItems) {
         const amenity = extractAmenityItem(item);
@@ -565,6 +566,24 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
         secureLocalStorage.setItem("userData", data?.userData);
         secureLocalStorage.setItem("data", data);
 
+        // Keep local booking session cookie in sync for /api/auth/me.
+        try {
+          const localLoginResponse = await fetch(`/api/auth/login`, {
+            method: "POST",
+            credentials: "include",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(body),
+          });
+          const localLoginData = await localLoginResponse.json().catch(() => ({}));
+          if (localLoginResponse.ok && localLoginData?.token) {
+            setBookingAuthToken(localLoginData.token);
+          }
+        } catch {
+          // Ignore sync failures and keep external login success.
+        }
+
         // Reset the form fields
         setUserSignInInfo({
           signInEmail: "",
@@ -727,7 +746,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
     primaryLeg?.Segments?.[0]?.SegmentCode?.seatsAvailable ?? null;
   const baggageAllowance = convertWeight(
     displayOffer?.PriceBreakDown?.[0]?.Bag?.[0]?.Allowance ||
-      data?.PriceBreakDown?.[0]?.Bag?.[0]?.Allowance
+    data?.PriceBreakDown?.[0]?.Bag?.[0]?.Allowance
   );
   const cabinClassLabel = getCabinClass(
     primaryLeg?.Segments?.[0]?.SegmentCode?.cabinCode

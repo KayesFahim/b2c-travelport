@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   TextField,
   Grid,
@@ -29,6 +29,7 @@ import { FaCcVisa } from "react-icons/fa";
 import { FaCamera } from "react-icons/fa";
 import { FaIdCard } from "react-icons/fa"; // Add this import statement
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
+import { fetchTravelBuddies } from "../../../utils/travelBuddyApi";
 const createPassenger = (
   passenger,
   isLead = false,
@@ -58,6 +59,8 @@ const createPassenger = (
   CountryCode: passenger?.passNation,
   Nationality: passenger?.passNation,
   FFNumber: passenger?.FFNumber,
+  MealSSRCode: passenger?.specialMealCode || "",
+  DisabilitySSRCode: passenger?.specialDisabilityCode || "",
   ContactNumber: phone, // Ensure ContactNumber is assigned
   Email: email, // Ensure Email is assigned
   Address1: "",
@@ -82,7 +85,51 @@ const generatePassengerData = (type, date) => ({
   PassCopy: null,
   VisaCopy: null,
   FFNumber: "",
+  specialMealCode: "",
+  specialDisabilityCode: "",
 });
+
+const DISABILITY_SSR_OPTIONS = [
+  { code: "", label: "None" },
+  { code: "BLND", label: "Blind Traveler" },
+  { code: "DEAF", label: "Deaf Traveler" },
+  { code: "DPNA", label: "Disability Assistance" },
+  { code: "WCHC", label: "Wheelchair Completely Immobile" },
+  { code: "WCHR", label: "Wheelchair Can Use Stairs" },
+  { code: "WCHS", label: "Wheelchair Cannot Use Stairs" },
+];
+
+const MEAL_SSR_OPTIONS = [
+  { code: "", label: "None" },
+  { code: "BBML", label: "Baby Meal" },
+  { code: "CHML", label: "Child Meal" },
+  { code: "DBML", label: "Diabetic Meal" },
+  { code: "FPML", label: "Fruit Platter Meal" },
+  { code: "HNML", label: "Hindu Meal" },
+  { code: "VJML", label: "Jain Meal" },
+  { code: "KSML", label: "Kosher Meal" },
+  { code: "LCML", label: "Low Calorie Meal" },
+  { code: "LFML", label: "Low Fat Meal" },
+  { code: "LSML", label: "Low Salt Meal" },
+  { code: "MOML", label: "Muslim Meal" },
+  { code: "NLML", label: "Non Lactose Meal" },
+  { code: "NOML", label: "No Meal" },
+  { code: "SFML", label: "Seafood Meal" },
+  { code: "VGML", label: "Vegan Meal" },
+  { code: "AVML", label: "Vegetarian Hindu Meal" },
+  { code: "VLML", label: "Vegetarian Lacto Ovo Meal" },
+  { code: "VOML", label: "Vegetarian Oriental Meal" },
+  { code: "RVML", label: "Vegetarian Raw Meal" },
+];
+
+const getMealOptionsByPaxType = (paxType) => {
+  const code = String(paxType || "").toUpperCase();
+  return MEAL_SSR_OPTIONS.filter((item) => {
+    if (item.code === "BBML") return code === "INF" || code === "INFANT";
+    if (item.code === "CHML") return code === "CHD" || code === "CHILD";
+    return true;
+  });
+};
 
 const getArrayByKeys = (obj, keys = []) => {
   for (const key of keys) {
@@ -553,6 +600,137 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
     phone: false,
   });
   const [passportScanState, setPassportScanState] = useState({});
+  const [travellers, setTravellers] = useState([]);
+  const [selectedTravelerKeys, setSelectedTravelerKeys] = useState({});
+
+  useEffect(() => {
+    let active = true;
+
+    fetchTravelBuddies({ token: String(token || "") })
+      .then((payload) => {
+        if (!active) return;
+        const rows = Array.isArray(payload?.travelBuddies) ? payload.travelBuddies : [];
+        const uniqueRows = [
+          ...new Map(
+            rows.map((item, index) => {
+              const key =
+                getStringValue(item?.id) ||
+                getStringValue(item?.document) ||
+                getStringValue(item?.passportNumber) ||
+                `${getStringValue(item?.firstName)}-${getStringValue(item?.lastName)}-${index}`;
+              return [key, item];
+            })
+          ).values(),
+        ];
+        setTravellers(uniqueRows);
+      })
+      .catch(() => {
+        if (!active) return;
+        setTravellers([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [token]);
+
+  const getTravelerKey = (traveler, index) =>
+    getStringValue(traveler?.id) ||
+    getStringValue(traveler?.document) ||
+    getStringValue(traveler?.passportNumber) ||
+    `${getStringValue(traveler?.firstName)}-${getStringValue(traveler?.lastName)}-${index}`;
+
+  const isTravelerTypeMatch = (category, travelerType) => {
+    const normalizedCategory = String(category || "").toLowerCase();
+    const type = String(travelerType || "").toLowerCase();
+    if (normalizedCategory === "adult") {
+      return type === "adult" || type === "adt";
+    }
+    if (normalizedCategory === "child") {
+      return type === "child" || type === "chd" || type === "cnn";
+    }
+    if (normalizedCategory === "infant") {
+      return type === "infant" || type === "inf";
+    }
+    return false;
+  };
+
+  const getTravelerOptionsByCategory = (category) => {
+    return travellers
+      .filter((item) => isTravelerTypeMatch(category, item?.paxtype))
+      .map((item, index) => {
+        const key = getTravelerKey(item, index);
+        const title = getStringValue(item?.title);
+        const firstName = getStringValue(item?.firstName);
+        const lastName = getStringValue(item?.lastName);
+        const gender = getStringValue(item?.gender);
+        const dob = getStringValue(item?.dob || item?.dateOfBirth);
+        return {
+          key,
+          traveler: item,
+          label: `${title ? `${title} ` : ""}${firstName} ${lastName} | ${gender || "N/A"} | ${dob || "N/A"}`.trim(),
+        };
+      });
+  };
+
+  const handleTravelerAutoFill = (traveler, index, category) => {
+    if (!traveler || !category) return;
+
+    setFlightPassengerData((prevState) => {
+      const updatedState = { ...prevState };
+      const passengers = Array.isArray(updatedState?.[category])
+        ? [...updatedState[category]]
+        : [];
+      const currentPassenger = passengers[index];
+      if (!currentPassenger) return prevState;
+
+      const resolvedGender = normalizeGender(traveler?.gender) || currentPassenger.gender;
+      const resolvedDob =
+        parseDateValue(traveler?.dob || traveler?.dateOfBirth) || currentPassenger.dob;
+      const resolvedPassportExpiry =
+        parseDateValue(traveler?.passportexp || traveler?.passportExpiryDate) ||
+        currentPassenger.passEx;
+      const resolvedNationality = normalizeCountryCode(
+        traveler?.nationality,
+        currentPassenger.passNation
+      );
+
+      const nextPassenger = {
+        ...currentPassenger,
+        title:
+          getStringValue(traveler?.title) ||
+          normalizeTitle("", resolvedGender, currentPassenger.type) ||
+          currentPassenger.title,
+        fName: getStringValue(traveler?.firstName) || currentPassenger.fName,
+        lName: getStringValue(traveler?.lastName) || currentPassenger.lName,
+        gender: resolvedGender,
+        dob: resolvedDob,
+        passNo:
+          getStringValue(traveler?.passport || traveler?.passportNumber) ||
+          currentPassenger.passNo,
+        passEx: resolvedPassportExpiry,
+        passNation: resolvedNationality || currentPassenger.passNation,
+        passIssueCountry:
+          resolvedNationality ||
+          currentPassenger.passIssueCountry ||
+          currentPassenger.passNation,
+      };
+
+      passengers[index] = nextPassenger;
+      updatedState[category] = passengers;
+
+      const travelerEmail = getStringValue(traveler?.email);
+      const travelerPhone = getStringValue(traveler?.phone);
+      if (travelerEmail) {
+        updatedState.email = travelerEmail;
+      }
+      if (travelerPhone) {
+        updatedState.phone = travelerPhone;
+      }
+
+      return updatedState;
+    });
+  };
 
   const getScanKey = (type, index) => `${type}-${index}`;
   const setScanStatus = (type, index, nextState) => {
@@ -667,6 +845,33 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
     e.preventDefault();
 
     if (validateForm()) {
+      // Validate that we have flight data
+      if (!activeAirPrice || !Object.keys(activeAirPrice).length) {
+        console.error("Flight data (activeAirPrice) is missing or empty", {
+          activeAirPrice,
+          data,
+          airPriceData,
+          selectedAirPrice,
+        });
+        alert(
+          "Error: Flight information is missing. Please go back and select a flight again."
+        );
+        return;
+      }
+
+      if (!data || !Object.keys(data).length) {
+        console.error("Flight offer data is missing or empty", {
+          data,
+          activeAirPrice,
+          airPriceData,
+          selectedAirPrice,
+        });
+        alert(
+          "Error: Flight offer information is missing. Please go back and select a flight again."
+        );
+        return;
+      }
+
       const passengers = [
         ...flightPassengerData.adult.map((adult, index) =>
           createPassenger(
@@ -1042,6 +1247,70 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
                     backgroundColor: "#FDFEFF",
                   }}
                 >
+                  <Grid item xs={12}>
+                    <Box sx={{ mb: 1.2 }}>
+                      <Typography
+                        sx={{
+                          fontSize: { xs: 11, md: 12 },
+                          color: "#36577b",
+                          fontWeight: 600,
+                          mb: 0.6,
+                        }}
+                      >
+                        Select Traveler For Autofill (Optional)
+                      </Typography>
+                      {getTravelerOptionsByCategory(category).length > 0 ? (
+                        <FormControl fullWidth>
+                          <Select
+                            value={selectedTravelerKeys[`${category}-${index}`] || ""}
+                            onChange={(event) => {
+                              const selectedKey = String(event.target.value || "");
+                              setSelectedTravelerKeys((prev) => ({
+                                ...prev,
+                                [`${category}-${index}`]: selectedKey,
+                              }));
+                              const selectedOption = getTravelerOptionsByCategory(category).find(
+                                (item) => item.key === selectedKey
+                              );
+                              if (selectedOption?.traveler) {
+                                handleTravelerAutoFill(selectedOption.traveler, index, category);
+                              }
+                            }}
+                            displayEmpty
+                            inputProps={{ "aria-label": "Select traveler" }}
+                            sx={{
+                              height: 40,
+                              borderRadius: 2,
+                              borderColor: "lightgray",
+                              fontSize: "11px",
+                            }}
+                            MenuProps={{
+                              PaperProps: {
+                                sx: {
+                                  maxHeight: 220,
+                                  border: "1px solid lightgray",
+                                },
+                              },
+                            }}
+                          >
+                            <MenuItem value="" disabled>
+                              Select traveler
+                            </MenuItem>
+                            {getTravelerOptionsByCategory(category).map((item) => (
+                              <MenuItem key={item.key} value={item.key}>
+                                {item.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      ) : (
+                        <Typography sx={{ fontSize: 11, color: "#7f90a6" }}>
+                          No saved travelers found for this passenger type.
+                        </Typography>
+                      )}
+                    </Box>
+                  </Grid>
+
                   <Grid
                     item
                     xs={12}
@@ -1552,6 +1821,96 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
                         minDate={new Date()}
                         popperPlacement={"bottom-start"}
                       />
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <Typography
+                        variant="subtitle1"
+                        gutterBottom
+                        sx={{ fontSize: "14px", color: "gray" }}
+                      >
+                        Meal Special Service (Optional)
+                      </Typography>
+                      <Select
+                        value={passenger.specialMealCode || ""}
+                        onChange={(event) =>
+                          handleInputChange(
+                            { target: { value: event.target.value } },
+                            category,
+                            index,
+                            "specialMealCode"
+                          )
+                        }
+                        displayEmpty
+                        inputProps={{ "aria-label": "Meal special service" }}
+                        sx={{
+                          height: 40,
+                          borderRadius: 2,
+                          borderColor: "lightgray",
+                          fontSize: "11px",
+                        }}
+                        MenuProps={{
+                          PaperProps: {
+                            sx: {
+                              maxHeight: 240,
+                              border: "1px solid lightgray",
+                            },
+                          },
+                        }}
+                      >
+                        {getMealOptionsByPaxType(passenger?.type).map((meal) => (
+                          <MenuItem key={meal.code || "none"} value={meal.code}>
+                            {meal.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid item xs={12} md={6}>
+                    <FormControl fullWidth>
+                      <Typography
+                        variant="subtitle1"
+                        gutterBottom
+                        sx={{ fontSize: "14px", color: "gray" }}
+                      >
+                        Disability Special Service (Optional)
+                      </Typography>
+                      <Select
+                        value={passenger.specialDisabilityCode || ""}
+                        onChange={(event) =>
+                          handleInputChange(
+                            { target: { value: event.target.value } },
+                            category,
+                            index,
+                            "specialDisabilityCode"
+                          )
+                        }
+                        displayEmpty
+                        inputProps={{ "aria-label": "Disability special service" }}
+                        sx={{
+                          height: 40,
+                          borderRadius: 2,
+                          borderColor: "lightgray",
+                          fontSize: "11px",
+                        }}
+                        MenuProps={{
+                          PaperProps: {
+                            sx: {
+                              maxHeight: 240,
+                              border: "1px solid lightgray",
+                            },
+                          },
+                        }}
+                      >
+                        {DISABILITY_SSR_OPTIONS.map((item) => (
+                          <MenuItem key={item.code || "none"} value={item.code}>
+                            {item.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
                     </FormControl>
                   </Grid>
 

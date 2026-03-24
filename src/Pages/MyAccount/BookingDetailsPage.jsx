@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Box,
@@ -53,6 +53,11 @@ function paxLabelDetail(value) {
 function parseDateValue(value) {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function isTicketedStatus(value) {
+    const status = String(value || "").trim().toLowerCase();
+    return status === "ticketed" || status === "issued" || status === "ticket issue done";
 }
 
 function formatDateTime(value) {
@@ -170,6 +175,18 @@ export default function BookingDetailsPage() {
         }
     }, [location.search, location.state]);
 
+    const [issuingTicket, setIssuingTicket] = useState(false);
+    const [ticketStatusOverride, setTicketStatusOverride] = useState("");
+    const [issueMessage, setIssueMessage] = useState("");
+    const [issueError, setIssueError] = useState("");
+
+    useEffect(() => {
+        setTicketStatusOverride("");
+        setIssueMessage("");
+        setIssueError("");
+        setIssuingTicket(false);
+    }, [booking?.id, booking?.reservationId, booking?.locator]);
+
     if (!booking) {
         return (
             <Box>
@@ -195,13 +212,61 @@ export default function BookingDetailsPage() {
     const netFare = toNumberValue(displayBooking?.NetFare);
     const currency = priceRows?.[0]?.CurrencyCode || "BDT";
     const pnr = toText(displayBooking?.PNR, "-");
+    const effectiveStatus = toText(ticketStatusOverride || displayBooking?.BookingStatus, "Booked");
+    const canIssueTicket = !isTicketedStatus(effectiveStatus);
     const statusColor = (() => {
-        const s = String(displayBooking?.BookingStatus || "").toLowerCase();
+        const s = String(effectiveStatus || "").toLowerCase();
         if (s === "ticketed" || s === "issued") return { bgcolor: "#E6F9EE", color: "#1A7A41" };
         if (s === "booked") return { bgcolor: "#E8F3FF", color: "#15488C" };
         if (s === "cancelled") return { bgcolor: "#FDECEA", color: "#B71C1C" };
         return { bgcolor: "#F3F5F9", color: "#444" };
     })();
+
+    const handleIssueTicket = async () => {
+        const issuePnr = toText(
+            booking?.locator ||
+            booking?.Locator ||
+            booking?.PNR ||
+            booking?.pnr ||
+            displayBooking?.PNR
+        );
+
+        if (!issuePnr) {
+            setIssueError("PNR/Locator not found for this booking.");
+            return;
+        }
+
+        try {
+            setIssuingTicket(true);
+            setIssueError("");
+            setIssueMessage("");
+
+            const response = await fetch(
+                `/api/travelport/issue-ticket?pnr=${encodeURIComponent(issuePnr)}`,
+                {
+                    method: "POST",
+                    credentials: "include",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({ pnr: issuePnr }),
+                }
+            );
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.details || payload?.message || "Issue ticket failed.");
+            }
+
+            const ticketLocator = toText(payload?.locator || issuePnr);
+            setTicketStatusOverride("Ticketed");
+            setIssueMessage(`Ticket issued successfully. Locator: ${ticketLocator}`);
+        } catch (error) {
+            setIssueError(error instanceof Error ? error.message : "Issue ticket failed.");
+        } finally {
+            setIssuingTicket(false);
+        }
+    };
 
     return (
         <Box>
@@ -232,7 +297,7 @@ export default function BookingDetailsPage() {
                             <Grid item xs={6} md={2}>
                                 <Typography sx={{ fontSize: 11, color: "#607890" }}>Status</Typography>
                                 <Chip
-                                    label={toText(displayBooking?.BookingStatus, "-")}
+                                    label={effectiveStatus}
                                     size="small"
                                     sx={{ fontWeight: 700, fontSize: 11, ...statusColor, border: "none" }}
                                 />
@@ -250,6 +315,42 @@ export default function BookingDetailsPage() {
                                 </Typography>
                             </Grid>
                         </Grid>
+                    </Paper>
+
+                    <Paper sx={{ ...panelStyle, p: 1.6 }}>
+                        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 1.2, flexWrap: "wrap" }}>
+                            <Box>
+                                <Typography sx={{ fontWeight: 800, color: "#0f4b7d", fontSize: 14 }}>
+                                    Ticket Status
+                                </Typography>
+                                <Typography sx={{ fontSize: 12, color: "#607890" }}>
+                                    Current status: <strong>{effectiveStatus}</strong>
+                                </Typography>
+                            </Box>
+
+                            {canIssueTicket && (
+                                <Button
+                                    variant="contained"
+                                    onClick={handleIssueTicket}
+                                    disabled={issuingTicket}
+                                    sx={{ minWidth: 140 }}
+                                >
+                                    {issuingTicket ? "Issuing..." : "Issue Ticket"}
+                                </Button>
+                            )}
+                        </Box>
+
+                        {issueMessage ? (
+                            <Alert severity="success" sx={{ mt: 1.2 }}>
+                                {issueMessage}
+                            </Alert>
+                        ) : null}
+
+                        {issueError ? (
+                            <Alert severity="error" sx={{ mt: 1.2 }}>
+                                {issueError}
+                            </Alert>
+                        ) : null}
                     </Paper>
 
                     <Paper sx={{ ...panelStyle, p: 0, overflow: "hidden" }}>

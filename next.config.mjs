@@ -5,7 +5,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: true,
+  // Keep false in local dev to avoid duplicate useEffect API calls.
+  reactStrictMode: false,
   // Parent folder has its own package-lock.json; pin tracing + Turbopack to this app.
   outputFileTracingRoot: __dirname,
   outputFileTracingIncludes: {

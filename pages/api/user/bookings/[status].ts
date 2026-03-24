@@ -63,8 +63,8 @@ function mapBookingStatusToTab(booking: Pick<Booking, "status" | "locator">): Bo
 function mapTabToStatuses(tab: string): BookingStatus[] {
     if (tab === "Cancelled") return [BookingStatus.CANCELLED];
     if (tab === "IssueInProcess") return [BookingStatus.PREPARED, BookingStatus.FAILED];
-    if (tab === "Ticketed" || tab === "Booked") return [BookingStatus.COMMITTED];
-    return [BookingStatus.PREPARED, BookingStatus.COMMITTED, BookingStatus.FAILED, BookingStatus.CANCELLED];
+    if (tab === "Ticketed" || tab === "Booked") return [BookingStatus.COMMITTED, BookingStatus.TICKETED];
+    return [BookingStatus.PREPARED, BookingStatus.COMMITTED, BookingStatus.FAILED, BookingStatus.CANCELLED, BookingStatus.TICKETED];
 }
 
 function extractFlightFields(payloadSnapshot: unknown): {

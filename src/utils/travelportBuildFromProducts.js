@@ -44,8 +44,8 @@ function getCandidateBuildFromProductsUrls() {
   const configuredBaseUrl = getConfiguredBaseUrl();
 
   const urls = [
-    configuredUrl,
     TRAVELPORT_BUILD_FROM_PRODUCTS_PATH,
+    configuredUrl,
     joinBaseAndPath(configuredBaseUrl, TRAVELPORT_BUILD_FROM_PRODUCTS_PATH),
     localFallbackUrl,
   ].filter(Boolean);
@@ -76,7 +76,7 @@ export async function fetchTravelportBuildFromProducts({
   infantCount,
 }) {
   const urls = getCandidateBuildFromProductsUrls();
-  let lastError = new Error("Travelport build-from-products route is not reachable");
+  let lastError = null;
 
   const payload = {
     selectedOffer,
@@ -115,8 +115,14 @@ export async function fetchTravelportBuildFromProducts({
         error instanceof Error
           ? error
           : new Error("Travelport build-from-products request failed");
+      continue;
     }
   }
 
-  throw lastError;
+  if (lastError) {
+    console.warn("Build-from-products unavailable, using selected offer fallback", {
+      message: lastError.message,
+    });
+  }
+  return null;
 }

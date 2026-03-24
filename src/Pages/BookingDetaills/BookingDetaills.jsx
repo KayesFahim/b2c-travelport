@@ -38,12 +38,12 @@ const isFlightOfferShape = (value) => {
   if (!value || typeof value !== "object") return false;
   return Boolean(
     value?.ResultId ||
-      value?.resultId ||
-      value?.identifier ||
-      value?.SearchId ||
-      value?.searchId ||
-      value?.AllLegsInfo ||
-      value?.allLegsInfo
+    value?.resultId ||
+    value?.identifier ||
+    value?.SearchId ||
+    value?.searchId ||
+    value?.AllLegsInfo ||
+    value?.allLegsInfo
   );
 };
 
@@ -164,14 +164,14 @@ const toNumberValue = (value) => {
   if (typeof value === "object") {
     return toNumberValue(
       value?.value ??
-        value?.Value ??
-        value?.amount ??
-        value?.Amount ??
-        value?.TotalPrice ??
-        value?.totalPrice ??
-        value?.Base ??
-        value?.base ??
-        null
+      value?.Value ??
+      value?.amount ??
+      value?.Amount ??
+      value?.TotalPrice ??
+      value?.totalPrice ??
+      value?.Base ??
+      value?.base ??
+      null
     );
   }
   return null;
@@ -233,7 +233,7 @@ const extractAncillaryItems = (payload) => {
   if (!payload || typeof payload !== "object") return [];
   const root =
     payload?.CatalogOfferingsAncillaryListResponse &&
-    typeof payload.CatalogOfferingsAncillaryListResponse === "object"
+      typeof payload.CatalogOfferingsAncillaryListResponse === "object"
       ? payload.CatalogOfferingsAncillaryListResponse
       : payload;
   const items = [];
@@ -496,12 +496,12 @@ const resolveAncillaryShopRequestFromOffer = (offer) => {
       : null;
   const sourceUnifiedSeatAvailabilityRequest =
     sourceUnified?.seatAvailabilityRequest &&
-    typeof sourceUnified.seatAvailabilityRequest === "object"
+      typeof sourceUnified.seatAvailabilityRequest === "object"
       ? sourceUnified.seatAvailabilityRequest
       : null;
   const reservationWorkbenchRequest =
     offer?.reservationWorkbenchRequest &&
-    typeof offer.reservationWorkbenchRequest === "object"
+      typeof offer.reservationWorkbenchRequest === "object"
       ? offer.reservationWorkbenchRequest
       : null;
 
@@ -510,14 +510,14 @@ const resolveAncillaryShopRequestFromOffer = (offer) => {
       "offerListIdentifier",
       "OfferListIdentifier",
     ]) ||
-      getValueByKeys(farePolicyRequest || {}, [
-        "offerListIdentifier",
-        "OfferListIdentifier",
-      ]) ||
-      getValueByKeys(seatAvailabilityRequest || {}, [
-        "offerListIdentifier",
-        "OfferListIdentifier",
-      ])
+    getValueByKeys(farePolicyRequest || {}, [
+      "offerListIdentifier",
+      "OfferListIdentifier",
+    ]) ||
+    getValueByKeys(seatAvailabilityRequest || {}, [
+      "offerListIdentifier",
+      "OfferListIdentifier",
+    ])
   );
 
   const offerIdentifier = normalizeIdentifier(
@@ -528,11 +528,11 @@ const resolveAncillaryShopRequestFromOffer = (offer) => {
       "identifier",
       "ResultId",
     ]) ||
-      getValueByKeys(farePolicyRequest || {}, ["offerIdentifier", "OfferIdentifier"]) ||
-      getValueByKeys(seatAvailabilityRequest || {}, [
-        "offerIdentifier",
-        "OfferIdentifier",
-      ])
+    getValueByKeys(farePolicyRequest || {}, ["offerIdentifier", "OfferIdentifier"]) ||
+    getValueByKeys(seatAvailabilityRequest || {}, [
+      "offerIdentifier",
+      "OfferIdentifier",
+    ])
   );
   const productIdentifiers = normalizeIdentifierList(
     getValueByKeys(explicitRequest || offer, [
@@ -541,30 +541,30 @@ const resolveAncillaryShopRequestFromOffer = (offer) => {
       "productIdentifier",
       "ProductIdentifier",
     ]) ||
-      getValueByKeys(seatAvailabilityRequest || {}, [
-        "productIdentifiers",
-        "ProductIdentifiers",
-        "productIdentifier",
-        "ProductIdentifier",
-      ]) ||
-      getValueByKeys(farePolicyRequest || {}, [
-        "productIdentifiers",
-        "ProductIdentifiers",
-        "productIdentifier",
-        "ProductIdentifier",
-      ]) ||
-      getValueByKeys(sourceUnifiedSeatAvailabilityRequest || {}, [
-        "productIdentifiers",
-        "ProductIdentifiers",
-        "productIdentifier",
-        "ProductIdentifier",
-      ]) ||
-      getValueByKeys(sourceUnifiedFarePolicyRequest || {}, [
-        "productIdentifiers",
-        "ProductIdentifiers",
-        "productIdentifier",
-        "ProductIdentifier",
-      ])
+    getValueByKeys(seatAvailabilityRequest || {}, [
+      "productIdentifiers",
+      "ProductIdentifiers",
+      "productIdentifier",
+      "ProductIdentifier",
+    ]) ||
+    getValueByKeys(farePolicyRequest || {}, [
+      "productIdentifiers",
+      "ProductIdentifiers",
+      "productIdentifier",
+      "ProductIdentifier",
+    ]) ||
+    getValueByKeys(sourceUnifiedSeatAvailabilityRequest || {}, [
+      "productIdentifiers",
+      "ProductIdentifiers",
+      "productIdentifier",
+      "ProductIdentifier",
+    ]) ||
+    getValueByKeys(sourceUnifiedFarePolicyRequest || {}, [
+      "productIdentifiers",
+      "ProductIdentifiers",
+      "productIdentifier",
+      "ProductIdentifier",
+    ])
   );
   const reservationId = normalizeIdentifier(
     getValueByKeys(explicitRequest || reservationWorkbenchRequest || offer, [
@@ -585,7 +585,7 @@ const resolveAncillaryShopRequestFromOffer = (offer) => {
       : modeText === "offerlist" || modeText === "offer_list"
         ? "offerList"
         : modeText === "reservationworkbench" ||
-            modeText === "reservation_workbench"
+          modeText === "reservation_workbench"
           ? "reservationWorkbench"
           : "";
 
@@ -594,10 +594,10 @@ const resolveAncillaryShopRequestFromOffer = (offer) => {
     (forceGdsOnly
       ? "offerList"
       : reservationId
-      ? "reservationWorkbench"
-      : productIdentifiers.length > 0
-        ? "offer"
-        : "offerList");
+        ? "reservationWorkbench"
+        : productIdentifiers.length > 0
+          ? "offer"
+          : "offerList");
 
   if (mode === "reservationWorkbench") {
     if (!reservationId) return null;
@@ -747,7 +747,7 @@ const BookingDetaills = () => {
 
         setAirPriceData(normalized.length ? normalized : [selectedOffer]);
       } catch (error) {
-        console.error("Error fetching build-from-products data:", error);
+        console.warn("Build-from-products failed, using selected offer fallback");
         setAirPriceData([selectedOffer]);
       } finally {
         setLoading(false);
@@ -1282,19 +1282,15 @@ const BookingDetaills = () => {
               }}
             >
               {ancillaryShopRequest.mode === "reservationWorkbench"
-                ? `Mode: Reservation Workbench | Reservation: ${
-                    ancillaryShopRequest.reservationId || "N/A"
-                  }`
-                : `Mode: ${
-                    ancillaryShopRequest.mode === "offer" ? "Offer" : "Offer List"
-                  } | Offer List: ${
-                    ancillaryShopRequest.offerListIdentifier || "N/A"
-                  } | Offer ID: ${ancillaryShopRequest.offerIdentifier || "N/A"}${
-                    Array.isArray(ancillaryShopRequest.productIdentifiers) &&
-                    ancillaryShopRequest.productIdentifiers.length
-                      ? ` | Products: ${ancillaryShopRequest.productIdentifiers.length}`
-                      : ""
-                  }`}
+                ? `Mode: Reservation Workbench | Reservation: ${ancillaryShopRequest.reservationId || "N/A"
+                }`
+                : `Mode: ${ancillaryShopRequest.mode === "offer" ? "Offer" : "Offer List"
+                } | Offer List: ${ancillaryShopRequest.offerListIdentifier || "N/A"
+                } | Offer ID: ${ancillaryShopRequest.offerIdentifier || "N/A"}${Array.isArray(ancillaryShopRequest.productIdentifiers) &&
+                  ancillaryShopRequest.productIdentifiers.length
+                  ? ` | Products: ${ancillaryShopRequest.productIdentifiers.length}`
+                  : ""
+                }`}
             </Typography>
           ) : null}
         </DialogTitle>
