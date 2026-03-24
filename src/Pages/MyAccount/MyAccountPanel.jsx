@@ -8,6 +8,7 @@ import {
     CircularProgress,
     Divider,
     Grid,
+    IconButton,
     Paper,
     Tab,
     Tabs,
@@ -20,6 +21,8 @@ import {
     TextField,
     Typography,
 } from "@mui/material";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import secureLocalStorage from "react-secure-storage";
 import { useLocation, useNavigate } from "react-router-dom";
 import moment from "moment";
@@ -388,6 +391,20 @@ export default function MyAccountPanel() {
         error: "",
     });
 
+    const [passwordForm, setPasswordForm] = useState({
+        currentPassword: "",
+        newPassword: "",
+        confirmPassword: "",
+    });
+    const [passwordState, setPasswordState] = useState({
+        submitting: false,
+        success: "",
+        error: "",
+        showCurrentPassword: false,
+        showNewPassword: false,
+        showConfirmPassword: false,
+    });
+
     useEffect(() => {
         const tabFromQuery = new URLSearchParams(location.search).get("tab");
         if (!tabFromQuery) return;
@@ -721,6 +738,60 @@ export default function MyAccountPanel() {
             setErrorText(error instanceof Error ? error.message : "Failed to update profile.");
         } finally {
             setSavingProfile(false);
+        }
+    };
+
+    const handleChangePassword = async () => {
+        try {
+            setPasswordState((prev) => ({ ...prev, submitting: true, error: "", success: "" }));
+
+            if (!passwordForm.currentPassword) {
+                setPasswordState((prev) => ({ ...prev, submitting: false, error: "Current password is required" }));
+                return;
+            }
+
+            if (!passwordForm.newPassword) {
+                setPasswordState((prev) => ({ ...prev, submitting: false, error: "New password is required" }));
+                return;
+            }
+
+            if (!passwordForm.confirmPassword) {
+                setPasswordState((prev) => ({ ...prev, submitting: false, error: "Password confirmation is required" }));
+                return;
+            }
+
+            if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+                setPasswordState((prev) => ({ ...prev, submitting: false, error: "New password and confirm password do not match" }));
+                return;
+            }
+
+            const response = await fetch("/api/user/changePassword", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    currentPassword: passwordForm.currentPassword,
+                    newPassword: passwordForm.newPassword,
+                    confirmPassword: passwordForm.confirmPassword,
+                }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Failed to change password.");
+            }
+
+            setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+            setPasswordState((prev) => ({ ...prev, submitting: false, success: "Password changed successfully!" }));
+        } catch (error) {
+            setPasswordState((prev) => ({
+                ...prev,
+                submitting: false,
+                error: error instanceof Error ? error.message : "Failed to change password.",
+            }));
         }
     };
 
@@ -1141,6 +1212,122 @@ export default function MyAccountPanel() {
                     </Paper>
                 </Grid>
             </Grid>
+
+            {/* Password Change Section */}
+            <Paper sx={{ ...panelStyle, p: { xs: 1.6, md: 2.2 }, mt: 2.2 }}>
+                <Typography sx={sectionTitleStyle}>Change Password</Typography>
+                <Typography sx={{ fontSize: 13, color: "#4f6d8b", mb: 1.8 }}>
+                    Update your password to secure your account.
+                </Typography>
+
+                {passwordState.error && (
+                    <Alert severity="error" sx={{ mb: 1.6 }}>
+                        {passwordState.error}
+                    </Alert>
+                )}
+
+                {passwordState.success && (
+                    <Alert severity="success" sx={{ mb: 1.6 }}>
+                        {passwordState.success}
+                    </Alert>
+                )}
+
+                <Grid container spacing={1.2}>
+                    <Grid item xs={12}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Current Password"
+                            type={passwordState.showCurrentPassword ? "text" : "password"}
+                            value={passwordForm.currentPassword}
+                            onChange={(e) => setPasswordForm((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                            disabled={passwordState.submitting}
+                            InputProps={{
+                                endAdornment: (
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setPasswordState((prev) => ({ ...prev, showCurrentPassword: !prev.showCurrentPassword }))}
+                                        edge="end"
+                                    >
+                                        {passwordState.showCurrentPassword ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                                    </IconButton>
+                                ),
+                            }}
+                            sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+                        />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="New Password"
+                            type={passwordState.showNewPassword ? "text" : "password"}
+                            value={passwordForm.newPassword}
+                            onChange={(e) => setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))}
+                            disabled={passwordState.submitting}
+                            InputProps={{
+                                endAdornment: (
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setPasswordState((prev) => ({ ...prev, showNewPassword: !prev.showNewPassword }))}
+                                        edge="end"
+                                    >
+                                        {passwordState.showNewPassword ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                                    </IconButton>
+                                ),
+                            }}
+                            sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+                        />
+                    </Grid>
+
+                    <Grid item xs={12} sm={6}>
+                        <TextField
+                            fullWidth
+                            size="small"
+                            label="Confirm Password"
+                            type={passwordState.showConfirmPassword ? "text" : "password"}
+                            value={passwordForm.confirmPassword}
+                            onChange={(e) => setPasswordForm((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                            disabled={passwordState.submitting}
+                            InputProps={{
+                                endAdornment: (
+                                    <IconButton
+                                        size="small"
+                                        onClick={() => setPasswordState((prev) => ({ ...prev, showConfirmPassword: !prev.showConfirmPassword }))}
+                                        edge="end"
+                                    >
+                                        {passwordState.showConfirmPassword ? <VisibilityIcon /> : <VisibilityOffIcon />}
+                                    </IconButton>
+                                ),
+                            }}
+                            sx={{ "& .MuiOutlinedInput-root": { borderRadius: "12px" } }}
+                        />
+                    </Grid>
+
+                    <Grid item xs={12}>
+                        <Box sx={{ display: "flex", gap: 1, justifyContent: "flex-end" }}>
+                            <Button
+                                variant="outlined"
+                                onClick={() => {
+                                    setPasswordForm({ currentPassword: "", newPassword: "", confirmPassword: "" });
+                                    setPasswordState((prev) => ({ ...prev, error: "", success: "" }));
+                                }}
+                                disabled={passwordState.submitting}
+                            >
+                                Clear
+                            </Button>
+                            <Button
+                                variant="contained"
+                                disabled={passwordState.submitting || !passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword}
+                                onClick={handleChangePassword}
+                            >
+                                {passwordState.submitting ? "Changing..." : "Change Password"}
+                            </Button>
+                        </Box>
+                    </Grid>
+                </Grid>
+            </Paper>
         </Paper>
     );
 

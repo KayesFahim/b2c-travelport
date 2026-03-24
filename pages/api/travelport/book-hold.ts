@@ -13,6 +13,7 @@ type BookHoldBody = {
   reservationId?: string;
   commit?: boolean | string;
   commitOnly?: boolean | string;
+  commitRequested?: boolean | string;
   applyCommission?: boolean | string;
   commissionPercent?: number | string;
   bookingFlowKey?: string;
@@ -2208,39 +2209,27 @@ async function applyDocumentOverrides(params: {
   bookingBaseUrl: string;
   reservationId: string;
   headers: Record<string, string>;
-  travelerRefIds: string[];
+  travelerRefIds?: string[];
   commissionPercent: number;
   logs?: ApiFlowLog[];
 }) {
-  const travelerRefs = Array.from(new Set(params.travelerRefIds.filter(Boolean))).map(
-    (id) => ({ id })
-  );
-
-  if (!travelerRefs.length) {
-    return {
-      ok: false,
-      status: 400,
-      payload: { message: "No traveler refs available for commission override." },
-      errorMessage: "No traveler refs available for commission override.",
-    };
-  }
-
   const overrideUrl = `${params.bookingBaseUrl}/documentoverride/Reservation/${encodeURIComponent(
     params.reservationId
   )}/documentoverrides`;
+
+  // Build commission structure - use document-wide commission (no traveler refs)
+  const commissionStructure = {
+    Commission: {
+      "@type": "CommissionPercent",
+      Percent: params.commissionPercent,
+    },
+  };
+
   const overrideBody = {
     "@type": "DocumentOverrides",
     id: "documentOverrides_1",
     DocumentOverridesRef: "documentOverrides_1",
-    Commissions: [
-      {
-        TravelerIdentifierRef: travelerRefs,
-        Commission: {
-          "@type": "CommissionPercent",
-          Percent: params.commissionPercent,
-        },
-      },
-    ],
+    Commissions: [commissionStructure],
   };
 
   const overrideResponse = await fetch(overrideUrl, {

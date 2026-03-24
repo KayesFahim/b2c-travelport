@@ -623,7 +623,7 @@ const NavBar = () => {
     "/userinfov2/usertraveler",
     "/userinfov2/addtravler",
     "/userinfov2/adddeposite",
-    "/myprofile/usertraveler",
+
     "/myprofile/addtravler",
     "/paymentgateway",
     "/userinfov2/updateprofilev2",

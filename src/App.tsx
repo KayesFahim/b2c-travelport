@@ -18,7 +18,6 @@ import UserProfileUpdated from "./Pages/UserInfo/UserProfile/UserProfileUpdated"
 import UserProfile from "./Pages/UserInfo/UserProfile/UserProfile"
 import AddDeposite from "./Pages/UserInfo/UserWallet/AddDeposite"
 import UserTransactions from "./Pages/UserInfo/UserTransactions/UserTransactions"
-import UserTraveler from "./Pages/UserInfo/UserTraveler/UserTraveler"
 import AddTraveler from "./Pages/UserInfo/UserTraveler/AddTraveler"
 import ScrollToTop from "./ScrollToTop"
 import OtpVerification from "./Pages/SignUp/OtpVerification"
@@ -91,7 +90,6 @@ const App: FC = () => {
               <Route path="/myprofile" element={<UserProfile />} />
               <Route path="/myprofile/adddeposite" element={<AddDeposite />} />
               <Route path="/myprofile/usertransctions" element={<UserTransactions />} />
-              <Route path="/myprofile/usertraveler" element={<UserTraveler />} />
               <Route path="/myprofile/addtravler" element={<AddTraveler />} />
               <Route path="/myprofile/updateprofilev2" element={<UserProfileUpdated />} />
             </Route>
