@@ -634,35 +634,27 @@ export default function MyAccountPanel() {
                     if (cancelled) return;
 
                     const fallbackData = getSessionFallbackAccountData(sessionEmail);
-                    const [bookingDataByStatus, buddyData] = await Promise.all([
-                        Promise.all(
-                            STATUS_KEYS.map((status) =>
-                                fetchBookingsByStatus(status).catch(() => [])
-                            )
-                        ),
-                        fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] })),
-                    ]);
+                    const bookingDataByStatus = await Promise.all(
+                        STATUS_KEYS.map((status) =>
+                            fetchBookingsByStatus(status).catch(() => [])
+                        )
+                    );
                     const dbBookings = dedupeBookings(bookingDataByStatus.flat());
                     const mergedBookings = dedupeBookings([
                         ...dbBookings,
                         ...fallbackData.bookings,
                     ]);
-                    const mergedTravelBuddies = Array.isArray(buddyData?.travelBuddies) && buddyData.travelBuddies.length
-                        ? buddyData.travelBuddies
-                        : fallbackData.travelBuddies;
 
                     setProfile(sessionProfile);
                     setProfileDraft(buildProfileDraft(sessionProfile));
                     setBookings(mergedBookings);
                     setTransactions(fallbackData.transactions);
-                    setTravelBuddies(mergedTravelBuddies);
                     return;
                 }
 
-                const [profileData, buddyData, transactionData, bookingDataByStatus] =
+                const [profileData, transactionData, bookingDataByStatus] =
                     await Promise.all([
                         fetchProfileInfo().catch(() => sessionProfile || {}),
-                        fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] })),
                         fetchJson(`${config.baseUrl}/user/oneUserAllTransection?page=1&limit=50`).catch(() => ({ transactions: [] })),
                         Promise.all(
                             STATUS_KEYS.map((status) =>
@@ -692,7 +684,6 @@ export default function MyAccountPanel() {
 
                 setProfile(mergedProfile);
                 setProfileDraft(buildProfileDraft(mergedProfile));
-                setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
                 setTransactions(Array.isArray(transactionData?.transactions) ? transactionData.transactions : []);
                 setBookings(mergedBookings);
             } catch (error) {
@@ -716,6 +707,24 @@ export default function MyAccountPanel() {
             cancelled = true;
         };
     }, [token, navigate]);
+
+    useEffect(() => {
+        if (activeTab !== "Travelbuddy") return;
+
+        let cancelled = false;
+
+        const loadTravelBuddies = async () => {
+            const buddyData = await fetchTravelBuddies({ token }).catch(() => ({ travelBuddies: [] }));
+            if (cancelled) return;
+            setTravelBuddies(Array.isArray(buddyData?.travelBuddies) ? buddyData.travelBuddies : []);
+        };
+
+        loadTravelBuddies();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [activeTab, token]);
 
     const bookingStats = useMemo(() => {
         const today = new Date();
@@ -845,21 +854,10 @@ export default function MyAccountPanel() {
                 credentials: "include",
                 headers: {
                     "Content-Type": "application/json",
-                    Authorization: `Bearer ${token}`,
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
                 },
                 body: JSON.stringify(requestBody),
             });
-
-            if (response.status === 404 || response.status === 405) {
-                response = await fetch(`${config.baseUrl}/user/updateUserProfile`, {
-                    method: "PATCH",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `Bearer ${token}`,
-                    },
-                    body: JSON.stringify(requestBody),
-                });
-            }
 
             const payload = await response.json().catch(() => ({}));
             if (!response.ok) {
@@ -1254,15 +1252,6 @@ export default function MyAccountPanel() {
                                     fontWeight: 700,
                                 }}
                             />
-                            <Chip
-                                size="small"
-                                label={toText(profile?.role, "CUSTOMER")}
-                                sx={{
-                                    bgcolor: "rgba(255,255,255,0.18)",
-                                    color: "#fff",
-                                    fontWeight: 700,
-                                }}
-                            />
                         </Box>
 
                         <Divider sx={{ borderColor: "rgba(255,255,255,0.22)", my: 1.4 }} />
@@ -1316,23 +1305,6 @@ export default function MyAccountPanel() {
                                     </Typography>
                                     <Typography sx={{ fontWeight: 700, fontSize: 14 }}>
                                         {toText(profileDraft.phone, "-")}
-                                    </Typography>
-                                </Paper>
-                            </Grid>
-                            <Grid item xs={6}>
-                                <Paper
-                                    sx={{
-                                        p: 1,
-                                        borderRadius: "12px",
-                                        bgcolor: "rgba(255,255,255,0.16)",
-                                        color: "#fff",
-                                    }}
-                                >
-                                    <Typography sx={{ fontSize: 11, color: "rgba(255,255,255,0.88)" }}>
-                                        Updated At
-                                    </Typography>
-                                    <Typography sx={{ fontWeight: 700, fontSize: 14 }}>
-                                        {formatDateTime(profile?.updatedAt)}
                                     </Typography>
                                 </Paper>
                             </Grid>
@@ -1402,30 +1374,6 @@ export default function MyAccountPanel() {
                                             }))
                                         }
                                         disabled={!editingProfile}
-                                        sx={{
-                                            "& .MuiOutlinedInput-root": {
-                                                borderRadius: "12px",
-                                            },
-                                        }}
-                                    />
-                                </Grid>
-                            ))}
-                        </Grid>
-
-                        <Grid container spacing={1.2} sx={{ mt: 0.2 }}>
-                            {[
-                                { label: "Role", value: toText(profile?.role, "-") },
-                                { label: "Admin", value: profile?.admin ? "YES" : "NO" },
-                                { label: "Created At", value: formatDateTime(profile?.createdAt) },
-                                { label: "Updated At", value: formatDateTime(profile?.updatedAt) },
-                            ].map((item) => (
-                                <Grid item xs={12} sm={6} key={item.label}>
-                                    <TextField
-                                        fullWidth
-                                        size="small"
-                                        label={item.label}
-                                        value={item.value}
-                                        disabled
                                         sx={{
                                             "& .MuiOutlinedInput-root": {
                                                 borderRadius: "12px",

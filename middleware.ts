@@ -19,6 +19,8 @@ const PROTECTED_PREFIXES = [
     "/api/cms/settings",
 ];
 
+const BOOKING_SESSION_COOKIE = "flyjatt_booking_session";
+
 function getAllowedOrigins(requestOrigin: string): Set<string> {
     const configured = String(process.env.ALLOWED_API_ORIGINS || "")
         .split(",")
@@ -56,15 +58,32 @@ function isClientIpAllowed(req: NextRequest): boolean {
     const clientIp = getClientIp(req);
     if (!clientIp) return false;
 
-    const configuredAllowedIps = String(process.env.ALLOWED_API_IPS || "")
+    const configuredRaw = String(process.env.ALLOWED_API_IPS || "").trim();
+    const configuredAllowedIps = configuredRaw
         .split(",")
         .map((entry) => normalizeIp(entry))
         .filter(Boolean);
 
+    // Public production sites on Vercel receive end-user IPs.
+    // If allowlist is not configured, do not block all public traffic.
+    if (!configuredRaw) {
+        if (process.env.NODE_ENV === "production") {
+            return true;
+        }
+        const localhostOnly = new Set<string>(["127.0.0.1", "::1", "localhost"]);
+        if (localhostOnly.has(clientIp)) return true;
+        if (isLocalhostIp(clientIp) && [...localhostOnly].some((item) => isLocalhostIp(item))) {
+            return true;
+        }
+        return false;
+    }
+
+    if (configuredAllowedIps.includes("*")) {
+        return true;
+    }
+
     const allowed = new Set<string>(
-        configuredAllowedIps.length > 0
-            ? configuredAllowedIps
-            : ["127.0.0.1", "::1", "localhost"]
+        configuredAllowedIps
     );
 
     if (allowed.has(clientIp)) return true;
@@ -106,6 +125,11 @@ function getBearerToken(req: NextRequest): string {
     return authHeader.slice(7).trim();
 }
 
+function hasSessionCookie(req: NextRequest): boolean {
+    const cookieValue = String(req.cookies.get(BOOKING_SESSION_COOKIE)?.value || "").trim();
+    return Boolean(cookieValue);
+}
+
 function isProtectedPath(pathname: string): boolean {
     if (PUBLIC_API_PATHS.has(pathname)) return false;
     return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
@@ -130,12 +154,18 @@ export async function middleware(req: NextRequest) {
     }
 
     const token = getBearerToken(req);
-    if (!token) {
+    const sessionCookiePresent = hasSessionCookie(req);
+
+    if (!token && !sessionCookiePresent) {
         return NextResponse.json({ message: "Authorization token is required" }, { status: 401 });
     }
 
+    if (!token && sessionCookiePresent) {
+        return NextResponse.next();
+    }
+
     const claims = await verifySessionJwt(token);
-    if (!claims?.sub || !claims?.sid) {
+    if ((!claims?.sub || !claims?.sid) && !sessionCookiePresent) {
         return NextResponse.json({ message: "Invalid or expired authorization token" }, { status: 401 });
     }
 
