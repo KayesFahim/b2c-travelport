@@ -53,53 +53,8 @@ function isLocalhostIp(ip: string): boolean {
     return ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
 }
 
-function isClientIpAllowed(req: NextRequest): boolean {
-    const configuredRaw = String(process.env.ALLOWED_API_IPS || "").trim();
-    const configuredAllowedIps = configuredRaw
-        .split(",")
-        .map((entry) => normalizeIp(entry))
-        .filter(Boolean);
-
-    const clientIp = getClientIp(req);
-    if (!clientIp) {
-        // Some edge hops may omit IP headers; avoid false 403 for public production traffic
-        // when no explicit allowlist policy is configured.
-        if (!configuredRaw && process.env.NODE_ENV === "production") {
-            return true;
-        }
-        if (configuredAllowedIps.includes("*")) {
-            return true;
-        }
-        return false;
-    }
-
-    // Public production sites on Vercel receive end-user IPs.
-    // If allowlist is not configured, do not block all public traffic.
-    if (!configuredRaw) {
-        if (process.env.NODE_ENV === "production") {
-            return true;
-        }
-        const localhostOnly = new Set<string>(["127.0.0.1", "::1", "localhost"]);
-        if (localhostOnly.has(clientIp)) return true;
-        if (isLocalhostIp(clientIp) && [...localhostOnly].some((item) => isLocalhostIp(item))) {
-            return true;
-        }
-        return false;
-    }
-
-    if (configuredAllowedIps.includes("*")) {
-        return true;
-    }
-
-    const allowed = new Set<string>(
-        configuredAllowedIps
-    );
-
-    if (allowed.has(clientIp)) return true;
-    if (isLocalhostIp(clientIp) && [...allowed].some((item) => isLocalhostIp(item))) {
-        return true;
-    }
-    return false;
+function isClientIpAllowed(_req: NextRequest): boolean {
+    return true;
 }
 
 function isOriginAllowed(req: NextRequest): boolean {
