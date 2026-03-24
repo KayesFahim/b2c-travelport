@@ -101,19 +101,24 @@ function persistLastSearchInBrowser({
   }
 }
 
-async function getResponseErrorMessage(response) {
+async function getResponseErrorPayload(response) {
   const contentType = response.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     const payload = await response.json().catch(() => ({}));
-    return (
-      payload?.message ||
-      payload?.details ||
-      `Travelport search failed (${response.status})`
-    );
+    return {
+      message:
+        payload?.message ||
+        payload?.details ||
+        `Travelport search failed (${response.status})`,
+      payload,
+    };
   }
 
   const text = await response.text().catch(() => "");
-  return text || `Travelport search failed (${response.status})`;
+  return {
+    message: text || `Travelport search failed (${response.status})`,
+    payload: {},
+  };
 }
 
 function toNumber(value, fallback = 0) {
@@ -215,21 +220,21 @@ function mapUnifiedFlightToLegacyCompat(unified) {
   const farePolicyRequest =
     unified?.farePolicyRequest && typeof unified.farePolicyRequest === "object"
       ? {
-          offerIdentifier:
-            unified.farePolicyRequest.offerIdentifier || offerIdentifier || "",
-          offerListIdentifier:
-            unified.farePolicyRequest.offerListIdentifier || offerListIdentifier || "",
-          productIdentifiers: Array.isArray(
-            unified.farePolicyRequest.productIdentifiers
-          )
-            ? unified.farePolicyRequest.productIdentifiers
-            : productIdentifiers,
-        }
+        offerIdentifier:
+          unified.farePolicyRequest.offerIdentifier || offerIdentifier || "",
+        offerListIdentifier:
+          unified.farePolicyRequest.offerListIdentifier || offerListIdentifier || "",
+        productIdentifiers: Array.isArray(
+          unified.farePolicyRequest.productIdentifiers
+        )
+          ? unified.farePolicyRequest.productIdentifiers
+          : productIdentifiers,
+      }
       : {
-          offerIdentifier: offerIdentifier || "",
-          offerListIdentifier: offerListIdentifier || "",
-          productIdentifiers,
-        };
+        offerIdentifier: offerIdentifier || "",
+        offerListIdentifier: offerListIdentifier || "",
+        productIdentifiers,
+      };
 
   return {
     System: "travelport",
@@ -244,7 +249,7 @@ function mapUnifiedFlightToLegacyCompat(unified) {
     IsBookable: Boolean(unified?.isBookable),
     TripType:
       String(unified?.tripType || unified?.journeyType || "").toUpperCase() ===
-      "ROUND_TRIP"
+        "ROUND_TRIP"
         ? "Return"
         : "Oneway",
     FareType: unified?.fareType || "PublicFare",
@@ -358,8 +363,11 @@ export async function searchTravelportFlights(payload, token) {
         return normalizedData;
       }
 
-      const message = await getResponseErrorMessage(response);
-      const currentError = new Error(message);
+      const errorData = await getResponseErrorPayload(response);
+      const currentError = new Error(errorData.message);
+      currentError.status = response.status;
+      currentError.payload = errorData.payload;
+      currentError.requiresLogin = Boolean(errorData?.payload?.requiresLogin);
 
       // Try next candidate for missing route, stop early for other response errors.
       if (response.status === 404) {

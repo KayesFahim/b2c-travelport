@@ -13,7 +13,7 @@ import AirlinesSliderSlikton from "../AirlinesSlider/AirlinesSliderSlikton";
 import AfterSearchBanner from "../AfterSearch/AfterSearchBanner";
 import NavBar from "../../Shared/NavBar/NavBar";
 import SingleMulticityFlight from "./SingleMulticityFlight";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import secureLocalStorage from "react-secure-storage";
 import moment from "moment";
 import SingleMulticityFlightSlikton from "./SingleMulticityFlightSlikton";
@@ -34,10 +34,12 @@ import {
 } from "../../utils/flightPolicyUtils";
 import { resolveAirportInfo } from "../../utils/travelLookup";
 import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
+import Swal from "sweetalert2";
 
 const MultiCitySearchResult = () => {
   const MAX_MULTI_CITY_SEGMENTS = 4;
   const MAX_COMBINATIONS_PER_GROUP = 4;
+  const navigate = useNavigate();
   const location = useLocation();
   const {
     searchData,
@@ -159,7 +161,29 @@ const MultiCitySearchResult = () => {
         setMaxPrice(Math.max(...prices));
         setPriceRange([Math.min(...prices), Math.max(...prices)]);
       } catch (error) {
-        console.error("Error fetching data:", error);
+        if (
+          error?.requiresLogin ||
+          error?.status === 401 ||
+          error?.payload?.code === "ANON_SEARCH_LIMIT_REACHED_LOGIN_REQUIRED"
+        ) {
+          Swal.fire({
+            icon: "warning",
+            title: "Login Required",
+            text:
+              error?.message ||
+              "You have reached the guest search limit. Please sign in to continue searching.",
+            confirmButtonText: "Sign In",
+            allowOutsideClick: false,
+          }).then(() => {
+            navigate("/signIn");
+          });
+          return;
+        }
+        Swal.fire({
+          icon: "error",
+          title: "Oops...",
+          text: error?.message || "An unexpected error occurred.",
+        });
       } finally {
         setLoading(false);
       }
@@ -177,6 +201,7 @@ const MultiCitySearchResult = () => {
     safeCabinClass,
     segments,
     MAX_MULTI_CITY_SEGMENTS,
+    navigate,
   ]);
 
   // const handleAirlineClick = (career) => {
@@ -1080,14 +1105,14 @@ const MultiCitySearchResult = () => {
                     String(group?.key || group?.primary?.ResultId || "") ||
                     `group-${index}`;
                   return (
-                  <Grid item xs={12} sm={12} md={12} lg={12} key={groupRenderKey}>
-                    <SingleFlight
-                      data={group?.primary || {}}
-                      groupedFlights={group?.options || []}
-                    />
-                    {/* <SingleMulticityFlight data={data} /> */}
-                  </Grid>
-                );
+                    <Grid item xs={12} sm={12} md={12} lg={12} key={groupRenderKey}>
+                      <SingleFlight
+                        data={group?.primary || {}}
+                        groupedFlights={group?.options || []}
+                      />
+                      {/* <SingleMulticityFlight data={data} /> */}
+                    </Grid>
+                  );
                 })
               ) : (
                 <Grid item xs={12} sm={12} md={12} lg={12}>

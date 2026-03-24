@@ -13,7 +13,6 @@ import LockIcon from "@mui/icons-material/Lock";
 import NavBar from "../../Shared/NavBar/NavBar";
 import BrandWordmark from "../../Shared/BrandWordmark/BrandWordmark";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import axios from "axios";
 import Swal from "sweetalert2";
 import { config } from "../../config";
 
@@ -58,22 +57,22 @@ const ChangePassword = () => {
     setLoading(true);
 
     try {
-      const response = await axios.post(
-        `${config.baseUrl}/auth/reset-password/${token}`,
-        { newPassword },
-        {
-          headers: {
-            "Content-Type": "application/json",
-          },
-        }
-      );
+      const response = await fetch(`/api/auth/reset-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ token, newPassword }),
+      });
 
-      if (response.status === 201) {
+      const resData = await response.json().catch(() => ({}));
+
+      if (response.ok) {
         Swal.fire({
           icon: "success",
           title: "Success!",
           text:
-            response.data?.message ||
+            resData?.message ||
             "Your password has been reset successfully!",
         }).then(() => {
           navigate("/"); // Redirect to another page
@@ -83,7 +82,7 @@ const ChangePassword = () => {
           icon: "error",
           title: "Failed!",
           text:
-            response.data?.message ||
+            resData?.message ||
             "Password reset failed. Please try again.",
         });
       }
@@ -93,7 +92,7 @@ const ChangePassword = () => {
         icon: "error",
         title: "Error!",
         text:
-          error.response?.data?.message ||
+          error?.message ||
           "An unexpected error occurred. Please try again.",
       });
     } finally {

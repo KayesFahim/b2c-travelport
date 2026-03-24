@@ -170,15 +170,15 @@ const OneWaySearchResult = () => {
     );
     const displayFromSearch = toText(
       fromSearchText ||
-        recoveredFromRecent?.fromLabel ||
-        resolvedSegment?.depFromText ||
-        displayFromCode
+      recoveredFromRecent?.fromLabel ||
+      resolvedSegment?.depFromText ||
+      displayFromCode
     );
     const displayToSearch = toText(
       toSearchText ||
-        recoveredFromRecent?.toLabel ||
-        resolvedSegment?.arrToText ||
-        displayToCode
+      recoveredFromRecent?.toLabel ||
+      resolvedSegment?.arrToText ||
+      displayToCode
     );
     const displayDepartureDate =
       toText(departureDate) ||
@@ -190,12 +190,12 @@ const OneWaySearchResult = () => {
       valid: Boolean(resolvedSegment),
       payload: resolvedSegment
         ? {
-            adultcount: safeAdultCount,
-            childcount: safeChildCount,
-            infantcount: safeInfantCount,
-            cabinclass: safeCabinClass,
-            segments: [resolvedSegment],
-          }
+          adultcount: safeAdultCount,
+          childcount: safeChildCount,
+          infantcount: safeInfantCount,
+          cabinclass: safeCabinClass,
+          segments: [resolvedSegment],
+        }
         : null,
       display: {
         fromCode: displayFromCode,
@@ -327,6 +327,24 @@ const OneWaySearchResult = () => {
           setPriceRange([0, 100000]);
         }
       } catch (error) {
+        if (
+          error?.requiresLogin ||
+          error?.status === 401 ||
+          error?.payload?.code === "ANON_SEARCH_LIMIT_REACHED_LOGIN_REQUIRED"
+        ) {
+          Swal.fire({
+            icon: "warning",
+            title: "Login Required",
+            text:
+              error?.message ||
+              "You have reached the guest search limit. Please sign in to continue searching.",
+            confirmButtonText: "Sign In",
+            allowOutsideClick: false,
+          }).then(() => {
+            navigate("/signIn");
+          });
+          return;
+        }
         Swal.fire({
           icon: "error",
           title: "Oops...",
@@ -946,17 +964,17 @@ const OneWaySearchResult = () => {
   const bannerSegments = Array.isArray(resolvedSearchContext?.payload?.segments)
     ? resolvedSearchContext.payload.segments
     : Array.isArray(segments)
-    ? segments
-    : [];
+      ? segments
+      : [];
   const bannerSearchData =
     searchData && typeof searchData === "object"
       ? {
-          ...searchData,
-          segments: bannerSegments,
-        }
+        ...searchData,
+        segments: bannerSegments,
+      }
       : {
-          segments: bannerSegments,
-        };
+        segments: bannerSegments,
+      };
 
   return (
     <Box
@@ -1052,9 +1070,9 @@ const OneWaySearchResult = () => {
                   fontSize: "17px",
                   lineHeight: 1.1,
                 }}
-                >
-                  {displayContext.fromCode || "FROM"} - {displayContext.toCode || "TO"}
-                </Typography>
+              >
+                {displayContext.fromCode || "FROM"} - {displayContext.toCode || "TO"}
+              </Typography>
               <Typography
                 sx={{
                   mt: 0.25,

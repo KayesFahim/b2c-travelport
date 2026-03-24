@@ -9,7 +9,7 @@ import {
 } from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import AfterSearchBanner from "../AfterSearch/AfterSearchBanner";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import moment from "moment";
 import SingleRoundWayFlightsSilkton from "./SingleRoundWayFlightsSilkton";
 import AirlinesSlider from "../AirlinesSlider/AirlinesSlider";
@@ -31,6 +31,7 @@ import {
 } from "../../utils/flightPolicyUtils";
 import { resolveAirportInfo } from "../../utils/travelLookup";
 import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
+import Swal from "sweetalert2";
 
 const toUpperText = (value) => String(value ?? "").trim().toUpperCase();
 const toText = (value) => String(value ?? "").trim();
@@ -67,6 +68,7 @@ const normalizeSearchSegment = (segment) => {
 };
 
 const RoundWaySearchResult = () => {
+  const navigate = useNavigate();
   const location = useLocation();
   const {
     faddress,
@@ -172,15 +174,15 @@ const RoundWaySearchResult = () => {
 
     const displayFromSearch = toText(
       fromSearchText ||
-        recoveredFromRecent?.fromLabel ||
-        resolvedSegments[0]?.depFromText ||
-        displayFromCode
+      recoveredFromRecent?.fromLabel ||
+      resolvedSegments[0]?.depFromText ||
+      displayFromCode
     );
     const displayToSearch = toText(
       toSearchText ||
-        recoveredFromRecent?.toLabel ||
-        resolvedSegments[0]?.arrToText ||
-        displayToCode
+      recoveredFromRecent?.toLabel ||
+      resolvedSegments[0]?.arrToText ||
+      displayToCode
     );
 
     const displayDepartureDate =
@@ -329,7 +331,29 @@ const RoundWaySearchResult = () => {
           setPriceRange([0, 100000]);
         }
       } catch (error) {
-        console.error("Error fetching data:", error);
+        if (
+          error?.requiresLogin ||
+          error?.status === 401 ||
+          error?.payload?.code === "ANON_SEARCH_LIMIT_REACHED_LOGIN_REQUIRED"
+        ) {
+          Swal.fire({
+            icon: "warning",
+            title: "Login Required",
+            text:
+              error?.message ||
+              "You have reached the guest search limit. Please sign in to continue searching.",
+            confirmButtonText: "Sign In",
+            allowOutsideClick: false,
+          }).then(() => {
+            navigate("/signIn");
+          });
+          return;
+        }
+        Swal.fire({
+          icon: "error",
+          title: "Oops...",
+          text: error?.message || "An unexpected error occurred.",
+        });
       } finally {
         setLoading(false);
       }
@@ -339,6 +363,7 @@ const RoundWaySearchResult = () => {
   }, [
     resolvedSearchContext,
     token,
+    navigate,
   ]);
 
   // const handleAirlineClick = (career) => {
@@ -875,20 +900,20 @@ const RoundWaySearchResult = () => {
   const displayContext = resolvedSearchContext.display;
   const bannerSegments =
     Array.isArray(resolvedSearchContext?.payload?.segments) &&
-    resolvedSearchContext.payload.segments.length > 0
+      resolvedSearchContext.payload.segments.length > 0
       ? resolvedSearchContext.payload.segments
       : Array.isArray(segments)
-      ? segments
-      : [];
+        ? segments
+        : [];
   const bannerSearchData =
     searchData && typeof searchData === "object"
       ? {
-          ...searchData,
-          segments: bannerSegments,
-        }
+        ...searchData,
+        segments: bannerSegments,
+      }
       : {
-          segments: bannerSegments,
-        };
+        segments: bannerSegments,
+      };
   const showDebugBadge = String(location?.pathname || "") === "/offers";
   const debugSegmentCount = resolvedSearchContext?.payload?.segments?.length || 2;
   console.log("flights", paginatedFlightGroups);
@@ -1009,16 +1034,16 @@ const RoundWaySearchResult = () => {
               }}
             >
               <Box>
-                  <Typography
-                    sx={{
-                      fontWeight: 600,
-                      fontSize: "18px",
-                      color: "var(--primary-button)",
-                    }}
-                  >
+                <Typography
+                  sx={{
+                    fontWeight: 600,
+                    fontSize: "18px",
+                    color: "var(--primary-button)",
+                  }}
+                >
                   {displayContext.fromCode}-{displayContext.toCode}
-                  </Typography>
-                </Box>
+                </Typography>
+              </Box>
               <Box sx={{ display: "flex", alignItems: "center", gap: "10px" }}>
                 <Box>
                   <Button
@@ -1226,13 +1251,13 @@ const RoundWaySearchResult = () => {
                     String(group?.key || group?.primary?.ResultId || "") ||
                     `group-${index}`;
                   return (
-                  <Grid item xs={12} sm={12} md={12} lg={12} key={groupRenderKey}>
-                    <SingleFlight
-                      data={group?.primary || {}}
-                      groupedFlights={group?.options || []}
-                    />
-                  </Grid>
-                );
+                    <Grid item xs={12} sm={12} md={12} lg={12} key={groupRenderKey}>
+                      <SingleFlight
+                        data={group?.primary || {}}
+                        groupedFlights={group?.options || []}
+                      />
+                    </Grid>
+                  );
                 })
               ) : (
                 <Grid item xs={12} sm={12} md={12} lg={12}>

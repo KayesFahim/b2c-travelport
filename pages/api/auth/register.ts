@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { createSession } from "@/server/auth-session";
+import { issueEmailVerification } from "@/server/auth-email";
 
 type ErrorResponse = {
   message: string;
@@ -78,6 +79,12 @@ export default async function handler(
         passwordHash,
       },
     });
+
+    try {
+      await issueEmailVerification({ id: user.id, email: user.email, name: user.name });
+    } catch {
+      // Do not fail registration when SMTP is unavailable.
+    }
 
     const session = await createSession(req, res, {
       id: user.id,

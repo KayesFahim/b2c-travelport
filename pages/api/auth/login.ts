@@ -2,6 +2,11 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { createSession } from "@/server/auth-session";
+import {
+  emailVerificationRequired,
+  isUserEmailVerified,
+  issueEmailVerification,
+} from "@/server/auth-email";
 
 type ErrorResponse = {
   message: string;
@@ -50,6 +55,21 @@ export default async function handler(
     const isValidPassword = await bcrypt.compare(password, user.passwordHash);
     if (!isValidPassword) {
       return res.status(401).json({ message: "Invalid email or password." });
+    }
+
+    if (emailVerificationRequired() && user.role !== "SUPER_ADMIN") {
+      const verified = await isUserEmailVerified(user.id);
+      if (!verified) {
+        try {
+          await issueEmailVerification({ id: user.id, email: user.email, name: user.name });
+        } catch {
+          // Keep auth flow stable even when SMTP is unavailable.
+        }
+        return res.status(403).json({
+          message:
+            "Email not verified yet. We sent a verification link to your inbox. Please verify and login again.",
+        });
+      }
     }
 
     const configuredSuperAdminEmail = normalizeEmail(process.env.SUPER_ADMIN_EMAIL);

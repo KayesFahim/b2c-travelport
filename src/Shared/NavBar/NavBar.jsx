@@ -85,15 +85,15 @@ const NavBar = () => {
     setError(null);
 
     try {
-      const response = await axios.get(
-        `${config.baseUrl}/auth/verifyEmail?token=${otpValue}`
-      );
+      const response = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(otpValue)}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "Failed to verify email");
 
       toast.success(
         "Email Verified Successfully. Your email has been successfully verified.",
         {
           position: "top-right",
-          autoClose: 5000, // Adjust the auto-close duration as needed
+          autoClose: 5000,
         }
       );
 
@@ -162,7 +162,7 @@ const NavBar = () => {
   const handlePassWordChangeEmail = async (e) => {
     e.preventDefault();
 
-    const apiUrl = `${config.baseUrl}/auth/forgotPassword`;
+    const apiUrl = `/api/auth/forgot-password`;
 
     try {
       setIsLoading(true);
@@ -412,102 +412,37 @@ const NavBar = () => {
     };
 
     try {
-      let externalSignUpCompleted = false;
+      const response = await fetch(`/api/auth/register`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: userInfo.userName,
+          email: userInfo.userEmail,
+          password: userInfo.userPass,
+        }),
+      });
 
-      try {
-        const response = await fetch(`${config.baseUrl}/user/signUp`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(body),
-        });
+      const data = await response.json().catch(() => ({}));
 
-        const data = await response.json().catch(() => ({}));
-
-        if (response.ok) {
-          externalSignUpCompleted = true;
-          Swal.fire({
-            icon: "success",
-            title: "Success!",
-            text: data?.message || "User signed up successfully!",
-            confirmButtonText: "OK",
-          }).then(() => {
-            setOpenSignUpOtp(true); // Keep existing external OTP flow
-          });
-
-          setUserInfo({
-            userName: "",
-            userEmail: "",
-            userPass: "",
-            userPhone: "",
-          });
-          setErrors({});
-          setOpenSignUp(false);
-        } else {
-          Swal.fire({
-            icon: "error",
-            title: "Sign up failed",
-            text:
-              data?.message ||
-              "There was an issue with the sign-up. Please try again.",
-            confirmButtonText: "Try Again",
-          });
-          setOpenSignUp(false);
-          return;
-        }
-      } catch (networkError) {
-        // External signup API unreachable. Fall back to local Next auth signup.
-      }
-
-      if (!externalSignUpCompleted) {
-        const fallbackResponse = await fetch(`/api/auth/register`, {
-          method: "POST",
-          credentials: "include",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            name: body.fullName,
-            email: body.email,
-            password: body.password,
-          }),
-        });
-
-        const fallbackData = await fallbackResponse.json().catch(() => ({}));
-        if (!fallbackResponse.ok) {
-          Swal.fire({
-            icon: "error",
-            title: "Sign up failed",
-            text:
-              fallbackData?.message ||
-              "Unable to register right now. Please try again.",
-            confirmButtonText: "Try Again",
-          });
-          return;
-        }
-
-        secureLocalStorage.removeItem("access_token");
-        secureLocalStorage.setItem("userData", fallbackData?.user || {});
-        secureLocalStorage.setItem("data", {
-          ...fallbackData,
-          authSource: "local-session",
-        });
-
-        setUserInfo({
-          userName: "",
-          userEmail: "",
-          userPass: "",
-          userPhone: "",
-        });
-        setErrors({});
-        setOpenSignUp(false);
-
+      if (response.ok) {
         Swal.fire({
           icon: "success",
-          title: "Success!",
-          text: "User registered successfully!",
+          title: "Registered!",
+          text: "A verification link has been sent to your email. Please check your inbox to complete sign-up.",
           confirmButtonText: "OK",
+        });
+        setUserInfo({ userName: "", userEmail: "", userPass: "", userPhone: "" });
+        setErrors({});
+        setOpenSignUp(false);
+      } else {
+        Swal.fire({
+          icon: "error",
+          title: "Sign up failed",
+          text: data?.message || "There was an issue with the sign-up. Please try again.",
+          confirmButtonText: "Try Again",
         });
       }
     } catch (error) {
@@ -536,10 +471,17 @@ const NavBar = () => {
 
   // logOut function
   const handleLogout = () => {
+    const token = String(secureLocalStorage.getItem("access_token") || "").trim();
     secureLocalStorage.removeItem("access_token");
     secureLocalStorage.removeItem("userData");
     secureLocalStorage.removeItem("data");
-    fetch("/api/auth/logout", { method: "POST", credentials: "include" }).catch(
+    fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    }).catch(
       () => { }
     );
 

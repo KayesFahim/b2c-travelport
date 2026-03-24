@@ -331,23 +331,28 @@ const SingleOnewayFlight = ({ data, className }) => {
 
     try {
       const response = await fetch(
-        `${config.baseUrl}/user/signUp`,
+        `/api/auth/register`,
         {
           method: "POST",
+          credentials: "include",
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(body),
+          body: JSON.stringify({
+            name: userInfo.userName,
+            email: userInfo.userEmail,
+            password: userInfo.userPass,
+          }),
         }
       );
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
         Swal.fire({
           icon: "success",
-          title: "Success!",
-          text: data?.message || "User signed up successfully!",
+          title: "Registered!",
+          text: "A verification link has been sent to your email. Please check your inbox to complete sign-up.",
           confirmButtonText: "OK",
         });
 
@@ -363,7 +368,7 @@ const SingleOnewayFlight = ({ data, className }) => {
           icon: "error",
           title: "Sign up failed",
           text:
-            data.message ||
+            data?.message ||
             "There was an issue with the sign up. Please try again.",
           confirmButtonText: "Try Again",
         });

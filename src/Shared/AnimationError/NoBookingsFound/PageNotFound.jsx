@@ -89,9 +89,9 @@ const PageNotFound = () => {
     setError(null);
 
     try {
-      const response = await axios.get(
-        `${config.baseUrl}/auth/verifyEmail?token=${otpValue}`
-      );
+      const response = await fetch(`/api/auth/verify-email?token=${encodeURIComponent(otpValue)}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data?.message || "Failed to verify email");
       Swal.fire({
         icon: "success",
         title: "Email Verified Successfully",
@@ -104,7 +104,7 @@ const PageNotFound = () => {
         }
       });
     } catch (err) {
-      console.error("Error verifying OTP:", err.response?.data || err.message);
+      console.error("Error verifying OTP:", err.message);
       setError("Failed to verify OTP. Please try again.");
     } finally {
       setIsLoading(false);
@@ -172,7 +172,7 @@ const PageNotFound = () => {
   const handlePassWordChangeEmail = async (e) => {
     e.preventDefault();
 
-    const apiUrl = `${config.baseUrl}/auth/forgotPassword`;
+    const apiUrl = `/api/auth/forgot-password`;
 
     try {
       setIsLoading(true);
@@ -378,24 +378,27 @@ const PageNotFound = () => {
     };
 
     try {
-      const response = await fetch(`${config.baseUrl}/user/signUp`, {
+      const response = await fetch(`/api/auth/register`, {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          name: userInfo.userName,
+          email: userInfo.userEmail,
+          password: userInfo.userPass,
+        }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
 
       if (response.ok) {
         Swal.fire({
           icon: "success",
-          title: "Success!",
-          text: data?.message || "User signed up successfully!",
+          title: "Registered!",
+          text: "A verification link has been sent to your email. Please check your inbox to complete sign-up.",
           confirmButtonText: "OK",
-        }).then(() => {
-          setOpenSignUpOtp(true); // Open OTP dialog
         });
 
         setUserInfo({
@@ -405,17 +408,17 @@ const PageNotFound = () => {
           userPhone: "",
         });
         setErrors({});
+        setOpenSignUp(false);
       } else {
         Swal.fire({
           icon: "error",
           title: "Sign up failed",
           text:
-            data.message ||
+            data?.message ||
             "There was an issue with the sign-up. Please try again.",
           confirmButtonText: "Try Again",
         });
       }
-      setOpenSignUp(false);
     } catch (error) {
       console.error("Error signing up:", error);
       Swal.fire({

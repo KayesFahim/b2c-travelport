@@ -547,6 +547,9 @@ export default function MyAccountPanel() {
             const response = await fetch("/api/auth/me", {
                 method: "GET",
                 credentials: "include",
+                headers: {
+                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                },
             });
 
             if (!response.ok) {

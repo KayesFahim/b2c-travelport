@@ -4,6 +4,7 @@ import path from "path";
 import { getTravelportAccessToken } from "./_token-cache";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
+import { sendBookingConfirmationEmail } from "@/server/auth-email";
 
 type BookHoldBody = {
   selectedAirPrice?: Record<string, unknown>;
@@ -3672,6 +3673,47 @@ export default async function handler(
     }
     if (activeBookingFlowKey) {
       clearBookingFlow(activeBookingFlowKey);
+    }
+
+    try {
+      const bookingRecord = await prisma.booking.findUnique({
+        where: { reservationId },
+        include: {
+          user: {
+            select: {
+              email: true,
+              name: true,
+            },
+          },
+          passengers: {
+            select: {
+              email: true,
+            },
+            take: 1,
+          },
+        },
+      });
+
+      if (bookingRecord?.user?.email) {
+        await sendBookingConfirmationEmail({
+          to:
+            String(bookingRecord.passengers?.[0]?.email || "").trim() ||
+            String(bookingRecord.user.email || "").trim(),
+          name: String(bookingRecord.user.name || "Traveler").trim() || "Traveler",
+          locator: String(commitResult.locator || bookingRecord.locator || "").trim() || "N/A",
+          reservationId: String(bookingRecord.reservationId || reservationId || "").trim() || "N/A",
+          route: String(bookingRecord.routeKey || "N/A").trim() || "N/A",
+          travelDate: bookingRecord.travelDate ? bookingRecord.travelDate.toISOString() : "N/A",
+          amount:
+            bookingRecord.totalFare !== null && bookingRecord.totalFare !== undefined
+              ? `${String(bookingRecord.currencyCode || "USD").trim()} ${Number(
+                bookingRecord.totalFare
+              ).toFixed(2)}`
+              : "N/A",
+        });
+      }
+    } catch {
+      // Keep booking response successful even when email delivery fails.
     }
 
     return res.status(200).json({

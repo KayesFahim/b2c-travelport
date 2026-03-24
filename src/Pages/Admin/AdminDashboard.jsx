@@ -27,6 +27,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import LogoutIcon from "@mui/icons-material/Logout";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import { useNavigate } from "react-router-dom";
+import secureLocalStorage from "react-secure-storage";
 import AdminDashboardView from "./views/AdminDashboardView";
 import BookingManagement from "./views/BookingManagement";
 import CustomerManagement from "./views/CustomerManagement";
@@ -50,6 +51,15 @@ const menuItems = [
 
 export default function AdminDashboard() {
     const navigate = useNavigate();
+    const getAuthHeaders = () => {
+        const token = String(
+            secureLocalStorage.getItem("access_token") ||
+            secureLocalStorage.getItem("flyjatt_booking_auth_token") ||
+            ""
+        ).trim();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    };
+
     const [activeTab, setActiveTab] = useState("dashboard");
     const [mobileOpen, setMobileOpen] = useState(false);
     const [anchorEl, setAnchorEl] = useState(null);
@@ -68,6 +78,9 @@ export default function AdminDashboard() {
                 const response = await fetch("/api/auth/me", {
                     method: "GET",
                     credentials: "include",
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
                 });
 
                 const payload = await response.json().catch(() => ({}));
@@ -131,6 +144,9 @@ export default function AdminDashboard() {
             await fetch("/api/auth/logout", {
                 method: "POST",
                 credentials: "include",
+                headers: {
+                    ...getAuthHeaders(),
+                },
             });
         } catch {
             // Ignore logout failure.

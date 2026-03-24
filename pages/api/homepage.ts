@@ -12,6 +12,8 @@ export default async function handler(
   }
 
   try {
+    res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=1200");
+
     const rows = await prisma.siteSettings.findMany({
       where: { section: "homepage" },
     });

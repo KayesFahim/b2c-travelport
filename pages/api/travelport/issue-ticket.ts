@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getTravelportAccessToken } from "./_token-cache";
 import { getSessionUser } from "@/server/auth-session";
+import { prisma } from "@/server/prisma";
+import { sendTicketIssuedEmail } from "@/server/auth-email";
 
 type ApiFlowLog = {
     timestamp: string;
@@ -1052,6 +1054,43 @@ export default async function handler(
                 stage: "issue_ticket_commit",
                 apiFlowLogs,
             });
+        }
+
+        try {
+            const bookingRecord = await prisma.booking.findFirst({
+                where: {
+                    OR: [
+                        { reservationId: reservationIdForCommit },
+                        { locator: commitResult.locator || pnr },
+                    ],
+                },
+                include: {
+                    user: {
+                        select: {
+                            email: true,
+                            name: true,
+                        },
+                    },
+                },
+            });
+
+            if (bookingRecord?.user?.email) {
+                const ticketInfo =
+                    String(commitResult.locator || pnr || "").trim() ||
+                    String(reservationIdForCommit || "").trim() ||
+                    "Issued";
+
+                await sendTicketIssuedEmail({
+                    to: String(bookingRecord.user.email || "").trim(),
+                    name: String(bookingRecord.user.name || "Traveler").trim() || "Traveler",
+                    locator: String(commitResult.locator || bookingRecord.locator || pnr || "N/A"),
+                    reservationId: String(reservationIdForCommit || bookingRecord.reservationId || "N/A"),
+                    route: String(bookingRecord.routeKey || "N/A"),
+                    ticketInfo,
+                });
+            }
+        } catch {
+            // Do not fail ticket issue response if email sending fails.
         }
 
         return res.status(200).json({

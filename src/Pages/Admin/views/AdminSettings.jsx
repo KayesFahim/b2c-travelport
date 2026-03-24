@@ -21,12 +21,14 @@ import {
     TableHead,
     TableRow,
     MenuItem,
+    CircularProgress,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
 import SecurityIcon from "@mui/icons-material/Security";
 import NotificationsIcon from "@mui/icons-material/Notifications";
 import TuneIcon from "@mui/icons-material/Tune";
 import GroupIcon from "@mui/icons-material/Group";
+import secureLocalStorage from "react-secure-storage";
 
 const sectionStyle = {
     borderRadius: "16px",
@@ -35,6 +37,15 @@ const sectionStyle = {
 };
 
 export default function AdminSettings() {
+    const getAuthHeaders = () => {
+        const token = String(
+            secureLocalStorage.getItem("access_token") ||
+            secureLocalStorage.getItem("flyjatt_booking_auth_token") ||
+            ""
+        ).trim();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    };
+
     const [saved, setSaved] = useState(false);
     const [teamUsers, setTeamUsers] = useState([]);
     const [teamLoading, setTeamLoading] = useState(true);
@@ -47,6 +58,27 @@ export default function AdminSettings() {
         role: "STAFF",
     });
     const [creatingUser, setCreatingUser] = useState(false);
+    const [savingSearchControl, setSavingSearchControl] = useState(false);
+    const [searchControlState, setSearchControlState] = useState({
+        success: "",
+        error: "",
+    });
+    const [analyticsLoading, setAnalyticsLoading] = useState(true);
+    const [analyticsError, setAnalyticsError] = useState("");
+    const [analytics, setAnalytics] = useState({
+        stats: {
+            searches: { total: 0, successful: 0, failed: 0, blocked: 0 },
+            bookings: { attempts: 0, failed: 0, successful: 0 },
+        },
+        latestSearchLogs: [],
+        latestBookingFailures: [],
+    });
+
+    const [searchControl, setSearchControl] = useState({
+        anonSearchLimit: "10",
+        loggedSearchesPerBooking: "50",
+        minimumLoggedSearchLimit: "50",
+    });
 
     const [general, setGeneral] = useState({
         siteName: "FlyJatt",
@@ -78,8 +110,18 @@ export default function AdminSettings() {
         try {
             setTeamLoading(true);
             const [meRes, usersRes] = await Promise.all([
-                fetch("/api/auth/me", { credentials: "include" }),
-                fetch("/api/admin/users", { credentials: "include" }),
+                fetch("/api/auth/me", {
+                    credentials: "include",
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
+                }),
+                fetch("/api/admin/users", {
+                    credentials: "include",
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
+                }),
             ]);
 
             const meData = await meRes.json().catch(() => ({}));
@@ -101,8 +143,115 @@ export default function AdminSettings() {
         }
     };
 
+    const loadSearchControlSettings = async () => {
+        try {
+            const response = await fetch("/api/cms/settings?section=search_control", {
+                credentials: "include",
+                headers: {
+                    ...getAuthHeaders(),
+                },
+            });
+            if (!response.ok) return;
+            const payload = await response.json().catch(() => ({}));
+            setSearchControl((prev) => ({
+                ...prev,
+                anonSearchLimit: String(payload?.anonSearchLimit || prev.anonSearchLimit),
+                loggedSearchesPerBooking: String(
+                    payload?.loggedSearchesPerBooking || prev.loggedSearchesPerBooking
+                ),
+                minimumLoggedSearchLimit: String(
+                    payload?.minimumLoggedSearchLimit || prev.minimumLoggedSearchLimit
+                ),
+            }));
+        } catch {
+            // Keep defaults when settings are unavailable.
+        }
+    };
+
+    const loadAnalytics = async () => {
+        try {
+            setAnalyticsLoading(true);
+            setAnalyticsError("");
+            const response = await fetch("/api/admin/search-analytics?limit=30", {
+                credentials: "include",
+                headers: {
+                    ...getAuthHeaders(),
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Unable to load analytics");
+            }
+            setAnalytics({
+                stats: {
+                    searches: {
+                        total: Number(payload?.stats?.searches?.total || 0),
+                        successful: Number(payload?.stats?.searches?.successful || 0),
+                        failed: Number(payload?.stats?.searches?.failed || 0),
+                        blocked: Number(payload?.stats?.searches?.blocked || 0),
+                    },
+                    bookings: {
+                        attempts: Number(payload?.stats?.bookings?.attempts || 0),
+                        failed: Number(payload?.stats?.bookings?.failed || 0),
+                        successful: Number(payload?.stats?.bookings?.successful || 0),
+                    },
+                },
+                latestSearchLogs: Array.isArray(payload?.latestSearchLogs) ? payload.latestSearchLogs : [],
+                latestBookingFailures: Array.isArray(payload?.latestBookingFailures)
+                    ? payload.latestBookingFailures
+                    : [],
+            });
+        } catch (error) {
+            setAnalyticsError(error instanceof Error ? error.message : "Unable to load analytics");
+        } finally {
+            setAnalyticsLoading(false);
+        }
+    };
+
+    const handleSaveSearchControl = async () => {
+        try {
+            setSavingSearchControl(true);
+            setSearchControlState({ success: "", error: "" });
+
+            const payload = {
+                section: "search_control",
+                settings: {
+                    anonSearchLimit: String(searchControl.anonSearchLimit || "10"),
+                    loggedSearchesPerBooking: String(searchControl.loggedSearchesPerBooking || "50"),
+                    minimumLoggedSearchLimit: String(searchControl.minimumLoggedSearchLimit || "50"),
+                },
+            };
+
+            const response = await fetch("/api/cms/settings", {
+                method: "PUT",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getAuthHeaders(),
+                },
+                body: JSON.stringify(payload),
+            });
+
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(result?.message || "Unable to save search control settings");
+            }
+
+            setSearchControlState({ success: "Search control settings saved.", error: "" });
+        } catch (error) {
+            setSearchControlState({
+                success: "",
+                error: error instanceof Error ? error.message : "Unable to save search control settings",
+            });
+        } finally {
+            setSavingSearchControl(false);
+        }
+    };
+
     useEffect(() => {
         loadTeamUsers();
+        loadSearchControlSettings();
+        loadAnalytics();
     }, []);
 
     const isSuperAdmin = currentUser?.role === "SUPER_ADMIN";
@@ -119,7 +268,10 @@ export default function AdminSettings() {
             const response = await fetch("/api/admin/users", {
                 method: "POST",
                 credentials: "include",
-                headers: { "Content-Type": "application/json" },
+                headers: {
+                    "Content-Type": "application/json",
+                    ...getAuthHeaders(),
+                },
                 body: JSON.stringify(newTeamUser),
             });
             const payload = await response.json().catch(() => ({}));
@@ -394,6 +546,185 @@ export default function AdminSettings() {
                             </TableBody>
                         </Table>
                     </TableContainer>
+                </CardContent>
+            </Card>
+
+            {/* Search Limits & Analytics */}
+            <Card sx={sectionStyle} elevation={0}>
+                <CardHeader
+                    avatar={<TuneIcon sx={{ color: "#0ea5e9" }} />}
+                    title={
+                        <Typography fontWeight={700} fontSize={15} color="#1e293b">
+                            Search Limits & Booking Analytics
+                        </Typography>
+                    }
+                    sx={{ pb: 0, pt: 2.5, px: 3 }}
+                />
+                <Divider sx={{ mt: 1 }} />
+                <CardContent sx={{ px: 3, pt: 2.5 }}>
+                    {searchControlState.success ? (
+                        <Alert severity="success" sx={{ mb: 1.5, borderRadius: "10px" }}>
+                            {searchControlState.success}
+                        </Alert>
+                    ) : null}
+                    {searchControlState.error ? (
+                        <Alert severity="error" sx={{ mb: 1.5, borderRadius: "10px" }}>
+                            {searchControlState.error}
+                        </Alert>
+                    ) : null}
+
+                    <Grid container spacing={1.4} sx={{ mb: 2 }}>
+                        <Grid item xs={12} md={4}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                type="number"
+                                label="Guest Search Limit (24h)"
+                                value={searchControl.anonSearchLimit}
+                                onChange={(e) =>
+                                    setSearchControl((prev) => ({ ...prev, anonSearchLimit: e.target.value }))
+                                }
+                            />
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                type="number"
+                                label="Logged Searches Per Booking"
+                                value={searchControl.loggedSearchesPerBooking}
+                                onChange={(e) =>
+                                    setSearchControl((prev) => ({ ...prev, loggedSearchesPerBooking: e.target.value }))
+                                }
+                            />
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                            <TextField
+                                fullWidth
+                                size="small"
+                                type="number"
+                                label="Minimum Logged Search Limit"
+                                value={searchControl.minimumLoggedSearchLimit}
+                                onChange={(e) =>
+                                    setSearchControl((prev) => ({ ...prev, minimumLoggedSearchLimit: e.target.value }))
+                                }
+                            />
+                        </Grid>
+                    </Grid>
+
+                    <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+                        <Button
+                            variant="contained"
+                            onClick={handleSaveSearchControl}
+                            disabled={savingSearchControl}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                        >
+                            {savingSearchControl ? "Saving..." : "Save Search Limits"}
+                        </Button>
+                        <Button
+                            variant="outlined"
+                            onClick={loadAnalytics}
+                            sx={{ textTransform: "none", fontWeight: 700 }}
+                        >
+                            Refresh Analytics
+                        </Button>
+                    </Box>
+
+                    {analyticsError ? (
+                        <Alert severity="error" sx={{ mb: 1.5, borderRadius: "10px" }}>
+                            {analyticsError}
+                        </Alert>
+                    ) : null}
+
+                    {analyticsLoading ? (
+                        <Box sx={{ display: "grid", placeItems: "center", py: 2 }}>
+                            <CircularProgress size={24} />
+                        </Box>
+                    ) : (
+                        <>
+                            <Grid container spacing={1.2} sx={{ mb: 2 }}>
+                                {[
+                                    { label: "Search Total", value: analytics.stats.searches.total },
+                                    { label: "Search Blocked", value: analytics.stats.searches.blocked },
+                                    { label: "Booking Attempts", value: analytics.stats.bookings.attempts },
+                                    { label: "Booking Failed", value: analytics.stats.bookings.failed },
+                                ].map((card) => (
+                                    <Grid item xs={12} sm={6} md={3} key={card.label}>
+                                        <Box sx={{ p: 1.2, border: "1px solid #e2e8f0", borderRadius: "10px", bgcolor: "#f8fafc" }}>
+                                            <Typography sx={{ fontSize: 12, color: "#64748b" }}>{card.label}</Typography>
+                                            <Typography sx={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>{card.value}</Typography>
+                                        </Box>
+                                    </Grid>
+                                ))}
+                            </Grid>
+
+                            <Typography sx={{ fontWeight: 700, color: "#1e293b", mb: 1 }}>Recent Search Logs</Typography>
+                            <TableContainer sx={{ mb: 2 }}>
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow sx={{ bgcolor: "#f8fafc" }}>
+                                            <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Mode</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Route</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Count/Limit</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Message</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {analytics.latestSearchLogs.length ? (
+                                            analytics.latestSearchLogs.map((row, index) => (
+                                                <TableRow key={`search-log-${index}`} hover>
+                                                    <TableCell>{row?.timestamp || "-"}</TableCell>
+                                                    <TableCell>{row?.mode || "-"}</TableCell>
+                                                    <TableCell>{row?.status || "-"}</TableCell>
+                                                    <TableCell>{row?.route || "-"}</TableCell>
+                                                    <TableCell>{`${row?.count || 0}/${row?.limit || 0}`}</TableCell>
+                                                    <TableCell>{row?.message || "-"}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={6} align="center">No search logs found.</TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+
+                            <Typography sx={{ fontWeight: 700, color: "#1e293b", mb: 1 }}>Recent Booking Failures</Typography>
+                            <TableContainer>
+                                <Table size="small">
+                                    <TableHead>
+                                        <TableRow sx={{ bgcolor: "#f8fafc" }}>
+                                            <TableCell sx={{ fontWeight: 700 }}>Time</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Stage</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Status</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Reservation</TableCell>
+                                            <TableCell sx={{ fontWeight: 700 }}>Message</TableCell>
+                                        </TableRow>
+                                    </TableHead>
+                                    <TableBody>
+                                        {analytics.latestBookingFailures.length ? (
+                                            analytics.latestBookingFailures.map((row, index) => (
+                                                <TableRow key={`booking-fail-${index}`} hover>
+                                                    <TableCell>{row?.timestamp || "-"}</TableCell>
+                                                    <TableCell>{row?.stage || "-"}</TableCell>
+                                                    <TableCell>{row?.status || "-"}</TableCell>
+                                                    <TableCell>{row?.reservationId || "-"}</TableCell>
+                                                    <TableCell>{row?.message || "-"}</TableCell>
+                                                </TableRow>
+                                            ))
+                                        ) : (
+                                            <TableRow>
+                                                <TableCell colSpan={5} align="center">No booking failures found.</TableCell>
+                                            </TableRow>
+                                        )}
+                                    </TableBody>
+                                </Table>
+                            </TableContainer>
+                        </>
+                    )}
                 </CardContent>
             </Card>
 

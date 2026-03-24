@@ -7,6 +7,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const nextConfig = {
   // Keep false in local dev to avoid duplicate useEffect API calls.
   reactStrictMode: false,
+  poweredByHeader: false,
+  compress: true,
   // Parent folder has its own package-lock.json; pin tracing + Turbopack to this app.
   outputFileTracingRoot: __dirname,
   outputFileTracingIncludes: {
@@ -18,6 +20,18 @@ const nextConfig = {
   },
   turbopack: {
     root: __dirname,
+  },
+  experimental: {
+    optimizePackageImports: [
+      "@mui/material",
+      "@mui/icons-material",
+      "@mui/lab",
+      "lodash",
+      "framer-motion",
+    ],
+  },
+  images: {
+    formats: ["image/avif", "image/webp"],
   },
   webpack(config) {
     config.module.rules.push({

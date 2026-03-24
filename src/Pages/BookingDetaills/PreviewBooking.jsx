@@ -293,6 +293,31 @@ const buildSpecialRequestsFromPassengers = ({
   return requests;
 };
 
+const toDisplayErrorText = (value) => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return "";
+    }
+  }
+  return "";
+};
+
+const getBookingFailureMessageFromError = (error) => {
+  const payload = error?.payload && typeof error.payload === "object" ? error.payload : {};
+  return (
+    toDisplayErrorText(payload?.details) ||
+    toDisplayErrorText(payload?.message) ||
+    toDisplayErrorText(payload?.error) ||
+    toDisplayErrorText(error?.message) ||
+    "There was an error confirming booking."
+  );
+};
+
 const buildPassengerCounts = (passengers = []) =>
   passengers.reduce(
     (acc, passenger) => {
@@ -1103,20 +1128,30 @@ const PreviewBooking = () => {
         return;
       }
       if (error?.status === 429) {
-        await Swal.fire({
+        const result = await Swal.fire({
           icon: "warning",
           title: "Daily Booking Limit Reached",
-          text: error instanceof Error ? error.message : "Maximum 10 bookings allowed per day.",
+          text: getBookingFailureMessageFromError(error),
+          showCancelButton: true,
+          confirmButtonText: "Search Another Flight",
+          cancelButtonText: "Stay Here",
         });
+        if (result.isConfirmed) {
+          navigate("/");
+        }
         return;
       }
-      Swal.fire(
-        "Booking failed",
-        error instanceof Error
-          ? error.message
-          : "There was an error confirming booking.",
-        "error"
-      );
+      const result = await Swal.fire({
+        icon: "error",
+        title: "Booking failed",
+        text: getBookingFailureMessageFromError(error),
+        showCancelButton: true,
+        confirmButtonText: "Search Another Flight",
+        cancelButtonText: "Stay Here",
+      });
+      if (result.isConfirmed) {
+        navigate("/");
+      }
     } finally {
       setSubmitting(false);
     }

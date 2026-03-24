@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomBytes } from "crypto";
 import { cacheDelete, cacheGetJson, cacheSetJson } from "./redis-cache";
+import { issueSessionJwt, verifySessionJwt } from "./jwt-session";
 
 export const BOOKING_SESSION_COOKIE = "flyjatt_booking_session";
 const BOOKING_SESSION_TTL_SEC = 60 * 60; // 1 hour
@@ -75,6 +76,18 @@ async function refreshSessionTtl(payload: SessionPayload) {
 export async function getSessionUser(req: NextApiRequest): Promise<SessionUser | null> {
   const bearerToken = getBearerTokenFromRequest(req);
   if (bearerToken) {
+    const claims = await verifySessionJwt(bearerToken);
+    if (claims?.sid) {
+      const jwtSessionPayload = await cacheGetJson<SessionPayload>(
+        getSessionCacheKey(String(claims.sid))
+      );
+      if (jwtSessionPayload?.user?.id && String(jwtSessionPayload.user.id) === String(claims.sub)) {
+        await refreshSessionTtl(jwtSessionPayload);
+        return jwtSessionPayload.user;
+      }
+    }
+
+    // Backward compatibility for older non-JWT tokens still present in cache.
     const tokenPayload = await cacheGetJson<SessionPayload>(getTokenCacheKey(bearerToken));
     if (tokenPayload?.user?.id) {
       await refreshSessionTtl(tokenPayload);
@@ -104,11 +117,15 @@ export async function createSession(
   }
   const existingToken = getBearerTokenFromRequest(req);
   if (existingToken) {
+    const existingClaims = await verifySessionJwt(existingToken);
+    if (existingClaims?.sid) {
+      await cacheDelete(getSessionCacheKey(String(existingClaims.sid)));
+    }
     await cacheDelete(getTokenCacheKey(existingToken));
   }
 
   const sessionId = randomBytes(32).toString("hex");
-  const token = randomBytes(32).toString("hex");
+  const token = await issueSessionJwt(user, sessionId, BOOKING_SESSION_TTL_SEC);
   const payload: SessionPayload = {
     user,
     createdAt: Date.now(),
@@ -143,6 +160,11 @@ export async function clearSession(
   const sessionId = getSessionIdFromRequest(req);
 
   if (bearerToken) {
+    const claims = await verifySessionJwt(bearerToken);
+    if (claims?.sid) {
+      await cacheDelete(getSessionCacheKey(String(claims.sid)));
+    }
+
     const tokenPayload = await cacheGetJson<SessionPayload>(getTokenCacheKey(bearerToken));
     if (tokenPayload?.sessionId) {
       await cacheDelete(getSessionCacheKey(tokenPayload.sessionId));

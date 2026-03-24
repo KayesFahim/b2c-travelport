@@ -6,6 +6,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (req.method === "GET") {
         try {
             const adminMode = req.query.admin === "true";
+            if (!adminMode) {
+                res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=1200");
+            }
             if (adminMode) {
                 const actor = await getActor(req);
                 if (!canManageCms(actor)) {
