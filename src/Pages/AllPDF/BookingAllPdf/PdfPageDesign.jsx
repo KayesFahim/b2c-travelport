@@ -189,6 +189,13 @@ const PDFPageDesign = ({ SingleBooking }) => {
   const netFare = pdfData?.NetFare || 0;
   const netFareInWords = toWords.convert(netFare);
   const discount = (pdfData?.GrossFare || 0) - netFare;
+  const airlinesPnr =
+    pdfData?.AirlinesPNR ||
+    pdfData?.airlinesPnr ||
+    pdfData?.AirlinePNR ||
+    pdfData?.airlinePnr ||
+    pdfData?.PNR ||
+    "N/A";
   const bookingCopyType =
     pdfData?.BookingStatus === "IssueInProcess" ? "E-Ticket Copy" : "Booking Copy";
 
@@ -233,8 +240,8 @@ const PDFPageDesign = ({ SingleBooking }) => {
               <Text style={styles.value}>{pdfData?.TripType || "OneWay"}</Text>
             </View>
             <View style={styles.infoCol}>
-              <Text style={styles.label}>Booking ID</Text>
-              <Text style={styles.value}>{pdfData?.BookingId || "N/A"}</Text>
+              <Text style={styles.label}>Airlines PNR</Text>
+              <Text style={styles.value}>{airlinesPnr}</Text>
             </View>
           </View>
         </View>

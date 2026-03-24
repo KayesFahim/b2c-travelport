@@ -20,6 +20,10 @@ type SuccessResponse = {
         features: string[];
         amenities: string[];
     };
+    policies: {
+        change: string[];
+        cancellation: string[];
+    };
     source: {
         bookingDbId: number;
         reservationId: string;
@@ -194,6 +198,62 @@ function extractBrand(snapshot: Record<string, unknown>): { code: string; name: 
     };
 }
 
+function collectPolicyLikeTexts(source: unknown): string[] {
+    const bag: string[] = [];
+
+    const visit = (node: unknown, depth = 0) => {
+        if (!node || depth > 6) return;
+
+        if (Array.isArray(node)) {
+            node.forEach((item) => visit(item, depth + 1));
+            return;
+        }
+
+        if (typeof node !== "object") return;
+
+        const entries = Object.entries(node as Record<string, unknown>);
+        entries.forEach(([key, value]) => {
+            const normalizedKey = String(key || "").toLowerCase();
+            if (
+                normalizedKey.includes("policy") ||
+                normalizedKey.includes("penalt") ||
+                normalizedKey.includes("cancel") ||
+                normalizedKey.includes("refund") ||
+                normalizedKey.includes("change") ||
+                normalizedKey.includes("reissue")
+            ) {
+                const text = toText(value);
+                if (text) bag.push(text);
+            }
+            if (value && typeof value === "object") {
+                visit(value, depth + 1);
+            }
+        });
+    };
+
+    visit(source, 0);
+    return Array.from(new Set(bag.filter(Boolean)));
+}
+
+function extractPolicies(snapshot: Record<string, unknown>): { change: string[]; cancellation: string[] } {
+    const policies = collectPolicyLikeTexts(snapshot);
+
+    const change = policies.filter((line) => {
+        const text = line.toLowerCase();
+        return text.includes("change") || text.includes("reissue") || text.includes("exchange");
+    });
+
+    const cancellation = policies.filter((line) => {
+        const text = line.toLowerCase();
+        return text.includes("cancel") || text.includes("refund") || text.includes("void");
+    });
+
+    return {
+        change: Array.from(new Set(change)),
+        cancellation: Array.from(new Set(cancellation)),
+    };
+}
+
 function buildDisplayBooking(
     dbRow: {
         id: number;
@@ -345,6 +405,7 @@ export default async function handler(
         const contact = extractContact(snapshot);
         const specialServices = extractSpecialServices(snapshot, passengerRows);
         const brand = extractBrand(snapshot);
+        const policies = extractPolicies(snapshot);
 
         return res.status(200).json({
             booking: displayBooking,
@@ -352,6 +413,7 @@ export default async function handler(
             contact,
             specialServices,
             brand,
+            policies,
             source: {
                 bookingDbId: row.id,
                 reservationId: toText(row.reservationId),

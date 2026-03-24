@@ -186,6 +186,7 @@ export default function BookingDetailsPage() {
     const [contactInfo, setContactInfo] = useState({ email: "", phone: "", address: "" });
     const [specialServices, setSpecialServices] = useState([]);
     const [brandInfo, setBrandInfo] = useState({ code: "", name: "", features: [], amenities: [] });
+    const [policyInfo, setPolicyInfo] = useState({ change: [], cancellation: [] });
     const [loadingDetails, setLoadingDetails] = useState(Boolean(queryBookingId));
     const [loadingError, setLoadingError] = useState("");
 
@@ -204,6 +205,7 @@ export default function BookingDetailsPage() {
                 setContactInfo({ email: "", phone: "", address: "" });
                 setSpecialServices([]);
                 setBrandInfo({ code: "", name: "", features: [], amenities: [] });
+                setPolicyInfo({ change: [], cancellation: [] });
                 setLoadingDetails(false);
                 return;
             }
@@ -236,6 +238,10 @@ export default function BookingDetailsPage() {
                 features: Array.isArray(payload?.brand?.features) ? payload.brand.features : [],
                 amenities: Array.isArray(payload?.brand?.amenities) ? payload.brand.amenities : [],
             });
+            setPolicyInfo({
+                change: Array.isArray(payload?.policies?.change) ? payload.policies.change : [],
+                cancellation: Array.isArray(payload?.policies?.cancellation) ? payload.policies.cancellation : [],
+            });
             setLoadingDetails(false);
         };
 
@@ -246,6 +252,7 @@ export default function BookingDetailsPage() {
             setContactInfo({ email: "", phone: "", address: "" });
             setSpecialServices([]);
             setBrandInfo({ code: "", name: "", features: [], amenities: [] });
+            setPolicyInfo({ change: [], cancellation: [] });
             setLoadingDetails(false);
             setLoadingError(error instanceof Error ? error.message : "Unable to load booking details");
         });
@@ -496,6 +503,38 @@ export default function BookingDetailsPage() {
                                 <Chip key={`brand-amenity-${amenity}`} size="small" label={amenity} />
                             )) : <Typography sx={{ fontSize: 12, color: "#607890" }}>N/A</Typography>}
                         </Box>
+
+                        <Divider sx={{ my: 1.2 }} />
+
+                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                            Change Policy
+                        </Typography>
+                        {policyInfo.change.length ? (
+                            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6, mb: 1.2 }}>
+                                {policyInfo.change.map((policy, idx) => (
+                                    <Typography key={`db-change-policy-${idx}`} sx={{ fontSize: 12, color: "#607890" }}>
+                                        • {policy}
+                                    </Typography>
+                                ))}
+                            </Box>
+                        ) : (
+                            <Typography sx={{ fontSize: 12, color: "#607890", mb: 1.2 }}>N/A</Typography>
+                        )}
+
+                        <Typography sx={{ fontSize: 12, fontWeight: 700, color: "#10355b", mb: 0.8 }}>
+                            Cancellation Policy
+                        </Typography>
+                        {policyInfo.cancellation.length ? (
+                            <Box sx={{ display: "flex", flexDirection: "column", gap: 0.6 }}>
+                                {policyInfo.cancellation.map((policy, idx) => (
+                                    <Typography key={`db-cancel-policy-${idx}`} sx={{ fontSize: 12, color: "#607890" }}>
+                                        • {policy}
+                                    </Typography>
+                                ))}
+                            </Box>
+                        ) : (
+                            <Typography sx={{ fontSize: 12, color: "#607890" }}>N/A</Typography>
+                        )}
                     </Paper>
 
                     <Paper sx={{ ...panelStyle, p: 1.8 }}>
@@ -671,7 +710,16 @@ export default function BookingDetailsPage() {
                         <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1, fontSize: 13 }}>
                             Download Booking & Ticket PDF
                         </Typography>
-                        <BookingAllPdf quesData={adaptBookingForPdf(booking)} />
+                        <BookingAllPdf
+                            quesData={adaptBookingForPdf({
+                                ...booking,
+                                AirlinesPNR: booking?.AirlinesPNR || booking?.airlinesPnr || booking?.PNR || booking?.locator,
+                                BrandName: brandInfo?.name,
+                                Amenities: Array.isArray(brandInfo?.amenities) ? brandInfo.amenities : [],
+                                ChangePolicies: Array.isArray(policyInfo?.change) ? policyInfo.change : [],
+                                CancellationPolicies: Array.isArray(policyInfo?.cancellation) ? policyInfo.cancellation : [],
+                            })}
+                        />
                     </Paper>
                 </Box>
             </Container>
