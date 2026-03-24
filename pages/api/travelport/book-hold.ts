@@ -1,6 +1,4 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { appendFile } from "fs/promises";
-import path from "path";
 import { getTravelportAccessToken } from "./_token-cache";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
@@ -1337,36 +1335,66 @@ async function persistBookingFailureToLocalFile(params: {
   commitRequested?: boolean;
   commitOnlyRequested?: boolean;
 }) {
-  const filePath = path.join(process.cwd(), "atpn_failed.txt");
-  const sharedLogPath = path.join(process.cwd(), "atpn.txt");
-  const logEntry = {
-    timestamp: new Date().toISOString(),
-    stage: params.stage,
-    status: params.status,
-    message: truncateForLog(params.message, 500),
-    details: truncateForLog(params.details, 1200),
-    reservationId: toText(params.reservationId) || "N/A",
-    bookingFlowKey: toText(params.bookingFlowKey) || "N/A",
-    bookingOfferKey: toText(params.bookingOfferKey) || "N/A",
-    offerIdentifiers: Array.isArray(params.offerIdentifiers)
-      ? params.offerIdentifiers.filter(Boolean)
-      : [],
-    warnings: (params.warnings || [])
-      .map((warning) => truncateForLog(warning, 300))
-      .filter(Boolean),
-    commitRequested: Boolean(params.commitRequested),
-    commitOnlyRequested: Boolean(params.commitOnlyRequested),
-  };
-  const serialized = JSON.stringify(logEntry);
-  await appendFile(filePath, `${serialized}\n`, "utf8");
-  await appendFile(
-    sharedLogPath,
-    `${logEntry.timestamp} | FAILED | Stage=${logEntry.stage} | Status=${logEntry.status
-    } | ReservationId=${logEntry.reservationId} | FlowKey=${logEntry.bookingFlowKey
-    } | OfferKey=${logEntry.bookingOfferKey} | Message=${logEntry.message} | Details=${logEntry.details || "N/A"
-    }\n`,
-    "utf8"
-  );
+  await prisma.bookingLog.create({
+    data: {
+      timestamp: new Date(),
+      outcome: "FAILED",
+      stage: params.stage,
+      status: params.status,
+      message: truncateForLog(params.message, 500),
+      details: truncateForLog(params.details, 1200) || null,
+      reservationId: toText(params.reservationId) || null,
+      bookingFlowKey: toText(params.bookingFlowKey) || null,
+      bookingOfferKey: toText(params.bookingOfferKey) || null,
+      offerIdentifiers: Array.isArray(params.offerIdentifiers)
+        ? params.offerIdentifiers.filter(Boolean)
+        : [],
+      warnings: (params.warnings || [])
+        .map((warning) => truncateForLog(warning, 300))
+        .filter(Boolean),
+      commitRequested: Boolean(params.commitRequested),
+      commitOnlyRequested: Boolean(params.commitOnlyRequested),
+      importKey: null,
+    },
+  });
+}
+
+async function persistBookingSuccessLog(params: {
+  stage: string;
+  status: number;
+  message: string;
+  reservationId?: string | null;
+  locator?: string | null;
+  offerIdentifiers?: string[];
+  bookingFlowKey?: string;
+  bookingOfferKey?: string;
+  warnings?: string[];
+  commitRequested?: boolean;
+  commitOnlyRequested?: boolean;
+}) {
+  const reservationId = toText(params.reservationId) || toText(params.locator) || null;
+  await prisma.bookingLog.create({
+    data: {
+      timestamp: new Date(),
+      outcome: "SUCCESS",
+      stage: params.stage,
+      status: params.status,
+      message: truncateForLog(params.message, 500),
+      details: toText(params.locator) ? `Locator=${truncateForLog(params.locator, 120)}` : null,
+      reservationId,
+      bookingFlowKey: toText(params.bookingFlowKey) || null,
+      bookingOfferKey: toText(params.bookingOfferKey) || null,
+      offerIdentifiers: Array.isArray(params.offerIdentifiers)
+        ? params.offerIdentifiers.filter(Boolean)
+        : [],
+      warnings: (params.warnings || [])
+        .map((warning) => truncateForLog(warning, 300))
+        .filter(Boolean),
+      commitRequested: Boolean(params.commitRequested),
+      commitOnlyRequested: Boolean(params.commitOnlyRequested),
+      importKey: null,
+    },
+  });
 }
 
 async function respondWithLoggedError(
@@ -2295,18 +2323,17 @@ async function applyDocumentOverrides(params: {
   reservationId: string;
   headers: Record<string, string>;
   travelerRefIds?: string[];
-  commissionPercent: number;
   logs?: ApiFlowLog[];
 }) {
   const overrideUrl = `${params.bookingBaseUrl}/documentoverride/Reservation/${encodeURIComponent(
     params.reservationId
   )}/documentoverrides`;
 
-  // Build commission structure - use document-wide commission (no traveler refs)
+  // Build commission structure - fixed 7% commission
   const commissionStructure = {
     Commission: {
       "@type": "CommissionPercent",
-      Percent: params.commissionPercent,
+      Percent: 7,
     },
   };
 
@@ -2815,7 +2842,6 @@ export default async function handler(
             reservationId: commitReservationId,
             headers: commonHeaders,
             travelerRefIds: offerTravelerRefIds,
-            commissionPercent: resolveCommissionPercent(body),
             logs: apiFlowLogs,
           });
 
@@ -2948,6 +2974,23 @@ export default async function handler(
       }
       if (activeBookingFlowKey) {
         clearBookingFlow(activeBookingFlowKey);
+      }
+
+      try {
+        await persistBookingSuccessLog({
+          stage: "commit_only_success",
+          status: 200,
+          message: "Booking committed successfully.",
+          reservationId: commitReservationId,
+          locator: commitResult.locator,
+          bookingFlowKey: activeBookingFlowKey,
+          bookingOfferKey: activeBookingOfferKey,
+          warnings,
+          commitRequested,
+          commitOnlyRequested,
+        });
+      } catch {
+        // Do not block API response when booking analytics logging fails.
       }
 
       return res.status(200).json({
@@ -3161,59 +3204,21 @@ export default async function handler(
       ok: travelerListResponse.ok && !hasTravelportErrors(travelerListResponsePayload),
       responseBody: travelerListResponsePayload,
     });
-    if (travelerListResponse.ok && !hasTravelportErrors(travelerListResponsePayload)) {
-      travelerPayloadResponse = travelerListResponsePayload;
-      travelerIdentifiers = resolveTravelerIdentifiers(travelerListResponsePayload);
-    } else {
-      const travelerSingleUrl = `${bookingBaseUrl}/traveler/reservationworkbench/${encodeURIComponent(
-        reservationId
-      )}/travelers`;
-      const travelerResults: Array<Record<string, unknown>> = [];
-
-      for (const traveler of travelers) {
-        const travelerResponse = await fetch(travelerSingleUrl, {
-          method: "POST",
-          headers: commonHeaders,
-          body: JSON.stringify(traveler),
-        });
-        const travelerResponsePayload = (await parseJsonSafe(travelerResponse)) as Record<
-          string,
-          unknown
-        >;
-        pushApiFlowLog({
-          logs: apiFlowLogs,
-          step: "precommit_add_traveler_single",
-          method: "POST",
-          url: travelerSingleUrl,
-          requestBody: traveler,
-          status: travelerResponse.status,
-          ok: travelerResponse.ok && !hasTravelportErrors(travelerResponsePayload),
-          responseBody: travelerResponsePayload,
-        });
-        travelerResults.push(travelerResponsePayload);
-
-        if (!travelerResponse.ok || hasTravelportErrors(travelerResponsePayload)) {
-          return logAndRespondError({
-            status: 502,
-            message: `Travelport add traveler failed (${travelerResponse.status})`,
-            details:
-              extractTravelportErrorMessage(travelerResponsePayload) ||
-              "Unable to add traveler information.",
-            warnings,
-            stage: "precommit_add_traveler",
-            destroyFlowKey: true,
-          });
-        }
-
-        const singleIdentifiers = resolveTravelerIdentifiers(travelerResponsePayload);
-        travelerIdentifiers.push(...singleIdentifiers);
-      }
-
-      travelerIdentifiers = Array.from(new Set(travelerIdentifiers.filter(Boolean)));
-      travelerPayloadResponse = {
-        TravelerResponseList: travelerResults,
-      };
+    if (!travelerListResponse.ok || hasTravelportErrors(travelerListResponsePayload)) {
+      return logAndRespondError({
+        status: 502,
+        message: `Travelport add traveler list failed (${travelerListResponse.status})`,
+        details:
+          extractTravelportErrorMessage(travelerListResponsePayload) ||
+          "Unable to add traveler information.",
+        warnings,
+        stage: "precommit_add_traveler_list",
+        destroyFlowKey: true,
+      });
     }
+
+    travelerPayloadResponse = travelerListResponsePayload;
+    travelerIdentifiers = resolveTravelerIdentifiers(travelerListResponsePayload);
 
     if (!travelerIdentifiers.length) {
       warnings.push("Traveler identifiers were not returned by Travelport.");
@@ -3564,7 +3569,6 @@ export default async function handler(
       reservationId,
       headers: commonHeaders,
       travelerRefIds,
-      commissionPercent: resolveCommissionPercent(body),
       logs: apiFlowLogs,
     });
 
@@ -3673,6 +3677,24 @@ export default async function handler(
     }
     if (activeBookingFlowKey) {
       clearBookingFlow(activeBookingFlowKey);
+    }
+
+    try {
+      await persistBookingSuccessLog({
+        stage: "commit_success",
+        status: 200,
+        message: "Booking committed successfully.",
+        reservationId,
+        locator: commitResult.locator,
+        offerIdentifiers: activeOfferIdentifiers,
+        bookingFlowKey: activeBookingFlowKey,
+        bookingOfferKey: activeBookingOfferKey,
+        warnings,
+        commitRequested,
+        commitOnlyRequested,
+      });
+    } catch {
+      // Do not block API response when booking analytics logging fails.
     }
 
     try {

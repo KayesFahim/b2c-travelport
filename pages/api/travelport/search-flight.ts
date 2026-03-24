@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import path from "path";
-import { appendFile, mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import { createHash, randomBytes } from "crypto";
 import { getTravelportAccessToken } from "./_token-cache";
 import { cacheGetJson, cacheIncr, cacheSetJson } from "@/server/redis-cache";
@@ -150,8 +150,31 @@ function buildRouteSignature(body: LegacySearchBody): string {
 }
 
 async function appendSearchLog(entry: SearchLogEvent) {
-  const filePath = path.join(process.cwd(), "search_logs.txt");
-  await appendFile(filePath, `${JSON.stringify(entry)}\n`, "utf8");
+  try {
+    const timestamp = new Date(entry.timestamp);
+    await prisma.searchLog.create({
+      data: {
+        timestamp: Number.isNaN(timestamp.getTime()) ? new Date() : timestamp,
+        mode: entry.mode,
+        userId: entry.userId,
+        status: entry.status,
+        route: entry.route,
+        cabinClass: entry.cabinClass,
+        segments: entry.segments,
+        ipHash: entry.ipHash,
+        browserFingerprint: entry.browserFingerprint,
+        visitorId: entry.visitorId ?? null,
+        count: entry.count ?? null,
+        limit: entry.limit ?? null,
+        remaining: entry.remaining ?? null,
+        bookingCount: entry.bookingCount ?? null,
+        message: entry.message ?? null,
+        importKey: null,
+      },
+    });
+  } catch (error) {
+    console.error("Failed to persist search log", error);
+  }
 }
 
 async function loadSearchLimitSettings(): Promise<SearchLimitSettings> {

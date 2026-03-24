@@ -149,3 +149,53 @@ model SiteSettings {
   @@unique([section, key])
   @@index([section])
 }
+
+model SearchLog {
+  id                 Int      @id @default(autoincrement())
+  timestamp          DateTime
+  mode               String
+  userId             Int?
+  status             String
+  route              String   @db.Text
+  cabinClass         String
+  segments           Int
+  ipHash             String
+  browserFingerprint String
+  visitorId          String?
+  count              Int?
+  limit              Int?
+  remaining          Int?
+  bookingCount       Int?
+  message            String?  @db.Text
+  importKey          String?  @unique
+  createdAt          DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([status, timestamp])
+  @@index([mode, timestamp])
+  @@index([userId, timestamp])
+}
+
+model BookingLog {
+  id                  Int      @id @default(autoincrement())
+  timestamp           DateTime
+  outcome             String
+  stage               String?
+  status              Int?
+  message             String?  @db.Text
+  details             String?  @db.Text
+  reservationId       String?
+  bookingFlowKey      String?
+  bookingOfferKey     String?
+  offerIdentifiers    Json?
+  warnings            Json?
+  commitRequested     Boolean  @default(false)
+  commitOnlyRequested Boolean  @default(false)
+  importKey           String?  @unique
+  createdAt           DateTime @default(now())
+
+  @@index([timestamp])
+  @@index([outcome, timestamp])
+  @@index([reservationId, timestamp])
+  @@index([stage, timestamp])
+}
