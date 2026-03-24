@@ -485,6 +485,13 @@ export default function MyAccountPanel() {
     const [savingProfile, setSavingProfile] = useState(false);
 
     const [bookings, setBookings] = useState([]);
+    const [dashboardCalendarBookings, setDashboardCalendarBookings] = useState([]);
+    const [dashboardStats, setDashboardStats] = useState({
+        total: 0,
+        hold: 0,
+        past: 0,
+        upcoming: 0,
+    });
     const [transactions, setTransactions] = useState([]);
     const [travelBuddies, setTravelBuddies] = useState([]);
     const [showAddTravelBuddy, setShowAddTravelBuddy] = useState(false);
@@ -589,22 +596,6 @@ export default function MyAccountPanel() {
             return response.json().catch(() => ({}));
         };
 
-        const fetchBookingsByStatus = async (status) => {
-            // Primary source: local Next.js API route backed by Prisma + session userId
-            try {
-                const payload = await fetchJson(
-                    `/api/user/bookings/${status}?page=1&limit=100`
-                );
-                return payload?.bookings || [];
-            } catch {
-                // Backward-compatible fallback: legacy external API
-                const payload = await fetchJson(
-                    `${config.baseUrl}/user/bookings/${status}?page=1&limit=100`
-                );
-                return payload?.bookings || [];
-            }
-        };
-
         const fetchProfileInfo = async () => {
             try {
                 return await fetchJson(`/api/user/profileInfo`);
@@ -634,48 +625,23 @@ export default function MyAccountPanel() {
                     if (cancelled) return;
 
                     const fallbackData = getSessionFallbackAccountData(sessionEmail);
-                    const bookingDataByStatus = await Promise.all(
-                        STATUS_KEYS.map((status) =>
-                            fetchBookingsByStatus(status).catch(() => [])
-                        )
-                    );
-                    const dbBookings = dedupeBookings(bookingDataByStatus.flat());
-                    const mergedBookings = dedupeBookings([
-                        ...dbBookings,
-                        ...fallbackData.bookings,
-                    ]);
 
                     setProfile(sessionProfile);
                     setProfileDraft(buildProfileDraft(sessionProfile));
-                    setBookings(mergedBookings);
+                    setBookings([]);
+                    setDashboardCalendarBookings([]);
+                    setDashboardStats({ total: 0, hold: 0, past: 0, upcoming: 0 });
                     setTransactions(fallbackData.transactions);
                     return;
                 }
 
-                const [profileData, transactionData, bookingDataByStatus] =
+                const [profileData, transactionData] =
                     await Promise.all([
                         fetchProfileInfo().catch(() => sessionProfile || {}),
                         fetchJson(`${config.baseUrl}/user/oneUserAllTransection?page=1&limit=50`).catch(() => ({ transactions: [] })),
-                        Promise.all(
-                            STATUS_KEYS.map((status) =>
-                                fetchBookingsByStatus(status).catch(() => [])
-                            )
-                        ),
                     ]);
 
                 if (cancelled) return;
-
-                const allBookings = bookingDataByStatus.flat();
-                const uniqueBookings = dedupeBookings(allBookings);
-
-                const resolvedEmail = toText(profileData?.email) || sessionEmail;
-                const fallbackData = getSessionFallbackAccountData(resolvedEmail);
-                // The API already returns bookings based on the authenticated User ID.
-                // We previously filtered by email which hid valid bookings for this User ID.
-                const mergedBookings = dedupeBookings([
-                    ...uniqueBookings,
-                    ...fallbackData.bookings,
-                ]);
 
                 const mergedProfile = {
                     ...(sessionProfile || {}),
@@ -685,7 +651,7 @@ export default function MyAccountPanel() {
                 setProfile(mergedProfile);
                 setProfileDraft(buildProfileDraft(mergedProfile));
                 setTransactions(Array.isArray(transactionData?.transactions) ? transactionData.transactions : []);
-                setBookings(mergedBookings);
+                setBookings([]);
             } catch (error) {
                 if (!cancelled) {
                     const errorMessage = error instanceof Error ? error.message : "Failed to load account data.";
@@ -726,32 +692,7 @@ export default function MyAccountPanel() {
         };
     }, [activeTab, token]);
 
-    const bookingStats = useMemo(() => {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-
-        const holdCount = bookings.filter((item) => {
-            const status = normalizeStatus(item?.bookingStatus);
-            return status.includes("issueinprocess") || status.includes("hold");
-        }).length;
-
-        const pastCount = bookings.filter((item) => {
-            const depDate = parseDateValue(getDepDate(item));
-            return depDate ? depDate < today : false;
-        }).length;
-
-        const upcomingCount = bookings.filter((item) => {
-            const depDate = parseDateValue(getDepDate(item));
-            return depDate ? depDate >= today : false;
-        }).length;
-
-        return {
-            total: bookings.length,
-            hold: holdCount,
-            past: pastCount,
-            upcoming: upcomingCount,
-        };
-    }, [bookings]);
+    const bookingStats = dashboardStats;
 
     const sortedBookings = useMemo(
         () =>
@@ -770,7 +711,7 @@ export default function MyAccountPanel() {
     );
 
     const bookingsByDate = useMemo(() => {
-        return bookings.reduce((acc, booking) => {
+        return dashboardCalendarBookings.reduce((acc, booking) => {
             const depDate = parseDateValue(getDepDate(booking));
             if (!depDate) return acc;
             const key = formatDateKey(depDate);
@@ -779,7 +720,7 @@ export default function MyAccountPanel() {
             acc[key].push(booking);
             return acc;
         }, {});
-    }, [bookings]);
+    }, [dashboardCalendarBookings]);
 
     const selectedDateBookings = useMemo(() => {
         if (!selectedDateKey) return [];
@@ -787,7 +728,7 @@ export default function MyAccountPanel() {
     }, [bookingsByDate, selectedDateKey]);
 
     useEffect(() => {
-        if (!bookings.length) {
+        if (!dashboardCalendarBookings.length) {
             setSelectedDateKey("");
             return;
         }
@@ -798,7 +739,7 @@ export default function MyAccountPanel() {
 
         const firstAvailableDate = Object.keys(bookingsByDate).sort()[0] || "";
         setSelectedDateKey(firstAvailableDate);
-    }, [bookings, bookingsByDate, selectedDateKey]);
+    }, [dashboardCalendarBookings, bookingsByDate, selectedDateKey]);
 
     const todayKey = formatDateKey(new Date());
     const currentMonthYearLabel = currentMonth.toLocaleDateString("en-US", {

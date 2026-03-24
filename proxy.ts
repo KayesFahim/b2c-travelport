@@ -55,14 +55,24 @@ function isLocalhostIp(ip: string): boolean {
 }
 
 function isClientIpAllowed(req: NextRequest): boolean {
-    const clientIp = getClientIp(req);
-    if (!clientIp) return false;
-
     const configuredRaw = String(process.env.ALLOWED_API_IPS || "").trim();
     const configuredAllowedIps = configuredRaw
         .split(",")
         .map((entry) => normalizeIp(entry))
         .filter(Boolean);
+
+    const clientIp = getClientIp(req);
+    if (!clientIp) {
+        // Some edge hops may omit IP headers; avoid false 403 for public production traffic
+        // when no explicit allowlist policy is configured.
+        if (!configuredRaw && process.env.NODE_ENV === "production") {
+            return true;
+        }
+        if (configuredAllowedIps.includes("*")) {
+            return true;
+        }
+        return false;
+    }
 
     // Public production sites on Vercel receive end-user IPs.
     // If allowlist is not configured, do not block all public traffic.
@@ -135,7 +145,7 @@ function isProtectedPath(pathname: string): boolean {
     return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
-export async function middleware(req: NextRequest) {
+export async function proxy(req: NextRequest) {
     const { pathname } = req.nextUrl;
     if (!pathname.startsWith("/api/")) {
         return NextResponse.next();
