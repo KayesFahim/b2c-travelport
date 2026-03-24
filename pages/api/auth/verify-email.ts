@@ -9,17 +9,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
     const token = String(req.query.token || "").trim();
     if (!token) {
-        return res.status(400).json({ message: "Verification token is required" });
+        return res.redirect(302, "/?verified=invalid");
     }
 
     const verified = await verifyEmailToken(token);
     if (!verified) {
-        return res.status(400).json({ message: "Invalid or expired verification token" });
+        return res.redirect(302, "/?verified=expired");
     }
 
-    return res.status(200).json({
-        success: true,
-        message: "Email verified successfully",
-        email: verified.email,
-    });
+    return res.redirect(302, "/?verified=success");
 }

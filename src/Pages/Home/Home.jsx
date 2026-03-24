@@ -1,5 +1,7 @@
 import { Box } from "@mui/material";
 import React, { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
+import Swal from "sweetalert2";
 import Banner from "./Banner";
 import NavBar from "../../Shared/NavBar/NavBar";
 import DiscountSlider from "./DiscountSlider";
@@ -11,6 +13,31 @@ import sliderData from "../../data/sliderData.json";
 const Home = () => {
   const [selectedTab, setSelectedTab] = useState("flight");
   const [data, setData] = useState(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const verified = searchParams.get("verified");
+    if (!verified) return;
+    // Remove the query param so refresh won't re-trigger the alert
+    setSearchParams({}, { replace: true });
+    if (verified === "success") {
+      Swal.fire({
+        icon: "success",
+        title: "Email Verified!",
+        text: "Your email has been successfully verified. You can now log in.",
+        confirmButtonText: "Log In",
+        confirmButtonColor: "#0ea5e9",
+      });
+    } else {
+      Swal.fire({
+        icon: "error",
+        title: "Link Expired",
+        text: "This verification link is invalid or has already been used. Please sign up again or request a new link.",
+        confirmButtonText: "OK",
+        confirmButtonColor: "#0ea5e9",
+      });
+    }
+  }, []);
 
   useEffect(() => {
     fetch(`/api/homepage`)

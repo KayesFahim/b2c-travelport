@@ -75,7 +75,7 @@ export default function AdminDashboard() {
                 setAuthLoading(true);
                 setAuthError("");
 
-                const response = await fetch("/api/auth/me", {
+                const response = await fetch("/api/auth/myaccount", {
                     method: "GET",
                     credentials: "include",
                     headers: {

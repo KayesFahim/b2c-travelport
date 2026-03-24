@@ -544,7 +544,7 @@ export default function MyAccountPanel() {
         let cancelled = false;
 
         const hydrateFromSessionUser = async () => {
-            const response = await fetch("/api/auth/me", {
+            const response = await fetch("/api/auth/myaccount", {
                 method: "GET",
                 credentials: "include",
                 headers: {

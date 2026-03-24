@@ -110,7 +110,7 @@ export default function AdminSettings() {
         try {
             setTeamLoading(true);
             const [meRes, usersRes] = await Promise.all([
-                fetch("/api/auth/me", {
+                fetch("/api/auth/myaccount", {
                     credentials: "include",
                     headers: {
                         ...getAuthHeaders(),

@@ -61,15 +61,22 @@ export async function isUserEmailVerified(userId: number): Promise<boolean> {
     const cached = await cacheGetJson<{ verified: boolean }>(verifiedUserKey(userId));
     if (cached?.verified) return true;
     // Fall back to DB for durability across cache restarts.
-    const user = await prisma.user.findUnique({
-        where: { id: userId },
-        select: { emailVerified: true },
-    });
-    if (user?.emailVerified) {
-        await cacheSetJson(verifiedUserKey(userId), { verified: true }, VERIFIED_CACHE_TTL_SECONDS);
-        return true;
+    try {
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: { emailVerified: true },
+        });
+        if (user?.emailVerified) {
+            await cacheSetJson(verifiedUserKey(userId), { verified: true }, VERIFIED_CACHE_TTL_SECONDS);
+            return true;
+        }
+        return false;
+    } catch (err: any) {
+        // P2022: column doesn't exist in DB yet (migration pending).
+        // Treat all users as verified so login is not blocked before the migration runs.
+        if (err?.code === "P2022") return true;
+        throw err;
     }
-    return false;
 }
 
 export async function issueEmailVerification(user: {
@@ -106,8 +113,10 @@ export async function verifyEmailToken(token: string): Promise<VerifyTokenPayloa
             where: { id: payload.userId },
             data: { emailVerified: true },
         });
-    } catch {
-        // Cache-only fallback if DB is momentarily unreachable.
+    } catch (err: any) {
+        // Swallow P2022 (column not yet migrated) and connectivity errors;
+        // cache write below is the durable source of truth until migration runs.
+        if (err?.code !== "P2022") console.error("[verifyEmailToken] DB update failed:", err?.message);
     }
     await cacheSetJson(verifiedUserKey(payload.userId), { verified: true }, VERIFIED_CACHE_TTL_SECONDS);
     await cacheDelete(verifyTokenKey(token));

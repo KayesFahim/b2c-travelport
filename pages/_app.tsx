@@ -1,5 +1,6 @@
 import type { AppProps } from "next/app";
 import Head from "next/head";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import "../src/index.css";
 import "../src/App.css";
 import "../src/Pages/Home/DiscountSlider.css";
@@ -31,6 +32,7 @@ export default function NextApp({ Component, pageProps }: AppProps) {
         />
       </Head>
       <Component {...pageProps} />
+      <SpeedInsights />
     </>
   );
 }
