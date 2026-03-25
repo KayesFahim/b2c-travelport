@@ -1,12 +1,13 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     Box,
     Grid,
     Card,
     CardContent,
     CardHeader,
     Typography,
-    LinearProgress,
+    CircularProgress,
     Table,
     TableBody,
     TableCell,
@@ -21,32 +22,17 @@ import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import EventNoteIcon from "@mui/icons-material/EventNote";
 import PeopleIcon from "@mui/icons-material/People";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import secureLocalStorage from "react-secure-storage";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 
-const dashboardData = [
-    { month: "Jan", bookings: 240, revenue: 2400, customers: 120 },
-    { month: "Feb", bookings: 180, revenue: 1398, customers: 95 },
-    { month: "Mar", bookings: 200, revenue: 9800, customers: 140 },
-    { month: "Apr", bookings: 220, revenue: 3908, customers: 160 },
-    { month: "May", bookings: 250, revenue: 4800, customers: 180 },
-    { month: "Jun", bookings: 290, revenue: 3800, customers: 210 },
-];
+const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
 
-const paymentMethodData = [
-    { name: "Credit Card", value: 45 },
-    { name: "Debit Card", value: 25 },
-    { name: "UPI", value: 20 },
-    { name: "Others", value: 10 },
-];
+const getAuthHeaders = () => {
+    const token = String(secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) || "").trim();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 const COLORS = ["#0d9488", "#0ea5e9", "#f59e0b", "#ef4444"];
-
-const recentBookings = [
-    { id: "BK001", customer: "John Doe", route: "NYC ↔ LAX", amount: "$450", status: "Completed", date: "Mar 24" },
-    { id: "BK002", customer: "Jane Smith", route: "DXB ↔ NYC", amount: "$520", status: "Pending", date: "Mar 24" },
-    { id: "BK003", customer: "Mike Johnson", route: "LOS ↔ DXB", amount: "$380", status: "Completed", date: "Mar 23" },
-    { id: "BK004", customer: "Sarah Williams", route: "NYC ↔ DXB", amount: "$600", status: "Processing", date: "Mar 23" },
-];
 
 const StatCard = ({ title, value, icon: Icon, color, trend }) => (
     <Card
@@ -106,10 +92,71 @@ const StatCard = ({ title, value, icon: Icon, color, trend }) => (
 );
 
 export default function AdminDashboardView() {
+    const [dashboard, setDashboard] = useState(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadDashboard = async () => {
+            try {
+                setLoading(true);
+                setError("");
+                const response = await fetch("/api/admin/dashboard-stats", {
+                    method: "GET",
+                    credentials: "include",
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload?.message || "Unable to load dashboard stats");
+                }
+                if (cancelled) return;
+                setDashboard(payload);
+            } catch (fetchError) {
+                if (!cancelled) {
+                    setDashboard(null);
+                    setError(fetchError instanceof Error ? fetchError.message : "Unable to load dashboard stats");
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        loadDashboard();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    const paymentMethodData = useMemo(() => {
+        const total = Number(dashboard?.totalBookings || 0);
+        const completed = Number(dashboard?.ticketedBookings || 0);
+        const pending = Number(dashboard?.pendingBookings || 0);
+        const cancelled = Number(dashboard?.cancelledBookings || 0);
+        if (!total) {
+            return [
+                { name: "Completed", value: 0 },
+                { name: "Pending", value: 0 },
+                { name: "Cancelled", value: 0 },
+            ];
+        }
+        return [
+            { name: "Completed", value: Math.round((completed / total) * 100) },
+            { name: "Pending", value: Math.round((pending / total) * 100) },
+            { name: "Cancelled", value: Math.round((cancelled / total) * 100) },
+        ];
+    }, [dashboard]);
+
     const getStatusColor = (status) => {
         switch (status) {
             case "Completed":
                 return "#10b981";
+            case "Booked":
             case "Pending":
                 return "#f59e0b";
             case "Processing":
@@ -123,42 +170,46 @@ export default function AdminDashboardView() {
 
     return (
         <Box>
+            {error ? (
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+            ) : null}
+
             {/* KPI Cards */}
             <Grid container spacing={2.5} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
                         title="Total Bookings"
-                        value="1,240"
+                        value={loading ? "-" : String(dashboard?.totalBookings ?? 0)}
                         icon={EventNoteIcon}
                         color="#0d9488"
-                        trend="+12%"
+                        trend={null}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
                         title="Total Revenue"
-                        value="$45,230"
+                        value={loading ? "-" : `${dashboard?.currency || "BDT"} ${Number(dashboard?.totalRevenue || 0).toLocaleString()}`}
                         icon={AttachMoneyIcon}
                         color="#0ea5e9"
-                        trend="+8%"
+                        trend={null}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
                         title="Active Customers"
-                        value="892"
+                        value={loading ? "-" : String(dashboard?.totalCustomers ?? 0)}
                         icon={PeopleIcon}
                         color="#f59e0b"
-                        trend="+5%"
+                        trend={null}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
-                        title="Conversion Rate"
-                        value="3.8%"
+                        title="Ticketed Bookings"
+                        value={loading ? "-" : String(dashboard?.ticketedBookings ?? 0)}
                         icon={TrendingUpIcon}
                         color="#ef4444"
-                        trend="+2%"
+                        trend={null}
                     />
                 </Grid>
             </Grid>
@@ -184,7 +235,7 @@ export default function AdminDashboardView() {
                         />
                         <CardContent>
                             <ResponsiveContainer width="100%" height={300}>
-                                <LineChart data={dashboardData}>
+                                <LineChart data={Array.isArray(dashboard?.monthlyStats) ? dashboard.monthlyStats : []}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
                                     <XAxis dataKey="month" stroke="#9ca3af" />
                                     <YAxis stroke="#9ca3af" />
@@ -200,6 +251,11 @@ export default function AdminDashboardView() {
                                     <Line type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 4 }} />
                                 </LineChart>
                             </ResponsiveContainer>
+                            {loading ? (
+                                <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
+                                    <CircularProgress size={20} />
+                                </Box>
+                            ) : null}
                         </CardContent>
                     </Card>
                 </Grid>
@@ -274,7 +330,14 @@ export default function AdminDashboardView() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {recentBookings.map((booking) => (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                                        <CircularProgress size={24} />
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
+                            {!loading && (dashboard?.recentBookings || []).map((booking) => (
                                 <TableRow
                                     key={booking.id}
                                     sx={{
@@ -285,7 +348,7 @@ export default function AdminDashboardView() {
                                     <TableCell sx={{ fontWeight: 600, color: "#0d9488", fontSize: 13 }}>{booking.id}</TableCell>
                                     <TableCell sx={{ fontSize: 13 }}>{booking.customer}</TableCell>
                                     <TableCell sx={{ fontSize: 13 }}>{booking.route}</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, fontSize: 13 }} align="right">{booking.amount}</TableCell>
+                                    <TableCell sx={{ fontWeight: 600, fontSize: 13 }} align="right">{booking.amount} {booking.currency}</TableCell>
                                     <TableCell>
                                         <Chip
                                             label={booking.status}
@@ -301,6 +364,13 @@ export default function AdminDashboardView() {
                                     <TableCell sx={{ fontSize: 13 }}>{booking.date}</TableCell>
                                 </TableRow>
                             ))}
+                            {!loading && !(dashboard?.recentBookings || []).length ? (
+                                <TableRow>
+                                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: "#6b7280" }}>
+                                        No recent bookings.
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
                         </TableBody>
                     </Table>
                 </TableContainer>

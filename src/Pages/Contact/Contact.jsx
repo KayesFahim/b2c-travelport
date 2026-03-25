@@ -75,10 +75,10 @@ const Contact = () => {
   const [contactInfo, setContactInfo] = useState(DEFAULT_CONTACT);
 
   useEffect(() => {
-    fetch("/api/cms/settings?section=contact")
+    fetch("/api/contact")
       .then((r) => r.json())
       .then((data) => {
-        if (data && typeof data === "object" && !data.message) {
+        if (data && typeof data === "object") {
           setContactInfo((prev) => ({ ...prev, ...data }));
         }
       })

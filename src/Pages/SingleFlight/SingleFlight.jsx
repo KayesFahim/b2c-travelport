@@ -298,6 +298,32 @@ const getBrandName = (flightData) => {
   );
 };
 
+const getBrandImageUrl = (flightData) => {
+  const allLegsInfo = Array.isArray(flightData?.AllLegsInfo)
+    ? flightData.AllLegsInfo
+    : Array.isArray(flightData?.allLegsInfo)
+      ? flightData.allLegsInfo
+      : [];
+
+  for (const leg of allLegsInfo) {
+    const brandFeatures = leg?.BrandFeatures || leg?.brandFeatures || {};
+    const imageRows = [
+      ...(Array.isArray(brandFeatures?.ImageURL) ? brandFeatures.ImageURL : []),
+      ...(Array.isArray(brandFeatures?.imageURL) ? brandFeatures.imageURL : []),
+      ...(Array.isArray(brandFeatures?.imageUrl) ? brandFeatures.imageUrl : []),
+    ];
+    const firstImage = imageRows.find((value) =>
+      String(value || "")
+        .trim()
+        .toLowerCase()
+        .startsWith("http")
+    );
+    if (firstImage) return String(firstImage).trim();
+  }
+
+  return "";
+};
+
 const getBrandFeatureSummary = (flightData) => {
   const features = flightData?.AllLegsInfo?.[0]?.BrandFeatures || {};
   const primary = Array.isArray(features?.BrandAttribute)
@@ -759,6 +785,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
   const netFareLabel = formatFare(selectedFareOption?.NetFare);
   const grossFareLabel = formatFare(selectedFareOption?.GrossFare);
   const brandName = getBrandName(selectedFareOption);
+  const brandImageUrl = getBrandImageUrl(selectedFareOption);
 
   return (
     <Box
@@ -797,8 +824,8 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
                             sx={{
                               fontSize: "11px",
                               fontWeight: 700,
-                              color: "#fff",
-                              lineHeight: 1.25,
+                              color: "#FFFFFF",
+                              lineHeight: 1.3,
                             }}
                           >
                             Connection {index + 1}: {layover.duration}
@@ -906,8 +933,8 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
                 </Box>
               ))}
             </Box>
-          </Box>
-        </Grid>
+          </Box >
+        </Grid >
 
         <Grid item xs={12} md={3.3}>
           <Box
@@ -1057,266 +1084,325 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
             </Button>
           </Box>
         </Grid>
-      </Grid>
-      {fareOptions.length > 1 ? (
-        <Accordion
-          expanded={isBrandedFareExpanded}
-          onChange={(_, expanded) => setIsBrandedFareExpanded(expanded)}
-          disableGutters
-          sx={{
-            borderTop: "1px dashed #DCE4EF",
-            backgroundColor: "#FBFDFF",
-            boxShadow: "none",
-            "&:before": {
-              display: "none",
-            },
-          }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#2E597D" }} />}
+      </Grid >
+      {
+        fareOptions.length > 1 ? (
+          <Accordion
+            expanded={isBrandedFareExpanded}
+            onChange={(_, expanded) => setIsBrandedFareExpanded(expanded)}
+            disableGutters
             sx={{
-              px: { xs: 1.1, md: 1.35 },
-              minHeight: "unset",
-              "& .MuiAccordionSummary-content": {
-                my: 1.05,
-                display: "flex",
-                alignItems: { xs: "flex-start", md: "center" },
-                justifyContent: "space-between",
-                flexDirection: { xs: "column", md: "row" },
-                gap: 0.6,
+              borderTop: "1px dashed #DCE4EF",
+              backgroundColor: "#FBFDFF",
+              boxShadow: "none",
+              "&:before": {
+                display: "none",
               },
             }}
           >
-            <Box
+            <AccordionSummary
+              expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#2E597D" }} />}
               sx={{
-                color: "#27496A",
-                fontSize: { xs: "11px", md: "12px" },
-                fontWeight: 700,
-              }}
-            >
-              Branded Fare Options ({fareOptions.length})
-            </Box>
-            <Typography
-              sx={{
-                fontSize: "12px",
-                color: "#4C657F",
-                fontWeight: 700,
-              }}
-            >
-              Selected Brand: {getBrandName(selectedFareOption)}
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ px: { xs: 1.1, md: 1.35 }, pb: 1.2, pt: 0 }}>
-            <Box
-              sx={{
-                direction: "rtl",
-                overflowX: "auto",
-                overflowY: "hidden",
-                pb: 0.35,
-                "&::-webkit-scrollbar": {
-                  height: "7px",
-                },
-                "&::-webkit-scrollbar-thumb": {
-                  background: "rgba(0,154,214,0.28)",
-                  borderRadius: "999px",
-                },
-                "&::-webkit-scrollbar-track": {
-                  background: "rgba(15,35,60,0.06)",
-                  borderRadius: "999px",
+                px: { xs: 1.1, md: 1.35 },
+                minHeight: "unset",
+                "& .MuiAccordionSummary-content": {
+                  my: 1.05,
+                  display: "flex",
+                  alignItems: { xs: "flex-start", md: "center" },
+                  justifyContent: "space-between",
+                  flexDirection: { xs: "column", md: "row" },
+                  gap: 0.6,
                 },
               }}
             >
               <Box
                 sx={{
-                  direction: "ltr",
-                  display: "flex",
-                  alignItems: "stretch",
-                  gap: 0.85,
-                  minWidth: "max-content",
-                  pr: 0.2,
+                  color: "#27496A",
+                  fontSize: { xs: "11px", md: "12px" },
+                  fontWeight: 700,
                 }}
               >
-                {fareOptions.map((option, index) => {
-                  const optionKey = getFareOptionKey(option, index);
-                  const isSelected = selectedFareKey === optionKey;
-                  const brandSummary = getBrandFeatureSummary(option);
-                  const optionCurrencyCode = getFlightCurrencyCode(option);
-                  const optionCurrencySymbol = getCurrencySymbol(optionCurrencyCode);
-                  const optionFareLabel = formatFare(
-                    option?.NetFare,
-                    optionCurrencyCode,
-                    optionCurrencySymbol
-                  );
-                  const featureLine = [
-                    brandSummary.included.length > 0
-                      ? `Included: ${brandSummary.included.join(", ")}`
-                      : "",
-                    brandSummary.chargeable.length > 0
-                      ? `Chargeable: ${brandSummary.chargeable.join(", ")}`
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" • ");
-
-                  return (
-                    <Box
-                      component="button"
-                      type="button"
-                      onClick={() => setSelectedFareKey(optionKey)}
-                      key={optionKey}
-                      sx={{
-                        border: isSelected
-                          ? "1px solid var(--primary-button)"
-                          : "1px solid #E2E9F4",
-                        borderRadius: "10px",
-                        px: 1.15,
-                        py: 0.85,
-                        minWidth: { xs: "240px", md: "286px" },
-                        maxWidth: { xs: "240px", md: "286px" },
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        gap: 1,
-                        backgroundColor: isSelected ? "#E9F6FF" : "#FFFFFF",
-                        cursor: "pointer",
-                        textAlign: "left",
-                        transition: "all 0.2s ease",
-                        "&:hover": {
-                          borderColor: "var(--primary-button)",
-                          boxShadow: "0 8px 18px rgba(0,154,214,0.14)",
-                        },
-                      }}
-                    >
-                      <Box>
-                        <Typography
-                          sx={{
-                            fontSize: { xs: "11px", md: "12px" },
-                            fontWeight: 700,
-                            color: "#1E3B5A",
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          {getBrandName(option)}
-                          {index === 0 ? " • Best Price" : ""}
-                        </Typography>
-                        {featureLine ? (
-                          <Typography
-                            sx={{
-                              fontSize: { xs: "10px", md: "11px" },
-                              color: "#526B86",
-                              lineHeight: 1.2,
-                              mt: 0.2,
-                              maxWidth: { xs: "138px", md: "175px" },
-                            }}
-                          >
-                            {featureLine}
-                          </Typography>
-                        ) : (
-                          <Typography
-                            sx={{
-                              fontSize: { xs: "10px", md: "11px" },
-                              color: "#7C8FA3",
-                              lineHeight: 1.2,
-                              mt: 0.2,
-                            }}
-                          >
-                            Fare details available
-                          </Typography>
-                        )}
-                      </Box>
-                      <Box sx={{ textAlign: "right", flexShrink: 0 }}>
-                        <Typography
-                          sx={{
-                            fontSize: { xs: "12px", md: "13px" },
-                            color: "#0C3F68",
-                            fontWeight: 700,
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {optionFareLabel}
-                        </Typography>
-                        <Typography
-                          sx={{
-                            mt: 0.25,
-                            fontSize: "10px",
-                            fontWeight: 700,
-                            color: isSelected ? "var(--primary-button)" : "#6F8296",
-                          }}
-                        >
-                          {isSelected ? "Selected Fare" : "Tap to Select"}
-                        </Typography>
-                      </Box>
-                    </Box>
-                  );
-                })}
+                Branded Fare Options ({fareOptions.length})
               </Box>
-            </Box>
-            <Typography
-              sx={{
-                mt: 0.8,
-                fontSize: "11px",
-                color: "#5F7389",
-                fontWeight: 600,
-              }}
-            >
-              Choose any branded fare above. Book Now will continue with selected fare.
-            </Typography>
-          </AccordionDetails>
-        </Accordion>
-      ) : (
-        <Accordion
-          expanded={isBrandedFareExpanded}
-          onChange={(_, expanded) => setIsBrandedFareExpanded(expanded)}
-          disableGutters
-          sx={{
-            borderTop: "1px dashed #DCE4EF",
-            backgroundColor: "#FBFDFF",
-            boxShadow: "none",
-            "&:before": {
-              display: "none",
-            },
-          }}
-        >
-          <AccordionSummary
-            expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#2E597D" }} />}
+              <Typography
+                sx={{
+                  fontSize: "12px",
+                  color: "#4C657F",
+                  fontWeight: 700,
+                }}
+              >
+                Selected Brand: {getBrandName(selectedFareOption)}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ px: { xs: 1.1, md: 1.35 }, pb: 1.2, pt: 0 }}>
+              <Box
+                sx={{
+                  direction: "rtl",
+                  overflowX: "auto",
+                  overflowY: "hidden",
+                  pb: 0.35,
+                  "&::-webkit-scrollbar": {
+                    height: "7px",
+                  },
+                  "&::-webkit-scrollbar-thumb": {
+                    background: "rgba(0,154,214,0.28)",
+                    borderRadius: "999px",
+                  },
+                  "&::-webkit-scrollbar-track": {
+                    background: "rgba(15,35,60,0.06)",
+                    borderRadius: "999px",
+                  },
+                }}
+              >
+                <Box
+                  sx={{
+                    direction: "ltr",
+                    display: "flex",
+                    alignItems: "stretch",
+                    gap: 0.85,
+                    minWidth: "max-content",
+                    pr: 0.2,
+                  }}
+                >
+                  {fareOptions.map((option, index) => {
+                    const optionKey = getFareOptionKey(option, index);
+                    const isSelected = selectedFareKey === optionKey;
+                    const optionBrandName = getBrandName(option);
+                    const optionBrandImageUrl = getBrandImageUrl(option);
+                    const brandSummary = getBrandFeatureSummary(option);
+                    const optionCurrencyCode = getFlightCurrencyCode(option);
+                    const optionCurrencySymbol = getCurrencySymbol(optionCurrencyCode);
+                    const optionFareLabel = formatFare(
+                      option?.NetFare,
+                      optionCurrencyCode,
+                      optionCurrencySymbol
+                    );
+                    const featureLine = [
+                      brandSummary.included.length > 0
+                        ? `Included: ${brandSummary.included.join(", ")}`
+                        : "",
+                      brandSummary.chargeable.length > 0
+                        ? `Chargeable: ${brandSummary.chargeable.join(", ")}`
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" • ");
+
+                    return (
+                      <Box
+                        component="button"
+                        type="button"
+                        onClick={() => setSelectedFareKey(optionKey)}
+                        key={optionKey}
+                        sx={{
+                          border: isSelected
+                            ? "1px solid var(--primary-button)"
+                            : "1px solid #E2E9F4",
+                          borderRadius: "10px",
+                          px: 1.15,
+                          py: 0.85,
+                          minWidth: { xs: "240px", md: "286px" },
+                          maxWidth: { xs: "240px", md: "286px" },
+                          display: "flex",
+                          justifyContent: "space-between",
+                          alignItems: "center",
+                          gap: 1,
+                          backgroundColor: isSelected ? "#E9F6FF" : "#FFFFFF",
+                          cursor: "pointer",
+                          textAlign: "left",
+                          transition: "all 0.2s ease",
+                          "&:hover": {
+                            borderColor: "var(--primary-button)",
+                            boxShadow: "0 8px 18px rgba(0,154,214,0.14)",
+                          },
+                        }}
+                      >
+                        <Box>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.65 }}>
+                            {optionBrandImageUrl && (
+                              <Tooltip
+                                arrow
+                                placement="right"
+                                title={
+                                  <Box
+                                    component="img"
+                                    src={optionBrandImageUrl}
+                                    alt={optionBrandName}
+                                    sx={{
+                                      width: "200px",
+                                      height: "200px",
+                                      objectFit: "contain",
+                                      borderRadius: "8px",
+                                      background: "#fff",
+                                      display: "block",
+                                    }}
+                                  />
+                                }
+                                componentsProps={{
+                                  tooltip: {
+                                    sx: {
+                                      bgcolor: "#fff",
+                                      border: "1px solid #DCE7F2",
+                                      borderRadius: "10px",
+                                      boxShadow: "0 8px 32px rgba(21,55,91,0.18)",
+                                      p: "6px",
+                                      maxWidth: "none",
+                                    },
+                                  },
+                                  arrow: {
+                                    sx: { color: "#DCE7F2" },
+                                  },
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={optionBrandImageUrl}
+                                  alt={optionBrandName}
+                                  sx={{
+                                    width: 38,
+                                    height: 18,
+                                    objectFit: "contain",
+                                    border: "1px solid #DCE7F2",
+                                    borderRadius: "4px",
+                                    background: "#fff",
+                                    p: "1px",
+                                    flexShrink: 0,
+                                    cursor: "zoom-in",
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                            <Typography
+                              sx={{
+                                fontSize: { xs: "11px", md: "12px" },
+                                fontWeight: 700,
+                                color: "#1E3B5A",
+                                lineHeight: 1.2,
+                              }}
+                            >
+                              {optionBrandName}
+                              {index === 0 ? " • Best Price" : ""}
+                            </Typography>
+                          </Box>
+                          {featureLine ? (
+                            <Typography
+                              sx={{
+                                fontSize: { xs: "10px", md: "11px" },
+                                color: "#526B86",
+                                lineHeight: 1.2,
+                                mt: 0.2,
+                                maxWidth: { xs: "138px", md: "175px" },
+                              }}
+                            >
+                              {featureLine}
+                            </Typography>
+                          ) : (
+                            <Typography
+                              sx={{
+                                fontSize: { xs: "10px", md: "11px" },
+                                color: "#7C8FA3",
+                                lineHeight: 1.2,
+                                mt: 0.2,
+                              }}
+                            >
+                              Fare details available
+                            </Typography>
+                          )}
+                        </Box>
+                        <Box sx={{ textAlign: "right", flexShrink: 0 }}>
+                          <Typography
+                            sx={{
+                              fontSize: { xs: "12px", md: "13px" },
+                              color: "#0C3F68",
+                              fontWeight: 700,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {optionFareLabel}
+                          </Typography>
+                          <Typography
+                            sx={{
+                              mt: 0.25,
+                              fontSize: "10px",
+                              fontWeight: 700,
+                              color: isSelected ? "var(--primary-button)" : "#6F8296",
+                            }}
+                          >
+                            {isSelected ? "Selected Fare" : "Tap to Select"}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              </Box>
+              <Typography
+                sx={{
+                  mt: 0.8,
+                  fontSize: "11px",
+                  color: "#5F7389",
+                  fontWeight: 600,
+                }}
+              >
+                Choose any branded fare above. Book Now will continue with selected fare.
+              </Typography>
+            </AccordionDetails>
+          </Accordion>
+        ) : (
+          <Accordion
+            expanded={isBrandedFareExpanded}
+            onChange={(_, expanded) => setIsBrandedFareExpanded(expanded)}
+            disableGutters
             sx={{
-              px: { xs: 1.1, md: 1.35 },
-              minHeight: "unset",
-              "& .MuiAccordionSummary-content": {
-                my: 1.05,
-                display: "flex",
-                alignItems: { xs: "flex-start", md: "center" },
-                justifyContent: "space-between",
-                flexDirection: { xs: "column", md: "row" },
-                gap: 0.6,
+              borderTop: "1px dashed #DCE4EF",
+              backgroundColor: "#FBFDFF",
+              boxShadow: "none",
+              "&:before": {
+                display: "none",
               },
             }}
           >
-            <Box
+            <AccordionSummary
+              expandIcon={<ExpandMoreRoundedIcon sx={{ color: "#2E597D" }} />}
               sx={{
-                color: "#27496A",
-                fontSize: { xs: "11px", md: "12px" },
-                fontWeight: 700,
+                px: { xs: 1.1, md: 1.35 },
+                minHeight: "unset",
+                "& .MuiAccordionSummary-content": {
+                  my: 1.05,
+                  display: "flex",
+                  alignItems: { xs: "flex-start", md: "center" },
+                  justifyContent: "space-between",
+                  flexDirection: { xs: "column", md: "row" },
+                  gap: 0.6,
+                },
               }}
             >
-              Branded Fare Options (0)
-            </Box>
-            <Typography
-              sx={{
-                fontSize: "12px",
-                color: "#4C657F",
-                fontWeight: 700,
-              }}
-            >
-              Regular fare: {netFareLabel}
-            </Typography>
-          </AccordionSummary>
-          <AccordionDetails sx={{ px: { xs: 1.1, md: 1.35 }, pb: 1.2, pt: 0 }}>
-            <Box sx={{ minHeight: "2px" }} />
-          </AccordionDetails>
-        </Accordion>
-      )}
-      <Box
+              <Box
+                sx={{
+                  color: "#27496A",
+                  fontSize: { xs: "11px", md: "12px" },
+                  fontWeight: 700,
+                }}
+              >
+                Branded Fare Options (0)
+              </Box>
+              <Typography
+                sx={{
+                  fontSize: "12px",
+                  color: "#4C657F",
+                  fontWeight: 700,
+                }}
+              >
+                Regular fare: {netFareLabel}
+              </Typography>
+            </AccordionSummary>
+            <AccordionDetails sx={{ px: { xs: 1.1, md: 1.35 }, pb: 1.2, pt: 0 }}>
+              <Box sx={{ minHeight: "2px" }} />
+            </AccordionDetails>
+          </Accordion>
+        )
+      }
+      < Box
         sx={{
           px: { xs: 1.1, md: 1.35 },
           py: 1,
@@ -1378,7 +1464,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
         >
           {flightDetails ? "Hide Details" : "Show Details"}
         </Button>
-      </Box>
+      </Box >
       {flightDetails && (
         <ShowDetails
           data={displayOffer}
@@ -1960,7 +2046,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
           </Box>
         </Box>
       </Dialog>
-    </Box>
+    </Box >
   );
 };
 

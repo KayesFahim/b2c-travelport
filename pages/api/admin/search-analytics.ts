@@ -29,6 +29,19 @@ type BookingFailureRow = {
     reservationId?: string;
 };
 
+function isMissingBookingLogTableError(error: unknown): boolean {
+    if (!error || typeof error !== "object") return false;
+    const asRecord = error as Record<string, unknown>;
+    const code = String(asRecord.code ?? "").trim().toUpperCase();
+    if (code === "P2021") return true;
+
+    const message = String(asRecord.message ?? "").toLowerCase();
+    return (
+        message.includes("bookinglog") &&
+        (message.includes("does not exist") || message.includes("doesn't exist"))
+    );
+}
+
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "GET") {
         res.setHeader("Allow", "GET");
@@ -45,13 +58,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 
         const limit = Math.max(1, Math.min(200, Number(req.query.limit) || 50));
 
-        const [searchLogRows, bookingFailureRows, totalSearches, successfulSearches, failedSearches, blockedSearches, bookingAttempts, bookingFailed, bookingSuccess] = await Promise.all([
+        const [searchLogRows, totalSearches, successfulSearches, failedSearches, blockedSearches] = await Promise.all([
             prisma.searchLog.findMany({
-                orderBy: { timestamp: "desc" },
-                take: limit,
-            }),
-            prisma.bookingLog.findMany({
-                where: { outcome: "FAILED" },
                 orderBy: { timestamp: "desc" },
                 take: limit,
             }),
@@ -59,10 +67,29 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
             prisma.searchLog.count({ where: { status: "success" } }),
             prisma.searchLog.count({ where: { status: "failed" } }),
             prisma.searchLog.count({ where: { status: "blocked" } }),
-            prisma.bookingLog.count(),
-            prisma.bookingLog.count({ where: { outcome: "FAILED" } }),
-            prisma.bookingLog.count({ where: { outcome: "SUCCESS" } }),
         ]);
+
+        let bookingFailureRows: Awaited<ReturnType<typeof prisma.bookingLog.findMany>> = [];
+        let bookingAttempts = 0;
+        let bookingFailed = 0;
+        let bookingSuccess = 0;
+
+        try {
+            [bookingFailureRows, bookingAttempts, bookingFailed, bookingSuccess] = await Promise.all([
+                prisma.bookingLog.findMany({
+                    where: { outcome: "FAILED" },
+                    orderBy: { timestamp: "desc" },
+                    take: limit,
+                }),
+                prisma.bookingLog.count(),
+                prisma.bookingLog.count({ where: { outcome: "FAILED" } }),
+                prisma.bookingLog.count({ where: { outcome: "SUCCESS" } }),
+            ]);
+        } catch (error) {
+            if (!isMissingBookingLogTableError(error)) {
+                throw error;
+            }
+        }
 
         const latestSearchLogs: SearchLogRow[] = searchLogRows.map((row) => ({
             timestamp: row.timestamp.toISOString(),

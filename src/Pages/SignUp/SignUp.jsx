@@ -15,10 +15,23 @@ const SignUp = () => {
     userPass: "",
     userPhone: "",
   });
+  const [passwordError, setPasswordError] = useState("");
+  const [signUpError, setSignUpError] = useState("");
+
+  const validatePassword = (password) => {
+    const passwordRegex = /^(?=.*[a-zA-Z]).{6,}$/;
+    if (!passwordRegex.test(String(password || ""))) {
+      return "Password must be at least 6 characters long, and contain at least one letter.";
+    }
+    return "";
+  };
 
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
+    if (name === "userPass") {
+      setPasswordError(validatePassword(value));
+    }
     setUserInfo((prevUserInfo) => ({
       ...prevUserInfo,
       [name]: value,
@@ -27,6 +40,13 @@ const SignUp = () => {
 
   const handleUserSignUp = async (e) => {
     e.preventDefault();
+    setSignUpError("");
+    const nextPasswordError = validatePassword(userInfo.userPass);
+    if (nextPasswordError) {
+      setPasswordError(nextPasswordError);
+      return;
+    }
+
     let body = {
       name: userInfo.userName,
       email: userInfo.userEmail,
@@ -51,10 +71,13 @@ const SignUp = () => {
           userPass: "",
           userPhone: "",
         });
+        setPasswordError("");
+        setSignUpError("");
       } else {
         throw new Error("Sign up request failed");
       }
     } catch (error) {
+      setSignUpError(error instanceof Error ? error.message : "Sign up request failed");
       console.error("Error signing up:", error);
     }
   };
@@ -205,6 +228,17 @@ const SignUp = () => {
                   />
                 </Box>
               </Box>
+              {passwordError ? (
+                <Typography
+                  sx={{
+                    color: "#d32f2f",
+                    fontSize: "12px",
+                    pt: "8px",
+                  }}
+                >
+                  {passwordError}
+                </Typography>
+              ) : null}
               {/* Phone input */}
               <Box
                 sx={{
@@ -259,6 +293,17 @@ const SignUp = () => {
                   </Typography>
                 </Box>
               </Box>
+              {signUpError ? (
+                <Typography
+                  sx={{
+                    color: "#d32f2f",
+                    fontSize: "12px",
+                    pt: "12px",
+                  }}
+                >
+                  {signUpError}
+                </Typography>
+              ) : null}
               <Button
                 type="submit"
                 sx={{

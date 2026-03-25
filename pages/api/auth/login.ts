@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
-import { assertDatabaseConfigured, prisma } from "@/server/prisma";
+import {
+  assertDatabaseConfigured,
+  getDatabaseUnavailableMessage,
+  isDatabaseConnectionError,
+  prisma,
+} from "@/server/prisma";
 import { createSession } from "@/server/auth-session";
 import {
   emailVerificationRequired,
@@ -72,26 +77,6 @@ export default async function handler(
       }
     }
 
-    const configuredSuperAdminEmail = normalizeEmail(process.env.SUPER_ADMIN_EMAIL);
-    if (configuredSuperAdminEmail && email === configuredSuperAdminEmail) {
-      const superAdminCount = await prisma.user.count({
-        where: { role: "SUPER_ADMIN", admin: true },
-      });
-
-      if (superAdminCount > 1) {
-        return res.status(500).json({
-          message: "System guard failed: more than one Super Admin exists.",
-        });
-      }
-
-      if (superAdminCount === 0 || user.role !== "SUPER_ADMIN" || user.admin !== true) {
-        user = await prisma.user.update({
-          where: { id: user.id },
-          data: { role: "SUPER_ADMIN", admin: true },
-        });
-      }
-    }
-
     const session = await createSession(req, res, {
       id: user.id,
       email: user.email,
@@ -112,6 +97,11 @@ export default async function handler(
       },
     });
   } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      return res.status(503).json({
+        message: getDatabaseUnavailableMessage(),
+      });
+    }
     return res.status(500).json({
       message: error instanceof Error ? error.message : "Login failed",
     });

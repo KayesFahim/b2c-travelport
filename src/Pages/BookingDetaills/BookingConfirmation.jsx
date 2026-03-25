@@ -6,6 +6,10 @@ import {
   Chip,
   CircularProgress,
   Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Grid,
   Paper,
   Typography,
@@ -931,6 +935,226 @@ const buildPostCommitAncillaryServiceRows = (reservation) => {
   return rows;
 };
 
+const AncillaryOfferingsDialogContent = ({ data }) => {
+  const flightSegmentMap = (() => {
+    const map = {};
+    const referenceLists = Array.isArray(data?.CatalogOfferingsAncillaryListResponse?.ReferenceList)
+      ? data.CatalogOfferingsAncillaryListResponse.ReferenceList
+      : [];
+
+    referenceLists.forEach((referenceItem) => {
+      const flights = Array.isArray(referenceItem?.Flight) ? referenceItem.Flight : [];
+      flights.forEach((flight) => {
+        const id = toText(flight?.id);
+        if (!id) return;
+        map[id] = {
+          from: toText(flight?.Departure?.location) || "-",
+          to: toText(flight?.Arrival?.location) || "-",
+        };
+      });
+    });
+
+    return map;
+  })();
+
+  const buildFullLegLabel = (refs) => {
+    const orderedRefs = Array.from(new Set((Array.isArray(refs) ? refs : []).map((ref) => toText(ref)).filter(Boolean)));
+    const segments = orderedRefs.map((ref) => flightSegmentMap[ref]).filter(Boolean);
+    if (!segments.length) return "All Routes";
+
+    const points = [];
+    segments.forEach((segment, index) => {
+      if (index === 0 && segment.from) points.push(segment.from);
+      if (segment.to) points.push(segment.to);
+    });
+
+    return points.filter(Boolean).join(" -> ") || "All Routes";
+  };
+
+  const offerings = (() => {
+    const travelerRows = data?.CatalogOfferingsAncillaryListResponse?.CatalogOfferingsID;
+    if (!Array.isArray(travelerRows)) return [];
+
+    const flat = [];
+    travelerRows.forEach((travelerItem) => {
+      const travelerId = toText(travelerItem?.id);
+      const travelerOffers = Array.isArray(travelerItem?.CatalogOffering)
+        ? travelerItem.CatalogOffering
+        : [];
+
+      travelerOffers.forEach((offer) => {
+        const ancillary = offer?.ProductOptions?.[0]?.Product?.[0]?.Ancillary || {};
+        const descriptionRow = Array.isArray(ancillary?.Description)
+          ? ancillary.Description[0] || {}
+          : {};
+        const price = offer?.Price || {};
+        const termsAndConditions = offer?.TermsAndConditions || {};
+        const currency = toText(price?.CurrencyCode?.value || price?.CurrencyCode);
+        const totalPrice = Number(price?.TotalPrice ?? 0);
+        const weight = ancillary?.Measurement?.[0] || {};
+
+        flat.push({
+          travelerId,
+          offerId: toText(offer?.id),
+          ancillaryType: toText(ancillary?.["@type"]),
+          subCode: toText(descriptionRow?.subCode),
+          ssrCode: toText(descriptionRow?.ssrCode),
+          description:
+            toText(descriptionRow?.value) ||
+            toText(offer?.name || offer?.Name) ||
+            "Ancillary",
+          totalPrice: Number.isFinite(totalPrice) ? totalPrice : 0,
+          currency,
+          quantity: toText(offer?.ProductOptions?.[0]?.Product?.[0]?.Quantity) || "1",
+          flightRefs: Array.isArray(ancillary?.FlightRef) ? ancillary.FlightRef : [],
+          refundability:
+            toText(termsAndConditions?.Refundability?.value) ||
+            toText(termsAndConditions?.refundability?.value) ||
+            "N/A",
+          allowance:
+            toText(weight?.value) && toText(weight?.unit)
+              ? `${toText(weight?.value)} ${toText(weight?.unit)}`
+              : "",
+        });
+      });
+    });
+
+    return flat;
+  })();
+
+  if (!offerings.length) {
+    return (
+      <Typography sx={{ fontSize: 13, color: "#607890", py: 1.5, textAlign: "center" }}>
+        No ancillary offerings available for this booking.
+      </Typography>
+    );
+  }
+
+  const groupedByRoute = offerings.reduce((acc, row) => {
+    const routeKey = buildFullLegLabel(row.flightRefs);
+    if (!acc[routeKey]) acc[routeKey] = [];
+    acc[routeKey].push(row);
+    return acc;
+  }, {});
+
+  const orderedRouteGroups = Object.entries(groupedByRoute)
+    .map(([routeKey, rows]) => {
+      const sortedRows = [...rows].sort((a, b) => a.totalPrice - b.totalPrice);
+      return {
+        routeKey,
+        rows: sortedRows,
+      };
+    })
+    .sort((a, b) => {
+      const minA = a.rows[0]?.totalPrice ?? Number.MAX_SAFE_INTEGER;
+      const minB = b.rows[0]?.totalPrice ?? Number.MAX_SAFE_INTEGER;
+      return minA - minB;
+    });
+
+  const labeledRouteGroups = orderedRouteGroups.map((group, index, allGroups) => {
+    const firstPoints = String(allGroups[0]?.routeKey || "").split(" -> ").map((item) => item.trim()).filter(Boolean);
+    const currentPoints = String(group.routeKey || "").split(" -> ").map((item) => item.trim()).filter(Boolean);
+    const firstOrigin = firstPoints[0] || "";
+    const firstDestination = firstPoints[firstPoints.length - 1] || "";
+    const currentOrigin = currentPoints[0] || "";
+    const currentDestination = currentPoints[currentPoints.length - 1] || "";
+
+    let label = `Leg ${index + 1}`;
+    if (index === 0) {
+      label = "Outbound";
+    } else if (
+      firstOrigin &&
+      firstDestination &&
+      currentOrigin === firstDestination &&
+      currentDestination === firstOrigin
+    ) {
+      label = "Return";
+    }
+
+    return {
+      ...group,
+      label,
+    };
+  });
+
+  return (
+    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.2 }}>
+      {labeledRouteGroups.map((group) => (
+        <Box
+          key={`anc-route-group-${group.routeKey}`}
+          sx={{ border: "1px solid #DCE7F3", borderRadius: "10px", p: 1.2, bgcolor: "#FCFEFF" }}
+        >
+          <Typography sx={{ fontSize: 13, fontWeight: 800, color: "#10355b", mb: 0.2 }}>
+            {group.label}: {group.routeKey}
+          </Typography>
+          <Typography sx={{ fontSize: 11, color: "#6D8299", mb: 0.8 }}>
+            {group.rows.length} option{group.rows.length > 1 ? "s" : ""} | Cheapest first
+          </Typography>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.7 }}>
+            {group.rows.map((row, idx) => {
+              const displayPrice =
+                Number.isFinite(row.totalPrice) && row.totalPrice > 0
+                  ? `${row.totalPrice.toLocaleString()}${row.currency ? ` ${row.currency}` : ""}`
+                  : "N/A";
+
+              return (
+                <Box
+                  key={`anc-row-${group.routeKey}-${idx}`}
+                  sx={{
+                    border: "1px dashed #D5E2F0",
+                    borderRadius: "8px",
+                    px: 1,
+                    py: 0.8,
+                    bgcolor: "#F7FBFF",
+                    display: "grid",
+                    gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+                    gap: 0.35,
+                  }}
+                >
+                  <Typography sx={{ fontSize: 12, color: "#4A607A", gridColumn: { xs: "1", md: "1 / span 2" } }}>
+                    Description: <strong>{row.description || "N/A"}</strong>
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                    Price: <strong>{displayPrice}</strong>
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                    Offer ID: <strong>{row.offerId || "N/A"}</strong>
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                    Type: <strong>{row.ancillaryType || "N/A"}</strong>
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                    Quantity: <strong>{row.quantity || "1"}</strong>
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                    Refundability: <strong>{row.refundability || "N/A"}</strong>
+                  </Typography>
+                  {row.allowance ? (
+                    <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                      Allowance: <strong>{row.allowance}</strong>
+                    </Typography>
+                  ) : null}
+                  {row.travelerId ? (
+                    <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                      Traveler: <strong>{row.travelerId}</strong>
+                    </Typography>
+                  ) : null}
+                  {row.flightRefs.length ? (
+                    <Typography sx={{ fontSize: 12, color: "#4A607A", gridColumn: { xs: "1", md: "1 / span 2" } }}>
+                      Flight Refs: <strong>{row.flightRefs.join(", ")}</strong>
+                    </Typography>
+                  ) : null}
+                </Box>
+              );
+            })}
+          </Box>
+        </Box>
+      ))}
+    </Box>
+  );
+};
+
 const BookingConfirmation = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -962,6 +1186,10 @@ const BookingConfirmation = () => {
   const [pnrRefreshTick, setPnrRefreshTick] = useState(0);
   const [issueTicketSubmitting, setIssueTicketSubmitting] = useState(false);
   const [showPassengerTicketDownloads, setShowPassengerTicketDownloads] = useState(false);
+  const [ancillaryShopLoading, setAncillaryShopLoading] = useState(false);
+  const [ancillaryShopOpen, setAncillaryShopOpen] = useState(false);
+  const [ancillaryShopData, setAncillaryShopData] = useState(null);
+  const [ancillaryShopError, setAncillaryShopError] = useState("");
   const [issueTicketFeedback, setIssueTicketFeedback] = useState({
     severity: "",
     message: "",
@@ -1526,6 +1754,52 @@ const BookingConfirmation = () => {
     }
   };
 
+  const handleShopAncillaries = async () => {
+    const shopPnr =
+      toText(pnrFromQuery) ||
+      toText(locator) ||
+      toText(finalCommitResponse?.locator) ||
+      toText(finalCommitResponse?.reservationId);
+
+    if (!shopPnr) {
+      setAncillaryShopError("PNR/Locator not found for ancillary shopping.");
+      setAncillaryShopOpen(true);
+      return;
+    }
+
+    try {
+      setAncillaryShopLoading(true);
+      setAncillaryShopError("");
+      setAncillaryShopData(null);
+
+      const response = await fetch(
+        `/api/travelport/ancillary-shop-by-pnr?pnr=${encodeURIComponent(shopPnr)}`,
+        {
+          method: "GET",
+          credentials: "include",
+          headers: {
+            Accept: "application/json",
+          },
+        }
+      );
+
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload?.details || payload?.message || "Ancillary shop failed.");
+      }
+
+      setAncillaryShopData(payload);
+      setAncillaryShopOpen(true);
+    } catch (error) {
+      setAncillaryShopError(
+        error instanceof Error ? error.message : "Unable to load ancillary offerings."
+      );
+      setAncillaryShopOpen(true);
+    } finally {
+      setAncillaryShopLoading(false);
+    }
+  };
+
   const handleGoToPreviewBooking = () => {
     let previewPayload =
       bookingPayload && bookingPayload?.bookingBody ? bookingPayload : null;
@@ -1710,8 +1984,8 @@ const BookingConfirmation = () => {
                     >
                       {({ loading }) =>
                         loading
-                          ? `Preparing ${row.passengerName} ticket...`
-                          : `Download ${row.passengerName} (${row.ticketNumber})`
+                          ? `${row.passengerName} (${row.ticketNumber})…`
+                          : `${row.passengerName} (${row.ticketNumber})`
                       }
                     </PDFDownloadLink>
                   ))}
@@ -2053,6 +2327,21 @@ const BookingConfirmation = () => {
 
         {/* ── Actions ── */}
         <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1.5, mb: 4, flexWrap: "wrap" }}>
+          <Button
+            variant="outlined"
+            onClick={handleShopAncillaries}
+            disabled={ancillaryShopLoading}
+            sx={{
+              textTransform: "none",
+              borderRadius: "10px",
+              fontWeight: 700,
+              fontFamily: FONT,
+              borderColor: "#0A527A",
+              color: "#0A527A",
+            }}
+          >
+            {ancillaryShopLoading ? "Loading Ancillaries..." : "Shop Ancillaries"}
+          </Button>
           {!isAlreadyTicketed ? (
             <Button
               variant="contained"
@@ -2137,6 +2426,26 @@ const BookingConfirmation = () => {
             </Box>
           ) : null
         }
+
+        <Dialog open={ancillaryShopOpen} onClose={() => setAncillaryShopOpen(false)} maxWidth="md" fullWidth>
+          <DialogTitle sx={{ fontWeight: 800, color: "#0f4b7d", fontSize: 16 }}>
+            Ancillary Offerings - {locator || pnrFromQuery || "N/A"}
+          </DialogTitle>
+          <DialogContent dividers>
+            {ancillaryShopError ? (
+              <Alert severity="error">{ancillaryShopError}</Alert>
+            ) : ancillaryShopData ? (
+              <AncillaryOfferingsDialogContent data={ancillaryShopData} />
+            ) : (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+                <CircularProgress size={24} />
+              </Box>
+            )}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setAncillaryShopOpen(false)}>Close</Button>
+          </DialogActions>
+        </Dialog>
 
       </Container >
     </Box >

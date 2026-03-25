@@ -47,6 +47,10 @@ function getObject(value: unknown): Record<string, unknown> {
     return value as Record<string, unknown>;
 }
 
+function getSelectedAirPricePayload(snapshot: Record<string, unknown>): Record<string, unknown> {
+    return getObject(snapshot.selectedAirPrice || snapshot.selectedOffer || snapshot.flightSearchData || snapshot.searchData);
+}
+
 function getNested(source: unknown, path: string): unknown {
     const keys = path.split(".");
     let current: unknown = source;
@@ -74,7 +78,13 @@ function mapBookingStatus(status: BookingStatus, locator: string | null): string
 }
 
 function extractPriceRows(snapshot: Record<string, unknown>): Array<Record<string, unknown>> {
-    const rows = normalizeArray(snapshot.PriceBreakDown || snapshot.priceBreakDown);
+    const selectedAirPrice = getSelectedAirPricePayload(snapshot);
+    const rows = normalizeArray(
+        snapshot.PriceBreakDown ||
+        snapshot.priceBreakDown ||
+        selectedAirPrice.PriceBreakDown ||
+        selectedAirPrice.priceBreakDown
+    );
     return rows;
 }
 
@@ -273,7 +283,9 @@ function buildDisplayBooking(
     const snapshot = getObject(dbRow.payloadSnapshot);
     const preview = getObject(dbRow.rawPreview);
     const commit = getObject(dbRow.rawCommit);
+    const selectedAirPrice = getSelectedAirPricePayload(snapshot);
     const merged = {
+        ...selectedAirPrice,
         ...preview,
         ...commit,
         ...snapshot,

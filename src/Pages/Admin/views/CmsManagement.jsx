@@ -40,6 +40,8 @@ import ContactMailIcon from "@mui/icons-material/ContactMail";
 import InfoIcon from "@mui/icons-material/Info";
 import HomeIcon from "@mui/icons-material/Home";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
+import CloudUploadIcon from "@mui/icons-material/CloudUpload";
+import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 
 const BLOG_TAGS = ["Travel Tips", "Fare Rules", "Airline Updates", "Visa Insights", "Travel Tech", "Destination", "News"];
 
@@ -71,6 +73,8 @@ function BlogTab() {
     const [editPost, setEditPost] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
     const [saving, setSaving] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const [seedingDemo, setSeedingDemo] = useState(false);
     const [alert, setAlert] = useState(null);
     const [form, setForm] = useState({
         title: "", tag: "Travel Tips", excerpt: "", content: "", imageUrl: "", published: true, authorName: "FlyJatt Team",
@@ -145,13 +149,80 @@ function BlogTab() {
         }
     };
 
+    const handleSeedDemo = async () => {
+        setSeedingDemo(true);
+        try {
+            const res = await fetch("/api/cms/blog", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "seed-demo" }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(payload?.message || "Failed to seed demo posts.");
+            setAlert({ type: "success", msg: payload?.message || "Demo posts loaded." });
+            fetchPosts();
+        } catch (error) {
+            setAlert({ type: "error", msg: error instanceof Error ? error.message : "Failed to seed demo posts." });
+        } finally {
+            setSeedingDemo(false);
+        }
+    };
+
+    const handleImageUpload = async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+
+        setUploadingImage(true);
+        try {
+            const dataUrl = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(String(reader.result || ""));
+                reader.onerror = () => reject(new Error("Unable to read selected image."));
+                reader.readAsDataURL(file);
+            });
+
+            const res = await fetch("/api/cms/blog-image", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    fileName: file.name,
+                    contentType: file.type,
+                    dataUrl,
+                }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok || !payload?.url) {
+                throw new Error(payload?.message || "Image upload failed.");
+            }
+
+            setForm((prev) => ({ ...prev, imageUrl: payload.url }));
+            setAlert({ type: "success", msg: "Blog image uploaded successfully." });
+        } catch (error) {
+            setAlert({ type: "error", msg: error instanceof Error ? error.message : "Image upload failed." });
+        } finally {
+            setUploadingImage(false);
+        }
+    };
+
     return (
         <Box>
             <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
                 <Typography variant="h6" fontWeight={700} color="#1e293b">Blog Posts</Typography>
-                <Button startIcon={<AddIcon />} variant="contained" onClick={openAdd} sx={{ ...saveBtnStyle, px: 2.5, py: 0.8 }}>
-                    New Post
-                </Button>
+                <Stack direction="row" spacing={1.2}>
+                    <Button
+                        startIcon={seedingDemo ? <CircularProgress size={16} color="inherit" /> : <AutoAwesomeIcon />}
+                        variant="outlined"
+                        onClick={handleSeedDemo}
+                        disabled={seedingDemo}
+                        sx={{ borderRadius: "12px", textTransform: "none", fontWeight: 700 }}
+                    >
+                        {seedingDemo ? "Loading Demo..." : "Load Demo Data"}
+                    </Button>
+                    <Button startIcon={<AddIcon />} variant="contained" onClick={openAdd} sx={{ ...saveBtnStyle, px: 2.5, py: 0.8 }}>
+                        New Post
+                    </Button>
+                </Stack>
             </Stack>
 
             {alert && (
@@ -258,6 +329,25 @@ function BlogTab() {
                             <TextField fullWidth label="Cover Image URL" value={form.imageUrl}
                                 onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
                                 size="small" sx={inputStyle} placeholder="https://..." />
+                        </Grid>
+                        <Grid item xs={12}>
+                            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.2} alignItems={{ xs: "stretch", sm: "center" }}>
+                                <Button
+                                    component="label"
+                                    variant="outlined"
+                                    startIcon={uploadingImage ? <CircularProgress size={16} color="inherit" /> : <CloudUploadIcon />}
+                                    disabled={uploadingImage}
+                                    sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700, width: "fit-content" }}
+                                >
+                                    {uploadingImage ? "Uploading..." : "Upload to Vercel Blob"}
+                                    <input type="file" hidden accept="image/*" onChange={handleImageUpload} />
+                                </Button>
+                                {form.imageUrl ? (
+                                    <Typography sx={{ fontSize: 12, color: "#64748b", wordBreak: "break-all" }}>
+                                        {form.imageUrl}
+                                    </Typography>
+                                ) : null}
+                            </Stack>
                         </Grid>
                         <Grid item xs={12}>
                             <TextField fullWidth multiline rows={2} label="Short Excerpt" value={form.excerpt}

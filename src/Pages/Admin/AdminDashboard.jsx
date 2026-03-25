@@ -38,6 +38,7 @@ import CmsManagement from "./views/CmsManagement";
 import ArticleIcon from "@mui/icons-material/Article";
 
 const DRAWER_WIDTH = 250;
+const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
 
 const menuItems = [
     { id: "dashboard", label: "Dashboard", icon: DashboardIcon, color: "#0d9488", roles: ["SUPER_ADMIN", "ADMIN", "MANAGER", "STAFF", "ACCOUNTANT", "RESERVATION"] },
@@ -53,8 +54,7 @@ export default function AdminDashboard() {
     const navigate = useNavigate();
     const getAuthHeaders = () => {
         const token = String(
-            secureLocalStorage.getItem("access_token") ||
-            secureLocalStorage.getItem("flyjatt_booking_auth_token") ||
+            secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) ||
             ""
         ).trim();
         return token ? { Authorization: `Bearer ${token}` } : {};
@@ -75,7 +75,7 @@ export default function AdminDashboard() {
                 setAuthLoading(true);
                 setAuthError("");
 
-                const response = await fetch("/api/auth/myaccount", {
+                const response = await fetch("/api/admin/me", {
                     method: "GET",
                     credentials: "include",
                     headers: {
@@ -88,16 +88,14 @@ export default function AdminDashboard() {
                     throw new Error(payload?.message || "You must be logged in to access the admin area.");
                 }
 
-                if (!payload.user.admin || payload.user.role === "CUSTOMER") {
-                    throw new Error("You do not have permission to access the admin area.");
-                }
-
                 if (!cancelled) {
                     setCurrentUser(payload.user);
                 }
             } catch (error) {
                 if (!cancelled) {
+                    secureLocalStorage.removeItem(ADMIN_AUTH_TOKEN_KEY);
                     setAuthError(error instanceof Error ? error.message : "Unable to validate admin session.");
+                    navigate("/admin/login", { replace: true });
                 }
             } finally {
                 if (!cancelled) {
@@ -111,7 +109,7 @@ export default function AdminDashboard() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [navigate]);
 
     const visibleMenuItems = useMemo(() => {
         if (!currentUser?.role) return [];
@@ -141,7 +139,7 @@ export default function AdminDashboard() {
     const handleLogout = async () => {
         handleMenuClose();
         try {
-            await fetch("/api/auth/logout", {
+            await fetch("/api/admin/logout", {
                 method: "POST",
                 credentials: "include",
                 headers: {
@@ -151,7 +149,8 @@ export default function AdminDashboard() {
         } catch {
             // Ignore logout failure.
         }
-        navigate("/signIn");
+        secureLocalStorage.removeItem(ADMIN_AUTH_TOKEN_KEY);
+        navigate("/admin/login", { replace: true });
     };
 
     const renderContent = () => {

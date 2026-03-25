@@ -5,6 +5,7 @@ import { verifySessionJwt } from "@/server/jwt-session";
 const PUBLIC_API_PATHS = new Set([
     "/api/auth/login",
     "/api/auth/register",
+    "/api/admin/login",
     "/api/contact",
     "/api/homepage",
     "/api/cms/blog",
@@ -19,6 +20,7 @@ const PROTECTED_PREFIXES = [
 ];
 
 const BOOKING_SESSION_COOKIE = "flyjatt_booking_session";
+const ADMIN_SESSION_COOKIE = "flyjatt_admin_session";
 
 function getAllowedOrigins(requestOrigin: string): Set<string> {
     const configured = String(process.env.ALLOWED_API_ORIGINS || "")
@@ -90,8 +92,11 @@ function getBearerToken(req: NextRequest): string {
 }
 
 function hasSessionCookie(req: NextRequest): boolean {
-    const cookieValue = String(req.cookies.get(BOOKING_SESSION_COOKIE)?.value || "").trim();
-    return Boolean(cookieValue);
+    const bookingCookie = String(req.cookies.get(BOOKING_SESSION_COOKIE)?.value || "").trim();
+    if (bookingCookie) return true;
+
+    const adminCookie = String(req.cookies.get(ADMIN_SESSION_COOKIE)?.value || "").trim();
+    return Boolean(adminCookie);
 }
 
 function isProtectedPath(pathname: string): boolean {

@@ -22,8 +22,9 @@ dist
 .env.test.local
 .env.production.local
 .vscode
-.V11 GDS Air Full Payload Path v25.11.2.json
-V11 GDS Air Reference Payload Path v25.11.2.json
+
+# local V11 GDS Air payload exports
+/V11 GDS Air*.json
 
 # live PNR / booking logs
 atpn.txt

@@ -271,6 +271,49 @@ function resolveReservationObject(payload: Record<string, unknown>): Record<stri
         : {};
 }
 
+function extractReservationResponsePayload(
+    payload?: Record<string, unknown> | null
+): Record<string, unknown> | null {
+    if (!payload || typeof payload !== "object") return null;
+    if (payload.ReservationResponse && typeof payload.ReservationResponse === "object") {
+        return payload.ReservationResponse as Record<string, unknown>;
+    }
+    return payload;
+}
+
+function buildCompactIssuedCommitPayload(params: {
+    reservationId: string;
+    locator?: string | null;
+    commitResponse?: Record<string, unknown> | null;
+}) {
+    const reservationResponse = extractReservationResponsePayload(params.commitResponse);
+    return {
+        ...(reservationResponse ? { ReservationResponse: reservationResponse } : {}),
+        reservationId: params.reservationId || null,
+        locator: toText(params.locator) || null,
+    } as Record<string, unknown>;
+}
+
+function buildUpdatedBookingSnapshot(params: {
+    existingSnapshot: unknown;
+    reservationId: string;
+    locator?: string | null;
+    commitResponse?: Record<string, unknown> | null;
+}) {
+    const snapshot =
+        params.existingSnapshot && typeof params.existingSnapshot === "object"
+            ? ({ ...(params.existingSnapshot as Record<string, unknown>) } as Record<string, unknown>)
+            : {};
+    const reservationResponse = extractReservationResponsePayload(params.commitResponse);
+
+    return {
+        ...snapshot,
+        ...(reservationResponse ? { ReservationResponse: reservationResponse } : {}),
+        reservationId: params.reservationId || null,
+        locator: toText(params.locator) || null,
+    } as Record<string, unknown>;
+}
+
 function resolveIssueTicketRuntimeContext(payload: Record<string, unknown>) {
     const reservation = resolveReservationObject(payload);
     const offers = Array.isArray(reservation?.Offer) ? (reservation.Offer as Record<string, unknown>[]) : [];
@@ -969,6 +1012,29 @@ export default async function handler(
                     },
                 },
             });
+
+            if (bookingRecord) {
+                const locator = toText(commitResult.locator || bookingRecord.locator || pnr) || null;
+                await prisma.booking.update({
+                    where: { id: bookingRecord.id },
+                    data: {
+                        reservationId: reservationIdForCommit || bookingRecord.reservationId,
+                        locator,
+                        status: "TICKETED",
+                        payloadSnapshot: buildUpdatedBookingSnapshot({
+                            existingSnapshot: bookingRecord.payloadSnapshot,
+                            reservationId: reservationIdForCommit,
+                            locator,
+                            commitResponse: commitResult.payload,
+                        }) as unknown as object,
+                        rawCommit: buildCompactIssuedCommitPayload({
+                            reservationId: reservationIdForCommit,
+                            locator,
+                            commitResponse: commitResult.payload,
+                        }) as unknown as object,
+                    },
+                });
+            }
 
             if (bookingRecord?.user?.email) {
                 const ticketInfo =

@@ -16,6 +16,8 @@ import PreviewBooking from "./Pages/BookingDetaills/PreviewBooking"
 import BookingConfirmation from "./Pages/BookingDetaills/BookingConfirmation"
 import BookingQueInfo from "./Pages/BookingQueInfo/BookingQueInfo"
 import AdminDashboard from "./Pages/Admin/AdminDashboard"
+import AdminEntry from "./Pages/Admin/AdminEntry"
+import AdminLogin from "./Pages/Admin/AdminLogin"
 import ScrollToTop from "./ScrollToTop"
 import OtpVerification from "./Pages/SignUp/OtpVerification"
 import ForgetEmail from "./Pages/SignUp/ForgetEmail"
@@ -82,7 +84,9 @@ const App: FC = () => {
           <Route path="/my-account/case" element={<MyAccountPanel />} />
           <Route path="/my-account/help-center" element={<MyAccountPanel />} />
           <Route path="/my-account/bookingdetails" element={<BookingDetailsPage />} />
-          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin" element={<AdminEntry />} />
+          <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
           {/* booking route  */}
 
           <Route

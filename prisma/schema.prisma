@@ -52,6 +52,19 @@ model User {
   @@index([admin, role])
 }
 
+model AdminUser {
+  id           Int        @id @default(autoincrement())
+  email        String     @unique
+  name         String?
+  passwordHash String
+  role         AccessRole @default(ADMIN)
+  isActive     Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([role, isActive])
+}
+
 model Booking {
   id              Int                @id @default(autoincrement())
   userId          Int
@@ -198,4 +211,20 @@ model BookingLog {
   @@index([outcome, timestamp])
   @@index([reservationId, timestamp])
   @@index([stage, timestamp])
+}
+
+model AirlineMarkup {
+  id            Int      @id @default(autoincrement())
+  airlineCode   String   @unique
+  airlineName   String?
+  markupType    String   @default("PERCENTAGE")
+  markupValue   Float    @default(0)
+  discountType  String   @default("PERCENTAGE")
+  discountValue Float    @default(0)
+  isActive      Boolean  @default(true)
+  notes         String?  @db.Text
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([airlineCode, isActive])
 }

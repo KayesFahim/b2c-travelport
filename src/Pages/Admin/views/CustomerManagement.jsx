@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     Box,
     Card,
     CardContent,
     CardHeader,
+    CircularProgress,
     Table,
     TableBody,
     TableCell,
@@ -24,75 +26,83 @@ import {
     Tooltip,
     Avatar,
 } from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import SearchIcon from "@mui/icons-material/Search";
-import AddIcon from "@mui/icons-material/Add";
+import secureLocalStorage from "react-secure-storage";
 
-const customersData = [
-    { id: 1, name: "John Doe", email: "john@example.com", phone: "+1-555-0101", country: "USA", bookings: 12, spent: "$2,450", joinDate: "2023-08-15", status: "Active" },
-    { id: 2, name: "Jane Smith", email: "jane@example.com", phone: "+44-555-0102", country: "UK", bookings: 8, spent: "$1,850", joinDate: "2023-09-22", status: "Active" },
-    { id: 3, name: "Mike Johnson", email: "mike@example.com", phone: "+1-555-0103", country: "USA", bookings: 15, spent: "$3,200", joinDate: "2023-07-10", status: "Active" },
-    { id: 4, name: "Sarah Williams", email: "sarah@example.com", phone: "+1-555-0104", country: "Canada", bookings: 5, spent: "$950", joinDate: "2024-01-12", status: "Active" },
-    { id: 5, name: "Robert Brown", email: "robert@example.com", phone: "+61-555-0105", country: "Australia", bookings: 0, spent: "$0", joinDate: "2024-02-28", status: "Inactive" },
-];
+const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
+
+const getAuthHeaders = () => {
+    const token = String(secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) || "").trim();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 export default function CustomerManagement() {
-    const [customers, setCustomers] = useState(customersData);
+    const [customers, setCustomers] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [detailsDialog, setDetailsDialog] = useState(false);
-    const [editDialog, setEditDialog] = useState(false);
-    const [formData, setFormData] = useState({});
 
-    const filteredCustomers = customers.filter((customer) =>
-        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.phone.includes(searchTerm)
-    );
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadCustomers = async () => {
+            try {
+                setLoading(true);
+                setError("");
+                const params = new URLSearchParams();
+                params.set("page", "1");
+                params.set("pageSize", "300");
+                if (searchTerm.trim()) params.set("search", searchTerm.trim());
+
+                const response = await fetch(`/api/admin/customers?${params.toString()}`, {
+                    method: "GET",
+                    credentials: "include",
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload?.message || "Unable to load customers");
+                }
+                if (cancelled) return;
+                setCustomers(Array.isArray(payload?.customers) ? payload.customers : []);
+            } catch (fetchError) {
+                if (!cancelled) {
+                    setCustomers([]);
+                    setError(fetchError instanceof Error ? fetchError.message : "Unable to load customers");
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        loadCustomers();
+        return () => {
+            cancelled = true;
+        };
+    }, [searchTerm]);
+
+    const summary = useMemo(() => {
+        const total = customers.length;
+        const active = customers.filter((c) => String(c.status || "").toLowerCase() === "active").length;
+        const inactive = total - active;
+        const totalBookings = customers.reduce((sum, c) => sum + Number(c.bookings || 0), 0);
+        return { total, active, inactive, totalBookings };
+    }, [customers]);
+
+    const filteredCustomers = customers;
 
     const handleViewDetails = (customer) => {
         setSelectedCustomer(customer);
         setDetailsDialog(true);
     };
 
-    const handleEditCustomer = (customer) => {
-        setSelectedCustomer(customer);
-        setFormData(customer);
-        setEditDialog(true);
-    };
-
-    const handleDeleteCustomer = (id) => {
-        if (window.confirm("Are you sure you want to delete this customer?")) {
-            setCustomers(customers.filter((c) => c.id !== id));
-        }
-    };
-
-    const handleSaveCustomer = () => {
-        setCustomers(
-            customers.map((c) => (c.id === formData.id ? formData : c))
-        );
-        setEditDialog(false);
-        setSelectedCustomer(null);
-    };
-
-    const handleAddCustomer = () => {
-        setFormData({
-            id: customers.length + 1,
-            name: "",
-            email: "",
-            phone: "",
-            country: "",
-            bookings: 0,
-            spent: "$0",
-            joinDate: new Date().toISOString().split("T")[0],
-            status: "Active",
-        });
-        setEditDialog(true);
-    };
-
     const getInitials = (name) => {
+        if (!name) return "NA";
         return name
             .split(" ")
             .map((n) => n[0])
@@ -108,7 +118,7 @@ export default function CustomerManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Total Customers</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#0d9488" }}>
-                            {customers.length}
+                            {summary.total}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -116,7 +126,7 @@ export default function CustomerManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Active</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#10b981" }}>
-                            {customers.filter((c) => c.status === "Active").length}
+                            {summary.active}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -124,7 +134,7 @@ export default function CustomerManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Total Bookings</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#0ea5e9" }}>
-                            {customers.reduce((sum, c) => sum + c.bookings, 0)}
+                            {summary.totalBookings}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -132,7 +142,7 @@ export default function CustomerManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Inactive</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#f59e0b" }}>
-                            {customers.filter((c) => c.status === "Inactive").length}
+                            {summary.inactive}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -168,24 +178,26 @@ export default function CustomerManagement() {
                         <Grid item xs={12} md={3}>
                             <Button
                                 fullWidth
-                                variant="contained"
+                                variant="outlined"
                                 sx={{
-                                    background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
-                                    color: "#fff",
                                     fontWeight: 600,
                                     borderRadius: "12px",
                                     textTransform: "none",
                                     py: 1.5,
                                 }}
-                                startIcon={<AddIcon />}
-                                onClick={handleAddCustomer}
+                                startIcon={<SearchIcon />}
+                                onClick={() => setSearchTerm("")}
                             >
-                                Add Customer
+                                Clear Search
                             </Button>
                         </Grid>
                     </Grid>
                 </CardContent>
             </Card>
+
+            {error ? (
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+            ) : null}
 
             {/* Customers Table */}
             <Card
@@ -218,7 +230,14 @@ export default function CustomerManagement() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredCustomers.map((customer) => (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={9} align="center" sx={{ py: 3 }}>
+                                        <CircularProgress size={24} />
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
+                            {!loading && filteredCustomers.map((customer) => (
                                 <TableRow
                                     key={customer.id}
                                     sx={{
@@ -238,7 +257,7 @@ export default function CustomerManagement() {
                                     <TableCell sx={{ fontSize: 12 }}>{customer.phone}</TableCell>
                                     <TableCell sx={{ fontSize: 12 }}>{customer.country}</TableCell>
                                     <TableCell sx={{ fontSize: 12, fontWeight: 600 }} align="center">{customer.bookings}</TableCell>
-                                    <TableCell sx={{ fontSize: 12, fontWeight: 600, color: "#0d9488" }} align="right">{customer.spent}</TableCell>
+                                    <TableCell sx={{ fontSize: 12, fontWeight: 600, color: "#0d9488" }} align="right">{customer.totalSpent} {customer.currency}</TableCell>
                                     <TableCell>
                                         <Chip
                                             label={customer.status}
@@ -262,27 +281,16 @@ export default function CustomerManagement() {
                                                 <VisibilityIcon sx={{ fontSize: 18 }} />
                                             </IconButton>
                                         </Tooltip>
-                                        <Tooltip title="Edit">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleEditCustomer(customer)}
-                                                sx={{ color: "#0ea5e9" }}
-                                            >
-                                                <EditIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                        </Tooltip>
-                                        <Tooltip title="Delete">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleDeleteCustomer(customer.id)}
-                                                sx={{ color: "#ef4444" }}
-                                            >
-                                                <DeleteIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                        </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             ))}
+                            {!loading && !filteredCustomers.length ? (
+                                <TableRow>
+                                    <TableCell colSpan={9} align="center" sx={{ py: 3, color: "#6b7280" }}>
+                                        No customers found.
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
                         </TableBody>
                     </Table>
                 </TableContainer>
@@ -323,57 +331,13 @@ export default function CustomerManagement() {
                             </Box>
                             <Box>
                                 <Typography sx={{ fontSize: 12, color: "#6b7280", fontWeight: 600, mb: 0.5 }}>Total Spent</Typography>
-                                <Typography sx={{ fontWeight: 600, fontSize: 18, color: "#10b981" }}>{selectedCustomer.spent}</Typography>
+                                <Typography sx={{ fontWeight: 600, fontSize: 18, color: "#10b981" }}>{selectedCustomer.totalSpent} {selectedCustomer.currency}</Typography>
                             </Box>
                         </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDetailsDialog(false)}>Close</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Edit Dialog */}
-            <Dialog open={editDialog} onClose={() => setEditDialog(false)} maxWidth="sm" fullWidth>
-                <DialogTitle sx={{ fontWeight: 700, backgroundColor: "#f9fafb", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-                    {selectedCustomer?.id ? "Edit Customer" : "Add New Customer"}
-                </DialogTitle>
-                <DialogContent sx={{ pt: 3, display: "flex", flexDirection: "column", gap: 2 }}>
-                    <TextField
-                        label="Name"
-                        fullWidth
-                        value={formData.name || ""}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    />
-                    <TextField
-                        label="Email"
-                        fullWidth
-                        type="email"
-                        value={formData.email || ""}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    />
-                    <TextField
-                        label="Phone"
-                        fullWidth
-                        value={formData.phone || ""}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    />
-                    <TextField
-                        label="Country"
-                        fullWidth
-                        value={formData.country || ""}
-                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    />
-                </DialogContent>
-                <DialogActions sx={{ p: 2, borderTop: "1px solid rgba(0,0,0,0.05)" }}>
-                    <Button onClick={() => setEditDialog(false)}>Cancel</Button>
-                    <Button
-                        variant="contained"
-                        sx={{ background: "#0d9488" }}
-                        onClick={handleSaveCustomer}
-                    >
-                        Save
-                    </Button>
                 </DialogActions>
             </Dialog>
         </Box>

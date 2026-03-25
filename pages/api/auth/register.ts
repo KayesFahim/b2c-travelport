@@ -1,6 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
-import { assertDatabaseConfigured, prisma } from "@/server/prisma";
+import {
+  assertDatabaseConfigured,
+  getDatabaseUnavailableMessage,
+  isDatabaseConnectionError,
+  prisma,
+} from "@/server/prisma";
 import { createSession } from "@/server/auth-session";
 import { issueEmailVerification } from "@/server/auth-email";
 
@@ -24,6 +29,10 @@ function normalizeEmail(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+function isValidSignupPassword(password: string): boolean {
+  return /^(?=.*[a-zA-Z]).{6,}$/.test(password);
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
@@ -43,8 +52,10 @@ export default async function handler(
     if (!email || !email.includes("@")) {
       return res.status(400).json({ message: "Valid email is required." });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ message: "Password must be at least 6 characters." });
+    if (!isValidSignupPassword(password)) {
+      return res.status(400).json({
+        message: "Password must be at least 6 characters long, and contain at least one letter.",
+      });
     }
 
     const existing = await prisma.user.findUnique({ where: { email } });
@@ -52,30 +63,13 @@ export default async function handler(
       return res.status(409).json({ message: "Account already exists for this email." });
     }
 
-    const configuredSuperAdminEmail = normalizeEmail(process.env.SUPER_ADMIN_EMAIL);
-    let role: "CUSTOMER" | "SUPER_ADMIN" = "CUSTOMER";
-    let admin = false;
-
-    if (configuredSuperAdminEmail && email === configuredSuperAdminEmail) {
-      const superAdminCount = await prisma.user.count({
-        where: { role: "SUPER_ADMIN", admin: true },
-      });
-
-      if (superAdminCount > 0) {
-        return res.status(409).json({ message: "Super Admin already exists." });
-      }
-
-      role = "SUPER_ADMIN";
-      admin = true;
-    }
-
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
       data: {
         email,
         name,
-        admin,
-        role,
+        admin: false,
+        role: "CUSTOMER",
         passwordHash,
       },
     });
@@ -106,6 +100,11 @@ export default async function handler(
       },
     });
   } catch (error) {
+    if (isDatabaseConnectionError(error)) {
+      return res.status(503).json({
+        message: getDatabaseUnavailableMessage(),
+      });
+    }
     return res.status(500).json({
       message: error instanceof Error ? error.message : "Registration failed",
     });

@@ -499,6 +499,69 @@ function normalizePassengerRows(body: BookHoldBody): Array<Record<string, unknow
   );
 }
 
+function extractReservationResponsePayload(
+  payload?: Record<string, unknown> | null
+): Record<string, unknown> | null {
+  if (!payload || typeof payload !== "object") return null;
+  const reservationResponse = getValueByKeys(payload, [
+    "ReservationResponse",
+    "reservationResponse",
+  ]);
+  if (reservationResponse && typeof reservationResponse === "object") {
+    return reservationResponse as Record<string, unknown>;
+  }
+  return payload;
+}
+
+function buildCompactBookingPayload(params: {
+  body: BookHoldBody;
+  selectedOffer?: Record<string, unknown>;
+  reservationId: string;
+  locator?: string | null;
+  commitResponse?: Record<string, unknown> | null;
+}) {
+  const passengers = normalizePassengerRows(params.body);
+  const reservationResponse = extractReservationResponsePayload(
+    params.commitResponse
+  );
+  const selectedAirPrice =
+    params.selectedOffer && Object.keys(params.selectedOffer).length > 0
+      ? params.selectedOffer
+      : null;
+
+  return {
+    ...(selectedAirPrice ? { selectedAirPrice } : {}),
+    bookingBody: {
+      Passengers: passengers,
+      adultCount: toNumber(params.body.adultCount, passengers.length),
+      childCount: toNumber(params.body.childCount, 0),
+      infantCount: toNumber(params.body.infantCount, 0),
+      ...(Array.isArray(params.body.seatSelections) && params.body.seatSelections.length
+        ? { seatSelections: params.body.seatSelections }
+        : {}),
+    },
+    ...(reservationResponse ? { ReservationResponse: reservationResponse } : {}),
+    reservationId: params.reservationId || null,
+    locator: toText(params.locator) || null,
+  } as Record<string, unknown>;
+}
+
+function buildCompactCommitPayload(params: {
+  reservationId: string;
+  locator?: string | null;
+  commitResponse?: Record<string, unknown> | null;
+}) {
+  const reservationResponse = extractReservationResponsePayload(
+    params.commitResponse
+  );
+
+  return {
+    ...(reservationResponse ? { ReservationResponse: reservationResponse } : {}),
+    reservationId: params.reservationId || null,
+    locator: toText(params.locator) || null,
+  } as Record<string, unknown>;
+}
+
 function toUtcDayBounds(date = new Date()): { start: Date; end: Date } {
   const start = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
@@ -536,7 +599,9 @@ async function findDuplicateCommittedBooking(params: {
   return prisma.booking.findFirst({
     where: {
       userId: params.userId,
-      status: "COMMITTED",
+      status: {
+        in: ["COMMITTED", "TICKETED"],
+      },
       flightSignature: params.fingerprint.flightSignature,
       routeKey: params.fingerprint.routeKey,
       airlineCode: params.fingerprint.airlineCode,
@@ -1322,6 +1387,19 @@ function pushApiFlowLog(params: {
   });
 }
 
+function isMissingBookingLogTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const asRecord = error as Record<string, unknown>;
+  const code = toText(asRecord.code).toUpperCase();
+  if (code === "P2021") return true;
+
+  const message = String(asRecord.message || "").toLowerCase();
+  return (
+    message.includes("bookinglog") &&
+    (message.includes("does not exist") || message.includes("doesn't exist"))
+  );
+}
+
 async function persistBookingFailureToLocalFile(params: {
   stage: string;
   status: number;
@@ -1335,28 +1413,33 @@ async function persistBookingFailureToLocalFile(params: {
   commitRequested?: boolean;
   commitOnlyRequested?: boolean;
 }) {
-  await prisma.bookingLog.create({
-    data: {
-      timestamp: new Date(),
-      outcome: "FAILED",
-      stage: params.stage,
-      status: params.status,
-      message: truncateForLog(params.message, 500),
-      details: truncateForLog(params.details, 1200) || null,
-      reservationId: toText(params.reservationId) || null,
-      bookingFlowKey: toText(params.bookingFlowKey) || null,
-      bookingOfferKey: toText(params.bookingOfferKey) || null,
-      offerIdentifiers: Array.isArray(params.offerIdentifiers)
-        ? params.offerIdentifiers.filter(Boolean)
-        : [],
-      warnings: (params.warnings || [])
-        .map((warning) => truncateForLog(warning, 300))
-        .filter(Boolean),
-      commitRequested: Boolean(params.commitRequested),
-      commitOnlyRequested: Boolean(params.commitOnlyRequested),
-      importKey: null,
-    },
-  });
+  try {
+    await prisma.bookingLog.create({
+      data: {
+        timestamp: new Date(),
+        outcome: "FAILED",
+        stage: params.stage,
+        status: params.status,
+        message: truncateForLog(params.message, 500),
+        details: truncateForLog(params.details, 1200) || null,
+        reservationId: toText(params.reservationId) || null,
+        bookingFlowKey: toText(params.bookingFlowKey) || null,
+        bookingOfferKey: toText(params.bookingOfferKey) || null,
+        offerIdentifiers: Array.isArray(params.offerIdentifiers)
+          ? params.offerIdentifiers.filter(Boolean)
+          : [],
+        warnings: (params.warnings || [])
+          .map((warning) => truncateForLog(warning, 300))
+          .filter(Boolean),
+        commitRequested: Boolean(params.commitRequested),
+        commitOnlyRequested: Boolean(params.commitOnlyRequested),
+        importKey: null,
+      },
+    });
+  } catch (error) {
+    if (isMissingBookingLogTableError(error)) return;
+    throw error;
+  }
 }
 
 async function persistBookingSuccessLog(params: {
@@ -1373,28 +1456,35 @@ async function persistBookingSuccessLog(params: {
   commitOnlyRequested?: boolean;
 }) {
   const reservationId = toText(params.reservationId) || toText(params.locator) || null;
-  await prisma.bookingLog.create({
-    data: {
-      timestamp: new Date(),
-      outcome: "SUCCESS",
-      stage: params.stage,
-      status: params.status,
-      message: truncateForLog(params.message, 500),
-      details: toText(params.locator) ? `Locator=${truncateForLog(params.locator, 120)}` : null,
-      reservationId,
-      bookingFlowKey: toText(params.bookingFlowKey) || null,
-      bookingOfferKey: toText(params.bookingOfferKey) || null,
-      offerIdentifiers: Array.isArray(params.offerIdentifiers)
-        ? params.offerIdentifiers.filter(Boolean)
-        : [],
-      warnings: (params.warnings || [])
-        .map((warning) => truncateForLog(warning, 300))
-        .filter(Boolean),
-      commitRequested: Boolean(params.commitRequested),
-      commitOnlyRequested: Boolean(params.commitOnlyRequested),
-      importKey: null,
-    },
-  });
+  try {
+    await prisma.bookingLog.create({
+      data: {
+        timestamp: new Date(),
+        outcome: "SUCCESS",
+        stage: params.stage,
+        status: params.status,
+        message: truncateForLog(params.message, 500),
+        details: toText(params.locator)
+          ? `Locator=${truncateForLog(params.locator, 120)}`
+          : null,
+        reservationId,
+        bookingFlowKey: toText(params.bookingFlowKey) || null,
+        bookingOfferKey: toText(params.bookingOfferKey) || null,
+        offerIdentifiers: Array.isArray(params.offerIdentifiers)
+          ? params.offerIdentifiers.filter(Boolean)
+          : [],
+        warnings: (params.warnings || [])
+          .map((warning) => truncateForLog(warning, 300))
+          .filter(Boolean),
+        commitRequested: Boolean(params.commitRequested),
+        commitOnlyRequested: Boolean(params.commitOnlyRequested),
+        importKey: null,
+      },
+    });
+  } catch (error) {
+    if (isMissingBookingLogTableError(error)) return;
+    throw error;
+  }
 }
 
 async function respondWithLoggedError(
@@ -1767,32 +1857,38 @@ function buildTravelersPayload(
     if (email && isLeadPassenger) {
       traveler.Email = [{ comment: "Primary Email Id", value: email }];
     }
-    traveler.TravelDocument = [
-      {
-        "@type": "TravelDocumentDetail",
-        ...(passportNumber ? { docNumber: passportNumber } : {}),
-        docType: "Passport",
-        ...(passportIssueDate ? { issueDate: passportIssueDate } : {}),
-        ...(passportExpiryDate ? { expireDate: passportExpiryDate } : {}),
-        issueCountry: passportIssueCountry || birthCountry || "",
-        birthDate: resolvedBirthDate,
-        birthCountry: birthCountry || passportIssueCountry || "",
-        Gender: resolvedGender,
-        PersonName: {
-          "@type": "PersonName",
-          Given: given,
-          ...(middleName ? { Middle: middleName } : {}),
-          Surname: surname,
+    // Only include TravelDocument when a passport number is available.
+    // Without docNumber, sending docType:"Passport" causes Travelport to return
+    // "TRAVEL DOCUMENT REQUIRES CURRENT PASSPORT OR NAME, DATE OF BIRTH, AND GENDER".
+    // The root-level PersonName, gender, and birthDate already satisfy that alternative.
+    if (passportNumber) {
+      traveler.TravelDocument = [
+        {
+          "@type": "TravelDocumentDetail",
+          docNumber: passportNumber,
+          docType: "Passport",
+          ...(passportIssueDate ? { issueDate: passportIssueDate } : {}),
+          ...(passportExpiryDate ? { expireDate: passportExpiryDate } : {}),
+          issueCountry: passportIssueCountry || birthCountry || "",
+          birthDate: resolvedBirthDate,
+          birthCountry: birthCountry || passportIssueCountry || "",
+          Gender: resolvedGender,
+          PersonName: {
+            "@type": "PersonName",
+            Given: given,
+            ...(middleName ? { Middle: middleName } : {}),
+            Surname: surname,
+          },
+          ...(birthCountry
+            ? {
+              IssuedForGeoPoliticalArea: {
+                value: birthCountry,
+              },
+            }
+            : {}),
         },
-        ...(birthCountry
-          ? {
-            IssuedForGeoPoliticalArea: {
-              value: birthCountry,
-            },
-          }
-          : {}),
-      },
-    ];
+      ];
+    }
 
     return traveler;
   });
@@ -2486,6 +2582,19 @@ async function persistCommittedBooking(params: {
       currencyCode: null,
     };
 
+  const payloadSnapshot = buildCompactBookingPayload({
+    body: params.body,
+    selectedOffer: hasSelectedOffer ? normalizedSelectedOffer : undefined,
+    reservationId: params.reservationId,
+    locator: params.locator,
+    commitResponse: params.commitResponse,
+  });
+  const rawCommitPayload = buildCompactCommitPayload({
+    reservationId: params.reservationId,
+    locator: params.locator,
+    commitResponse: params.commitResponse,
+  });
+
   const booking = await prisma.booking.upsert({
     where: {
       reservationId: params.reservationId,
@@ -2504,17 +2613,9 @@ async function persistCommittedBooking(params: {
       arrivalCode: fingerprint.arrivalCode || null,
       totalFare: fingerprint.totalFare || null,
       currencyCode: fingerprint.currencyCode || null,
-      payloadSnapshot: hasSelectedOffer
-        ? (normalizedSelectedOffer as unknown as object)
-        : null,
-      rawPreview:
-        params.preCommitResponse && typeof params.preCommitResponse === "object"
-          ? (params.preCommitResponse as unknown as object)
-          : null,
-      rawCommit:
-        params.commitResponse && typeof params.commitResponse === "object"
-          ? (params.commitResponse as unknown as object)
-          : null,
+      payloadSnapshot: payloadSnapshot as unknown as object,
+      rawPreview: null,
+      rawCommit: rawCommitPayload as unknown as object,
     },
     create: {
       userId: params.userId,
@@ -2531,17 +2632,9 @@ async function persistCommittedBooking(params: {
       arrivalCode: fingerprint.arrivalCode || null,
       totalFare: fingerprint.totalFare || null,
       currencyCode: fingerprint.currencyCode || null,
-      payloadSnapshot: hasSelectedOffer
-        ? (normalizedSelectedOffer as unknown as object)
-        : null,
-      rawPreview:
-        params.preCommitResponse && typeof params.preCommitResponse === "object"
-          ? (params.preCommitResponse as unknown as object)
-          : null,
-      rawCommit:
-        params.commitResponse && typeof params.commitResponse === "object"
-          ? (params.commitResponse as unknown as object)
-          : null,
+      payloadSnapshot: payloadSnapshot as unknown as object,
+      rawPreview: null,
+      rawCommit: rawCommitPayload as unknown as object,
     },
   });
 
@@ -2777,7 +2870,9 @@ export default async function handler(
       const committedTodayCount = await prisma.booking.count({
         where: {
           userId: sessionUser.id,
-          status: "COMMITTED",
+          status: {
+            in: ["COMMITTED", "TICKETED"],
+          },
           createdAt: {
             gte: dayStart,
             lt: dayEnd,
@@ -3063,7 +3158,9 @@ export default async function handler(
     const committedTodayCount = await prisma.booking.count({
       where: {
         userId: sessionUser.id,
-        status: "COMMITTED",
+        status: {
+          in: ["COMMITTED", "TICKETED"],
+        },
         createdAt: {
           gte: dayStart,
           lt: dayEnd,

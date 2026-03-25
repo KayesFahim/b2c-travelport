@@ -43,6 +43,16 @@ function normalizeArray(value: unknown): Record<string, unknown>[] {
     return value.filter((item) => item && typeof item === "object") as Record<string, unknown>[];
 }
 
+function resolveFlightPayload(payloadSnapshot: unknown): Record<string, unknown> {
+    const payload = (payloadSnapshot && typeof payloadSnapshot === "object"
+        ? payloadSnapshot
+        : {}) as Record<string, unknown>;
+    const selectedAirPrice = payload.selectedAirPrice || payload.selectedOffer || payload.flightSearchData || payload.searchData;
+    return selectedAirPrice && typeof selectedAirPrice === "object"
+        ? (selectedAirPrice as Record<string, unknown>)
+        : payload;
+}
+
 function mapBookingStatusToTab(status: BookingStatus, locator: string | null): CalendarBooking["bookingStatus"] {
     if (status === BookingStatus.CANCELLED) return "Cancelled";
     if (status === BookingStatus.PREPARED || status === BookingStatus.FAILED) return "IssueInProcess";
@@ -58,9 +68,7 @@ function extractFlightFields(payloadSnapshot: unknown): {
     depDate: string;
     arrDate: string;
 } {
-    const payload = (payloadSnapshot && typeof payloadSnapshot === "object"
-        ? payloadSnapshot
-        : {}) as Record<string, unknown>;
+    const payload = resolveFlightPayload(payloadSnapshot);
     const legs = normalizeArray(
         payload.AllLegsInfo || payload.allLegsInfo || payload.legs || payload.Legs
     );

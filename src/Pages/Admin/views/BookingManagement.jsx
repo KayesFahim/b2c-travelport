@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+    Alert,
     Box,
     Card,
     CardContent,
     CardHeader,
+    CircularProgress,
     Table,
     TableBody,
     TableCell,
@@ -24,29 +26,45 @@ import {
     IconButton,
     Tooltip,
 } from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import DeleteIcon from "@mui/icons-material/Delete";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import SearchIcon from "@mui/icons-material/Search";
-import FilterAltIcon from "@mui/icons-material/FilterAlt";
+import secureLocalStorage from "react-secure-storage";
 
-const bookingsData = [
-    { id: "BK001", customer: "John Doe", email: "john@example.com", route: "NYC → LAX", date: "2024-03-24", amount: "$450", status: "Completed", seats: "12A, 12B", airline: "United Airlines" },
-    { id: "BK002", customer: "Jane Smith", email: "jane@example.com", route: "DXB → NYC", date: "2024-03-24", amount: "$520", status: "Pending", seats: "5C, 5D", airline: "Emirates" },
-    { id: "BK003", customer: "Mike Johnson", email: "mike@example.com", route: "LOS → DXB", date: "2024-03-23", amount: "$380", status: "Completed", seats: "15F", airline: "Qatar Airways" },
-    { id: "BK004", customer: "Sarah Williams", email: "sarah@example.com", route: "NYC → DXB", date: "2024-03-23", amount: "$600", status: "Processing", seats: "2A", airline: "American Airlines" },
-    { id: "BK005", customer: "Robert Brown", email: "robert@example.com", route: "CDG → LAX", date: "2024-03-22", amount: "$480", status: "Cancelled", seats: "None", airline: "Air France" },
+const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
+
+const getAuthHeaders = () => {
+    const token = String(secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) || "").trim();
+    return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+const STATUS_OPTIONS = [
+    { label: "All Status", value: "ALL" },
+    { label: "Booked", value: "BOOKED" },
+    { label: "Completed", value: "COMMITTED" },
+    { label: "Ticketed", value: "TICKETED" },
+    { label: "Processing", value: "PREPARED" },
+    { label: "Cancelled", value: "CANCELLED" },
+    { label: "Failed", value: "FAILED" },
 ];
 
 const getStatusColor = (status) => {
-    switch (status) {
+    const normalized = String(status || "").toLowerCase();
+    switch (normalized) {
         case "Completed":
+        case "completed":
+        case "ticketed":
             return "#10b981";
         case "Pending":
+        case "pending":
+        case "booked":
             return "#f59e0b";
         case "Processing":
+        case "processing":
             return "#0ea5e9";
         case "Cancelled":
+        case "cancelled":
+            return "#ef4444";
+        case "failed":
             return "#ef4444";
         default:
             return "#6b7280";
@@ -54,50 +72,69 @@ const getStatusColor = (status) => {
 };
 
 export default function BookingManagement() {
-    const [bookings, setBookings] = useState(bookingsData);
+    const [bookings, setBookings] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
     const [searchTerm, setSearchTerm] = useState("");
-    const [filterStatus, setFilterStatus] = useState("All");
+    const [filterStatus, setFilterStatus] = useState("ALL");
     const [selectedBooking, setSelectedBooking] = useState(null);
-    const [openDialog, setOpenDialog] = useState(false);
     const [detailsDialog, setDetailsDialog] = useState(false);
 
-    const filteredBookings = bookings.filter((booking) => {
-        const matchesSearch =
-            booking.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            booking.customer.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            booking.email.toLowerCase().includes(searchTerm.toLowerCase());
+    useEffect(() => {
+        let cancelled = false;
 
-        const matchesStatus = filterStatus === "All" || booking.status === filterStatus;
+        const loadBookings = async () => {
+            try {
+                setLoading(true);
+                setError("");
+                const params = new URLSearchParams();
+                params.set("page", "1");
+                params.set("pageSize", "200");
+                if (searchTerm.trim()) params.set("search", searchTerm.trim());
+                if (filterStatus !== "ALL") params.set("status", filterStatus);
 
-        return matchesSearch && matchesStatus;
-    });
+                const response = await fetch(`/api/admin/bookings?${params.toString()}`, {
+                    method: "GET",
+                    credentials: "include",
+                    headers: {
+                        ...getAuthHeaders(),
+                    },
+                });
+                const payload = await response.json().catch(() => ({}));
+                if (!response.ok) {
+                    throw new Error(payload?.message || "Unable to load bookings");
+                }
+                if (cancelled) return;
+                setBookings(Array.isArray(payload?.bookings) ? payload.bookings : []);
+            } catch (fetchError) {
+                if (!cancelled) {
+                    setBookings([]);
+                    setError(fetchError instanceof Error ? fetchError.message : "Unable to load bookings");
+                }
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        };
+
+        loadBookings();
+        return () => {
+            cancelled = true;
+        };
+    }, [searchTerm, filterStatus]);
+
+    const summary = useMemo(() => {
+        const total = bookings.length;
+        const completed = bookings.filter((b) => ["completed", "ticketed"].includes(String(b.status || "").toLowerCase())).length;
+        const pending = bookings.filter((b) => String(b.status || "").toLowerCase() === "booked").length;
+        const processing = bookings.filter((b) => String(b.status || "").toLowerCase() === "processing").length;
+        return { total, completed, pending, processing };
+    }, [bookings]);
+
+    const filteredBookings = bookings;
 
     const handleViewDetails = (booking) => {
         setSelectedBooking(booking);
         setDetailsDialog(true);
-    };
-
-    const handleEditBooking = (booking) => {
-        setSelectedBooking(booking);
-        setOpenDialog(true);
-    };
-
-    const handleDeleteBooking = (id) => {
-        if (window.confirm("Are you sure you want to delete this booking?")) {
-            setBookings(bookings.filter((b) => b.id !== id));
-        }
-    };
-
-    const handleUpdateStatus = (newStatus) => {
-        if (selectedBooking) {
-            setBookings(
-                bookings.map((b) =>
-                    b.id === selectedBooking.id ? { ...b, status: newStatus } : b
-                )
-            );
-            setOpenDialog(false);
-            setSelectedBooking(null);
-        }
     };
 
     return (
@@ -108,7 +145,7 @@ export default function BookingManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Total Bookings</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#0d9488" }}>
-                            {bookings.length}
+                            {summary.total}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -116,7 +153,7 @@ export default function BookingManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Completed</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#10b981" }}>
-                            {bookings.filter((b) => b.status === "Completed").length}
+                            {summary.completed}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -124,7 +161,7 @@ export default function BookingManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Pending</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#f59e0b" }}>
-                            {bookings.filter((b) => b.status === "Pending").length}
+                            {summary.pending}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -132,7 +169,7 @@ export default function BookingManagement() {
                     <Paper sx={{ p: 2, textAlign: "center", borderRadius: "12px", backgroundColor: "#fff", border: "1px solid rgba(0,0,0,0.05)" }}>
                         <Typography sx={{ color: "#6b7280", fontSize: 12, fontWeight: 600, mb: 0.5 }}>Processing</Typography>
                         <Typography sx={{ fontSize: 28, fontWeight: 800, color: "#0ea5e9" }}>
-                            {bookings.filter((b) => b.status === "Processing").length}
+                            {summary.processing}
                         </Typography>
                     </Paper>
                 </Grid>
@@ -178,33 +215,37 @@ export default function BookingManagement() {
                                     },
                                 }}
                             >
-                                <MenuItem value="All">All Status</MenuItem>
-                                <MenuItem value="Completed">Completed</MenuItem>
-                                <MenuItem value="Pending">Pending</MenuItem>
-                                <MenuItem value="Processing">Processing</MenuItem>
-                                <MenuItem value="Cancelled">Cancelled</MenuItem>
+                                {STATUS_OPTIONS.map((opt) => (
+                                    <MenuItem key={opt.value} value={opt.value}>{opt.label}</MenuItem>
+                                ))}
                             </TextField>
                         </Grid>
                         <Grid item xs={12} md={3}>
                             <Button
                                 fullWidth
-                                variant="contained"
+                                variant="outlined"
+                                onClick={() => {
+                                    setSearchTerm("");
+                                    setFilterStatus("ALL");
+                                }}
                                 sx={{
-                                    background: "linear-gradient(135deg, #0f766e 0%, #0d9488 100%)",
-                                    color: "#fff",
                                     fontWeight: 600,
                                     borderRadius: "12px",
                                     textTransform: "none",
                                     py: 1.5,
                                 }}
-                                startIcon={<FilterAltIcon />}
+                                startIcon={<SearchIcon />}
                             >
-                                Apply Filters
+                                Clear Filters
                             </Button>
                         </Grid>
                     </Grid>
                 </CardContent>
             </Card>
+
+            {error ? (
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+            ) : null}
 
             {/* Bookings Table */}
             <Card
@@ -236,7 +277,14 @@ export default function BookingManagement() {
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {filteredBookings.map((booking) => (
+                            {loading ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} align="center" sx={{ py: 3 }}>
+                                        <CircularProgress size={24} />
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
+                            {!loading && filteredBookings.map((booking) => (
                                 <TableRow
                                     key={booking.id}
                                     sx={{
@@ -275,27 +323,16 @@ export default function BookingManagement() {
                                                 <VisibilityIcon sx={{ fontSize: 18 }} />
                                             </IconButton>
                                         </Tooltip>
-                                        <Tooltip title="Edit">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleEditBooking(booking)}
-                                                sx={{ color: "#0ea5e9" }}
-                                            >
-                                                <EditIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                        </Tooltip>
-                                        <Tooltip title="Delete">
-                                            <IconButton
-                                                size="small"
-                                                onClick={() => handleDeleteBooking(booking.id)}
-                                                sx={{ color: "#ef4444" }}
-                                            >
-                                                <DeleteIcon sx={{ fontSize: 18 }} />
-                                            </IconButton>
-                                        </Tooltip>
                                     </TableCell>
                                 </TableRow>
                             ))}
+                            {!loading && !filteredBookings.length ? (
+                                <TableRow>
+                                    <TableCell colSpan={8} align="center" sx={{ py: 3, color: "#6b7280" }}>
+                                        No bookings found.
+                                    </TableCell>
+                                </TableRow>
+                            ) : null}
                         </TableBody>
                     </Table>
                 </TableContainer>
@@ -326,53 +363,18 @@ export default function BookingManagement() {
                                 <Typography sx={{ fontWeight: 600 }}>{selectedBooking.airline}</Typography>
                             </Box>
                             <Box>
-                                <Typography sx={{ fontSize: 12, color: "#6b7280", fontWeight: 600, mb: 0.5 }}>Seats</Typography>
-                                <Typography sx={{ fontWeight: 600 }}>{selectedBooking.seats}</Typography>
+                                <Typography sx={{ fontSize: 12, color: "#6b7280", fontWeight: 600, mb: 0.5 }}>PNR</Typography>
+                                <Typography sx={{ fontWeight: 600 }}>{selectedBooking.pnr || "-"}</Typography>
                             </Box>
                             <Box>
                                 <Typography sx={{ fontSize: 12, color: "#6b7280", fontWeight: 600, mb: 0.5 }}>Amount</Typography>
-                                <Typography sx={{ fontWeight: 600, fontSize: 18, color: "#0d9488" }}>{selectedBooking.amount}</Typography>
+                                <Typography sx={{ fontWeight: 600, fontSize: 18, color: "#0d9488" }}>{selectedBooking.amount} {selectedBooking.currency}</Typography>
                             </Box>
                         </Box>
                     )}
                 </DialogContent>
                 <DialogActions>
                     <Button onClick={() => setDetailsDialog(false)}>Close</Button>
-                </DialogActions>
-            </Dialog>
-
-            {/* Edit Status Dialog */}
-            <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="xs" fullWidth>
-                <DialogTitle sx={{ fontWeight: 700, backgroundColor: "#f9fafb", borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
-                    Update Booking Status
-                </DialogTitle>
-                <DialogContent sx={{ pt: 3 }}>
-                    <Typography sx={{ mb: 2, fontWeight: 600 }}>
-                        Booking: {selectedBooking?.id}
-                    </Typography>
-                    <TextField
-                        select
-                        fullWidth
-                        label="New Status"
-                        defaultValue={selectedBooking?.status}
-                        onChange={(e) => handleUpdateStatus(e.target.value)}
-                        sx={{
-                            "& .MuiOutlinedInput-root": {
-                                borderRadius: "12px",
-                            },
-                        }}
-                    >
-                        <MenuItem value="Completed">Completed</MenuItem>
-                        <MenuItem value="Pending">Pending</MenuItem>
-                        <MenuItem value="Processing">Processing</MenuItem>
-                        <MenuItem value="Cancelled">Cancelled</MenuItem>
-                    </TextField>
-                </DialogContent>
-                <DialogActions sx={{ p: 2, borderTop: "1px solid rgba(0,0,0,0.05)" }}>
-                    <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
-                    <Button variant="contained" sx={{ background: "#0d9488" }}>
-                        Update
-                    </Button>
                 </DialogActions>
             </Dialog>
         </Box>

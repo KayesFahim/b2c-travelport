@@ -1,7 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { AccessRole } from "@prisma/client";
 import { prisma } from "@/server/prisma";
-import { getSessionUser } from "@/server/auth-session";
+import { ensureSuperAdminBootstrap } from "@/server/admin-bootstrap";
+import { getAdminSessionUser } from "@/server/admin-session";
 
 export type Actor = {
     id: number;
@@ -40,32 +41,34 @@ export function canManageTeamAccess(actor: Actor | null): boolean {
     return actor.role === AccessRole.SUPER_ADMIN;
 }
 
-export function isProtectedSuperAdmin(user: { admin: boolean; role: AccessRole }): boolean {
-    return user.admin === true && user.role === AccessRole.SUPER_ADMIN;
+export function isProtectedSuperAdmin(user: { role: AccessRole }): boolean {
+    return user.role === AccessRole.SUPER_ADMIN;
 }
 
 export async function getActor(req: NextApiRequest): Promise<Actor | null> {
-    const session = await getSessionUser(req);
+    await ensureSuperAdminBootstrap();
+
+    const session = await getAdminSessionUser(req);
     if (!session?.id) return null;
 
-    const user = await prisma.user.findUnique({
+    const user = await prisma.adminUser.findUnique({
         where: { id: session.id },
         select: {
             id: true,
             email: true,
             name: true,
-            admin: true,
             role: true,
+            isActive: true,
         },
     });
 
-    if (!user) return null;
+    if (!user || !user.isActive) return null;
 
     return {
         id: user.id,
         email: user.email,
         name: user.name || "",
-        admin: user.admin,
+        admin: true,
         role: user.role,
     };
 }

@@ -30,6 +30,8 @@ import TuneIcon from "@mui/icons-material/Tune";
 import GroupIcon from "@mui/icons-material/Group";
 import secureLocalStorage from "react-secure-storage";
 
+const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
+
 const sectionStyle = {
     borderRadius: "16px",
     border: "1px solid rgba(0,0,0,0.08)",
@@ -38,11 +40,7 @@ const sectionStyle = {
 
 export default function AdminSettings() {
     const getAuthHeaders = () => {
-        const token = String(
-            secureLocalStorage.getItem("access_token") ||
-            secureLocalStorage.getItem("flyjatt_booking_auth_token") ||
-            ""
-        ).trim();
+        const token = String(secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) || "").trim();
         return token ? { Authorization: `Bearer ${token}` } : {};
     };
 
@@ -110,7 +108,7 @@ export default function AdminSettings() {
         try {
             setTeamLoading(true);
             const [meRes, usersRes] = await Promise.all([
-                fetch("/api/auth/myaccount", {
+                fetch("/api/admin/me", {
                     credentials: "include",
                     headers: {
                         ...getAuthHeaders(),

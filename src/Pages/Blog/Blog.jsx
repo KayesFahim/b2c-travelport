@@ -21,57 +21,6 @@ const categories = [
     "Travel Tech",
 ];
 
-const FALLBACK_POSTS = [
-    {
-        id: "fallback-1",
-        title: "How to Read Fare Rules Before You Book",
-        tag: "Fare Rules",
-        date: "March 18, 2026",
-        imageUrl:
-            "https://images.unsplash.com/photo-1529074963764-98f45c47344b?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        id: "fallback-2",
-        title: "Best Time Windows for Lower International Fares",
-        tag: "Flight Tips",
-        date: "March 15, 2026",
-        imageUrl:
-            "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        id: "fallback-3",
-        title: "Transit Strategy: Short vs Long Connection",
-        tag: "Travel Tech",
-        date: "March 12, 2026",
-        imageUrl:
-            "https://images.unsplash.com/photo-1474302770737-173ee21bab63?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        id: "fallback-4",
-        title: "Baggage Policy Differences Across Major Carriers",
-        tag: "Airline Updates",
-        date: "March 10, 2026",
-        imageUrl:
-            "https://images.unsplash.com/photo-1517479149777-5f3b1511d5ad?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        id: "fallback-5",
-        title: "Multi-City Booking: Mistakes That Cost More",
-        tag: "Flight Tips",
-        date: "March 8, 2026",
-        imageUrl:
-            "https://images.unsplash.com/photo-1504196606672-aef5c9cefc92?auto=format&fit=crop&w=1200&q=80",
-    },
-    {
-        id: "fallback-6",
-        title: "Booking Confidence: What to Verify Pre-Ticketing",
-        tag: "Travel Tech",
-        date: "March 5, 2026",
-        imageUrl:
-            "https://images.unsplash.com/photo-1512374382149-233c42b6a83b?auto=format&fit=crop&w=1200&q=80",
-    },
-];
-
 function normalizePost(post, index) {
     const createdAt = post?.createdAt ? new Date(post.createdAt) : null;
     const isValidDate = createdAt instanceof Date && !Number.isNaN(createdAt.getTime());
@@ -91,7 +40,8 @@ function normalizePost(post, index) {
 }
 
 const Blog = () => {
-    const [posts, setPosts] = useState(FALLBACK_POSTS);
+    const [posts, setPosts] = useState([]);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         let cancelled = false;
@@ -100,12 +50,15 @@ const Blog = () => {
             .then((r) => r.json())
             .then((data) => {
                 if (cancelled) return;
-                if (Array.isArray(data) && data.length > 0) {
-                    setPosts(data.map(normalizePost));
-                }
+                setPosts(Array.isArray(data) ? data.map(normalizePost) : []);
             })
             .catch(() => {
-                // Keep fallback posts.
+                if (cancelled) return;
+                setPosts([]);
+            })
+            .finally(() => {
+                if (cancelled) return;
+                setLoading(false);
             });
 
         return () => {
@@ -113,7 +66,7 @@ const Blog = () => {
         };
     }, []);
 
-    const featuredPost = useMemo(() => posts[0] || FALLBACK_POSTS[0], [posts]);
+    const featuredPost = useMemo(() => posts[0] || null, [posts]);
 
     return (
         <Box sx={{ minHeight: "100%" }}>
@@ -196,60 +149,79 @@ const Blog = () => {
 
                 <Grid container spacing={3}>
                     <Grid item xs={12} md={7}>
-                        <Card
-                            sx={{
-                                height: "100%",
-                                borderRadius: "20px",
-                                overflow: "hidden",
-                                border: "1px solid rgba(0,154,214,0.14)",
-                                boxShadow: "0 16px 30px rgba(15,23,42,0.06)",
-                            }}
-                        >
-                            <Box
-                                component="img"
-                                src={featuredPost.imageUrl}
-                                alt={featuredPost.title}
-                                sx={{ width: "100%", height: { xs: 220, md: 320 }, objectFit: "cover" }}
-                            />
-                            <CardContent sx={{ p: { xs: 2.2, md: 3 } }}>
-                                <Chip
-                                    label="Featured"
-                                    size="small"
-                                    sx={{
-                                        mb: 1.2,
-                                        bgcolor: "rgba(0,154,214,0.14)",
-                                        color: "var(--primary-color)",
-                                        fontWeight: 700,
-                                    }}
+                        {featuredPost ? (
+                            <Card
+                                sx={{
+                                    height: "100%",
+                                    borderRadius: "20px",
+                                    overflow: "hidden",
+                                    border: "1px solid rgba(0,154,214,0.14)",
+                                    boxShadow: "0 16px 30px rgba(15,23,42,0.06)",
+                                }}
+                            >
+                                <Box
+                                    component="img"
+                                    src={featuredPost.imageUrl}
+                                    alt={featuredPost.title}
+                                    sx={{ width: "100%", height: { xs: 220, md: 320 }, objectFit: "cover" }}
                                 />
-                                <Typography
-                                    sx={{
-                                        fontSize: { xs: "22px", md: "30px" },
-                                        fontWeight: 800,
-                                        color: "var(--flight-color)",
-                                        lineHeight: 1.25,
-                                        mb: 1.2,
-                                    }}
-                                >
-                                    {featuredPost.title}
+                                <CardContent sx={{ p: { xs: 2.2, md: 3 } }}>
+                                    <Chip
+                                        label="Featured"
+                                        size="small"
+                                        sx={{
+                                            mb: 1.2,
+                                            bgcolor: "rgba(0,154,214,0.14)",
+                                            color: "var(--primary-color)",
+                                            fontWeight: 700,
+                                        }}
+                                    />
+                                    <Typography
+                                        sx={{
+                                            fontSize: { xs: "22px", md: "30px" },
+                                            fontWeight: 800,
+                                            color: "var(--flight-color)",
+                                            lineHeight: 1.25,
+                                            mb: 1.2,
+                                        }}
+                                    >
+                                        {featuredPost.title}
+                                    </Typography>
+                                    <Typography sx={{ color: "var(--text-color)", mb: 2 }}>
+                                        {featuredPost.excerpt ||
+                                            "A practical guide to route selection, fare comparison, baggage checks, and timing rules before final ticketing."}
+                                    </Typography>
+                                    <Button
+                                        endIcon={<ArrowOutwardRoundedIcon />}
+                                        sx={{
+                                            color: "var(--primary-color)",
+                                            fontWeight: 700,
+                                            px: 0,
+                                            "&:hover": { bgcolor: "transparent", color: "var(--primary-button)" },
+                                        }}
+                                    >
+                                        Read story
+                                    </Button>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <Card
+                                sx={{
+                                    height: "100%",
+                                    borderRadius: "20px",
+                                    border: "1px solid rgba(0,154,214,0.14)",
+                                    boxShadow: "0 16px 30px rgba(15,23,42,0.06)",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    p: 3,
+                                }}
+                            >
+                                <Typography sx={{ color: "var(--text-color)", textAlign: "center" }}>
+                                    {loading ? "Loading blog posts..." : "No blog posts available yet."}
                                 </Typography>
-                                <Typography sx={{ color: "var(--text-color)", mb: 2 }}>
-                                    {featuredPost.excerpt ||
-                                        "A practical guide to route selection, fare comparison, baggage checks, and timing rules before final ticketing."}
-                                </Typography>
-                                <Button
-                                    endIcon={<ArrowOutwardRoundedIcon />}
-                                    sx={{
-                                        color: "var(--primary-color)",
-                                        fontWeight: 700,
-                                        px: 0,
-                                        "&:hover": { bgcolor: "transparent", color: "var(--primary-button)" },
-                                    }}
-                                >
-                                    Read story
-                                </Button>
-                            </CardContent>
-                        </Card>
+                            </Card>
+                        )}
                     </Grid>
 
                     <Grid item xs={12} md={5}>
@@ -295,6 +267,20 @@ const Blog = () => {
                                     </Box>
                                 </Card>
                             ))}
+                            {!loading && posts.length <= 1 ? (
+                                <Card
+                                    sx={{
+                                        borderRadius: "16px",
+                                        border: "1px solid rgba(0,154,214,0.14)",
+                                        boxShadow: "0 8px 20px rgba(15,23,42,0.05)",
+                                        p: 2,
+                                    }}
+                                >
+                                    <Typography sx={{ color: "var(--text-color)" }}>
+                                        Add more blog posts from admin to populate this section.
+                                    </Typography>
+                                </Card>
+                            ) : null}
                         </Stack>
                     </Grid>
                 </Grid>
@@ -314,58 +300,64 @@ const Blog = () => {
                         Fresh travel intelligence from fare behavior to booking operations.
                     </Typography>
 
-                    <Grid container spacing={3}>
-                        {posts.map((post) => (
-                            <Grid item xs={12} sm={6} md={4} key={post.id}>
-                                <Card
-                                    sx={{
-                                        height: "100%",
-                                        borderRadius: "16px",
-                                        overflow: "hidden",
-                                        border: "1px solid rgba(0,154,214,0.14)",
-                                        boxShadow: "0 12px 24px rgba(15,23,42,0.05)",
-                                    }}
-                                >
-                                    <Box
-                                        component="img"
-                                        src={post.imageUrl}
-                                        alt={post.title}
-                                        sx={{ width: "100%", height: 190, objectFit: "cover" }}
-                                    />
-                                    <CardContent>
-                                        <Typography sx={{ fontSize: "12px", color: "var(--text-color)", mb: 0.8 }}>
-                                            {post.date} · {post.tag}
-                                        </Typography>
-                                        <Typography
-                                            sx={{
-                                                color: "var(--flight-color)",
-                                                fontWeight: 700,
-                                                lineHeight: 1.35,
-                                                fontSize: "17px",
-                                                mb: 1.2,
-                                            }}
-                                        >
-                                            {post.title}
-                                        </Typography>
-                                        <Button
-                                            endIcon={<ArrowOutwardRoundedIcon />}
-                                            sx={{
-                                                px: 0,
-                                                color: "var(--primary-color)",
-                                                fontWeight: 700,
-                                                "&:hover": {
-                                                    bgcolor: "transparent",
-                                                    color: "var(--primary-button)",
-                                                },
-                                            }}
-                                        >
-                                            Read more
-                                        </Button>
-                                    </CardContent>
-                                </Card>
-                            </Grid>
-                        ))}
-                    </Grid>
+                    {loading ? (
+                        <Typography sx={{ color: "var(--text-color)" }}>Loading latest posts...</Typography>
+                    ) : posts.length === 0 ? (
+                        <Typography sx={{ color: "var(--text-color)" }}>No blog posts available yet.</Typography>
+                    ) : (
+                        <Grid container spacing={3}>
+                            {posts.map((post) => (
+                                <Grid item xs={12} sm={6} md={4} key={post.id}>
+                                    <Card
+                                        sx={{
+                                            height: "100%",
+                                            borderRadius: "16px",
+                                            overflow: "hidden",
+                                            border: "1px solid rgba(0,154,214,0.14)",
+                                            boxShadow: "0 12px 24px rgba(15,23,42,0.05)",
+                                        }}
+                                    >
+                                        <Box
+                                            component="img"
+                                            src={post.imageUrl}
+                                            alt={post.title}
+                                            sx={{ width: "100%", height: 190, objectFit: "cover" }}
+                                        />
+                                        <CardContent>
+                                            <Typography sx={{ fontSize: "12px", color: "var(--text-color)", mb: 0.8 }}>
+                                                {post.date} · {post.tag}
+                                            </Typography>
+                                            <Typography
+                                                sx={{
+                                                    color: "var(--flight-color)",
+                                                    fontWeight: 700,
+                                                    lineHeight: 1.35,
+                                                    fontSize: "17px",
+                                                    mb: 1.2,
+                                                }}
+                                            >
+                                                {post.title}
+                                            </Typography>
+                                            <Button
+                                                endIcon={<ArrowOutwardRoundedIcon />}
+                                                sx={{
+                                                    px: 0,
+                                                    color: "var(--primary-color)",
+                                                    fontWeight: 700,
+                                                    "&:hover": {
+                                                        bgcolor: "transparent",
+                                                        color: "var(--primary-button)",
+                                                    },
+                                                }}
+                                            >
+                                                Read more
+                                            </Button>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    )}
                 </Box>
             </Container>
         </Box>

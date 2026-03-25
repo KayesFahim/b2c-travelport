@@ -1,4 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { prisma } from "../../src/server/prisma";
+import { sendEmail } from "../../src/server/email/mailer";
+import { buildContactSubmissionTemplate } from "../../src/server/email/templates";
 
 type ContactBody = {
   name?: string;
@@ -11,6 +14,17 @@ type ContactBody = {
 type ContactResponse = {
   message: string;
   receivedAt?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  supportHours?: string;
+};
+
+type ContactSettings = {
+  email: string;
+  phone: string;
+  address: string;
+  supportHours: string;
 };
 
 function isValidEmail(value: string): boolean {
@@ -22,14 +36,80 @@ function isValidPhone(value: string): boolean {
   return /^\d{7,15}$/.test(cleaned);
 }
 
-export default function handler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ContactResponse>
 ) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ message: "Method not allowed" });
+  if (req.method === "GET") {
+    return handleGet(req, res);
   }
+
+  if (req.method === "POST") {
+    return handlePost(req, res);
+  }
+
+  res.setHeader("Allow", "GET, POST");
+  return res.status(405).json({ message: "Method not allowed" });
+}
+
+async function readContactSettings(): Promise<ContactSettings> {
+  try {
+    const rows = await prisma.siteSettings.findMany({
+      where: {
+        OR: [{ section: "contact" }, { section: "homepage" }],
+      },
+    });
+
+    const settings: Record<string, string> = {};
+    rows.forEach((row) => {
+      settings[`${row.section}.${row.key}`] = String(row.value ?? "");
+    });
+
+    return {
+      email:
+        settings["contact.email"] ||
+        settings["homepage.contactEmail"] ||
+        String(process.env.CONTACT_EMAIL || "info@flyjatt.com"),
+      phone:
+        settings["contact.phone"] ||
+        settings["homepage.contactPhone"] ||
+        "+88 01736-987906",
+      address:
+        settings["contact.address"] ||
+        "DCC7, North Ibrahimpur, Kafrul, Dhaka-1206, Bangladesh",
+      supportHours:
+        settings["contact.supportHours"] ||
+        "24/7 online support",
+    };
+  } catch {
+    return {
+      email: String(process.env.CONTACT_EMAIL || "info@flyjatt.com"),
+      phone: "+88 01736-987906",
+      address: "DCC7, North Ibrahimpur, Kafrul, Dhaka-1206, Bangladesh",
+      supportHours: "24/7 online support",
+    };
+  }
+}
+
+async function handleGet(
+  _req: NextApiRequest,
+  res: NextApiResponse<ContactResponse>
+) {
+  const contact = await readContactSettings();
+  return res.status(200).json({
+    message: "Contact info loaded.",
+    email: contact.email,
+    phone: contact.phone,
+    address: contact.address,
+    supportHours: contact.supportHours,
+  });
+}
+
+async function handlePost(
+  req: NextApiRequest,
+  res: NextApiResponse<ContactResponse>
+) {
+  const contact = await readContactSettings();
 
   const body = (req.body ?? {}) as ContactBody;
   const name = String(body.name ?? "").trim();
@@ -65,6 +145,23 @@ export default function handler(
     subject,
     message,
     receivedAt: new Date().toISOString(),
+  });
+
+  const template = buildContactSubmissionTemplate({
+    name,
+    email,
+    phone,
+    subjectLine: subject,
+    message,
+  });
+
+  await sendEmail({
+    to: contact.email,
+    sender: "contact",
+    replyTo: email,
+    subject: template.subject,
+    html: template.html,
+    text: template.text,
   });
 
   return res.status(200).json({

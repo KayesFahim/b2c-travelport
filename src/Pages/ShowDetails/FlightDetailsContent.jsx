@@ -31,7 +31,7 @@ import { extractUnifiedPenaltyRows } from "../../utils/flightPolicyUtils";
 import { resolveAirlineName, resolveAirportInfo } from "../../utils/travelLookup";
 
 const FLIGHT_DETAILS_FONT_FAMILY = '"Manrope", sans-serif';
-const SHOW_BRAND_ATTRIBUTES_IN_FLIGHT_INFO = false;
+const SHOW_BRAND_ATTRIBUTES_IN_FLIGHT_INFO = true;
 
 const getValueByKeys = (obj, keys = []) => {
   for (const key of keys) {
@@ -299,9 +299,9 @@ const extractSegmentAmenities = (segment) => {
     ]),
     ...(containerObj
       ? getArrayByKeys(containerObj, [
-          "universalProductAttributes",
-          "UniversalProductAttributes",
-        ])
+        "universalProductAttributes",
+        "UniversalProductAttributes",
+      ])
       : []),
   ];
   universal.forEach((item) => {
@@ -435,7 +435,16 @@ const normalizeBrandFeatures = (leg, offer) => {
     toText(getValueByKeys(matchedRawBrand, ["tier", "Tier"])) ||
     "";
 
-  return { brandName, brandCode, tier, attributes };
+  const imageUrlCandidates = [
+    ...getArrayByKeys(legFeatures, ["ImageURL", "imageURL", "imageUrl"]),
+    ...getArrayByKeys(matchedRawBrand, ["ImageURL", "imageURL", "imageUrl"]),
+    ...topLevelFeatureCandidates.flatMap((item) =>
+      getArrayByKeys(item, ["ImageURL", "imageURL", "imageUrl"])
+    ),
+  ];
+  const imageUrl = toText(imageUrlCandidates.find((u) => toText(u).startsWith("http")));
+
+  return { brandName, brandCode, tier, attributes, imageUrl };
 };
 
 const normalizeBagEntries = (bagSource) => {
@@ -1129,13 +1138,12 @@ const FlightDetails = ({ data, compactLayout = false, amenityIconsOnly = false }
             legDurationRaw !== undefined && legDurationRaw !== null && String(legDurationRaw).trim()
               ? legDurationRaw
               : summedSegmentDuration > 0
-              ? summedSegmentDuration
-              : null
+                ? summedSegmentDuration
+                : null
           );
           const totalLegJourneyDurationLabel = `Total Leg Journey Duration: ${totalDuration}`;
-          const legSummary = `Leg ${legIndex + 1} • ${dep || "DEP"} \u2192 ${
-            arr || "ARR"
-          } • ${getStopText(segmentList.length)} • ${totalDuration}`;
+          const legSummary = `Leg ${legIndex + 1} • ${dep || "DEP"} \u2192 ${arr || "ARR"
+            } • ${getStopText(segmentList.length)} • ${totalDuration}`;
           const brandDetails = normalizeBrandFeatures(leg, data);
           const legAmenities = extractLegAmenities(segmentList);
 
@@ -1870,21 +1878,74 @@ const FlightDetails = ({ data, compactLayout = false, amenityIconsOnly = false }
                             flexWrap: "wrap",
                           }}
                         >
-                          <Typography
-                            sx={{
-                              fontSize: "12px",
-                              color: "#203247",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {brandDetails.brandName}
-                          </Typography>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {brandDetails.imageUrl && (
+                              <Tooltip
+                                arrow
+                                placement="right"
+                                title={
+                                  <Box
+                                    component="img"
+                                    src={brandDetails.imageUrl}
+                                    alt={brandDetails.brandName}
+                                    sx={{
+                                      width: "300px",
+                                      height: "300px",
+                                      objectFit: "contain",
+                                      borderRadius: "8px",
+                                      background: "#fff",
+                                      display: "block",
+                                    }}
+                                  />
+                                }
+                                componentsProps={{
+                                  tooltip: {
+                                    sx: {
+                                      bgcolor: "#fff",
+                                      border: "1px solid #DCE7F2",
+                                      borderRadius: "10px",
+                                      boxShadow: "0 8px 32px rgba(21,55,91,0.18)",
+                                      p: "6px",
+                                      maxWidth: "none",
+                                    },
+                                  },
+                                  arrow: {
+                                    sx: { color: "#DCE7F2" },
+                                  },
+                                }}
+                              >
+                                <Box
+                                  component="img"
+                                  src={brandDetails.imageUrl}
+                                  alt={brandDetails.brandName}
+                                  sx={{
+                                    height: "36px",
+                                    maxWidth: "80px",
+                                    objectFit: "contain",
+                                    borderRadius: "6px",
+                                    border: "1px solid #DCE7F2",
+                                    background: "#fff",
+                                    p: "2px",
+                                    cursor: "zoom-in",
+                                  }}
+                                />
+                              </Tooltip>
+                            )}
+                            <Typography
+                              sx={{
+                                fontSize: "12px",
+                                color: "#203247",
+                                fontWeight: 700,
+                              }}
+                            >
+                              {brandDetails.brandName}
+                            </Typography>
+                          </Box>
                           {brandDetails.attributes.length > 0 && (
                             <Chip
                               size="small"
-                              label={`${brandDetails.attributes.length} benefit${
-                                brandDetails.attributes.length > 1 ? "s" : ""
-                              }`}
+                              label={`${brandDetails.attributes.length} benefit${brandDetails.attributes.length > 1 ? "s" : ""
+                                }`}
                               sx={{
                                 height: "22px",
                                 borderRadius: "999px",
@@ -1953,110 +2014,110 @@ const FlightDetails = ({ data, compactLayout = false, amenityIconsOnly = false }
                   )}
 
                   {!compactLayout && (
-                  <Box sx={{ ...sectionCardSx, alignSelf: "start" }}>
-                    <Typography
-                      sx={{
-                        fontSize: "12px",
-                        color: "#193A5A",
-                        fontWeight: 700,
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "6px",
-                        mb: "8px",
-                      }}
-                    >
-                      <LuggageRounded sx={{ fontSize: "16px", color: "var(--primary-button)" }} />
-                      Baggage
-                    </Typography>
-                    {baggageRows.length > 0 ? (
-                      <Box
+                    <Box sx={{ ...sectionCardSx, alignSelf: "start" }}>
+                      <Typography
                         sx={{
-                          display: "grid",
-                          gridTemplateColumns: compactLayout
-                            ? "1fr"
-                            : {
+                          fontSize: "12px",
+                          color: "#193A5A",
+                          fontWeight: 700,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          mb: "8px",
+                        }}
+                      >
+                        <LuggageRounded sx={{ fontSize: "16px", color: "var(--primary-button)" }} />
+                        Baggage
+                      </Typography>
+                      {baggageRows.length > 0 ? (
+                        <Box
+                          sx={{
+                            display: "grid",
+                            gridTemplateColumns: compactLayout
+                              ? "1fr"
+                              : {
                                 xs: "1fr",
                                 md: `repeat(${baggageColumnCount}, minmax(0, 1fr))`,
                               },
-                          gap: "8px",
-                        }}
-                      >
-                        {baggageRows.map((row, rowIndex) => (
-                          <Box
-                            key={`${row.paxType}-${rowIndex}`}
-                            sx={{
-                              border: "1px solid #E3EBF3",
-                              borderRadius: "9px",
-                              p: "8px",
-                              background: "#FBFDFF",
-                            }}
-                          >
-                            <Typography
-                              sx={{
-                                fontSize: "11px",
-                                color: "#2B3D52",
-                                fontWeight: 700,
-                                mb: "5px",
-                              }}
-                            >
-                              {row.paxType} x{row.paxCount}
-                            </Typography>
+                            gap: "8px",
+                          }}
+                        >
+                          {baggageRows.map((row, rowIndex) => (
                             <Box
+                              key={`${row.paxType}-${rowIndex}`}
                               sx={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: "8px",
+                                border: "1px solid #E3EBF3",
+                                borderRadius: "9px",
+                                p: "8px",
+                                background: "#FBFDFF",
                               }}
                             >
-                              <Typography sx={{ fontSize: "11px", color: "#5B6F84", fontWeight: 600 }}>
-                                Checked
-                              </Typography>
                               <Typography
                                 sx={{
                                   fontSize: "11px",
                                   color: "#2B3D52",
                                   fontWeight: 700,
-                                  textAlign: "right",
-                                  overflowWrap: "anywhere",
-                                  minWidth: 0,
+                                  mb: "5px",
                                 }}
                               >
-                                {row.checked}
+                                {row.paxType} x{row.paxCount}
                               </Typography>
-                            </Box>
-                            <Box
-                              sx={{
-                                display: "flex",
-                                justifyContent: "space-between",
-                                gap: "8px",
-                                mt: "2px",
-                              }}
-                            >
-                              <Typography sx={{ fontSize: "11px", color: "#5B6F84", fontWeight: 600 }}>
-                                Cabin
-                              </Typography>
-                              <Typography
+                              <Box
                                 sx={{
-                                  fontSize: "11px",
-                                  color: "#2B3D52",
-                                  fontWeight: 700,
-                                  textAlign: "right",
-                                  overflowWrap: "anywhere",
-                                  minWidth: 0,
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
                                 }}
                               >
-                                {row.cabin}
-                              </Typography>
+                                <Typography sx={{ fontSize: "11px", color: "#5B6F84", fontWeight: 600 }}>
+                                  Checked
+                                </Typography>
+                                <Typography
+                                  sx={{
+                                    fontSize: "11px",
+                                    color: "#2B3D52",
+                                    fontWeight: 700,
+                                    textAlign: "right",
+                                    overflowWrap: "anywhere",
+                                    minWidth: 0,
+                                  }}
+                                >
+                                  {row.checked}
+                                </Typography>
+                              </Box>
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  justifyContent: "space-between",
+                                  gap: "8px",
+                                  mt: "2px",
+                                }}
+                              >
+                                <Typography sx={{ fontSize: "11px", color: "#5B6F84", fontWeight: 600 }}>
+                                  Cabin
+                                </Typography>
+                                <Typography
+                                  sx={{
+                                    fontSize: "11px",
+                                    color: "#2B3D52",
+                                    fontWeight: 700,
+                                    textAlign: "right",
+                                    overflowWrap: "anywhere",
+                                    minWidth: 0,
+                                  }}
+                                >
+                                  {row.cabin}
+                                </Typography>
+                              </Box>
                             </Box>
-                          </Box>
-                        ))}
-                      </Box>
-                    ) : (
-                      <Typography sx={{ fontSize: "11px", color: "#6A7E94" }}>
-                        Baggage information is not available for this fare.
-                      </Typography>
-                    )}
-                  </Box>
+                          ))}
+                        </Box>
+                      ) : (
+                        <Typography sx={{ fontSize: "11px", color: "#6A7E94" }}>
+                          Baggage information is not available for this fare.
+                        </Typography>
+                      )}
+                    </Box>
                   )}
                 </Box>
               )}

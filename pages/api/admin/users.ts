@@ -18,6 +18,7 @@ type ManagedUser = {
     name: string;
     admin: boolean;
     role: AccessRole;
+    isActive: boolean;
     createdAt: string;
     updatedAt: string;
 };
@@ -43,8 +44,8 @@ function asManagedUser(user: {
     id: number;
     email: string;
     name: string | null;
-    admin: boolean;
     role: AccessRole;
+    isActive: boolean;
     createdAt: Date;
     updatedAt: Date;
 }): ManagedUser {
@@ -52,15 +53,16 @@ function asManagedUser(user: {
         id: user.id,
         email: user.email,
         name: user.name || "",
-        admin: user.admin,
+        admin: true,
         role: user.role,
+        isActive: user.isActive,
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
     };
 }
 
 async function getSuperAdminCount(): Promise<number> {
-    return prisma.user.count({ where: { role: AccessRole.SUPER_ADMIN, admin: true } });
+    return prisma.adminUser.count({ where: { role: AccessRole.SUPER_ADMIN } });
 }
 
 export default async function handler(
@@ -77,15 +79,14 @@ export default async function handler(
             return deny(res, "Only Super Admin/Admin/Manager can view team users");
         }
 
-        const users = await prisma.user.findMany({
-            where: { admin: true },
+        const users = await prisma.adminUser.findMany({
             orderBy: [{ role: "asc" }, { createdAt: "desc" }],
             select: {
                 id: true,
                 email: true,
                 name: true,
-                admin: true,
                 role: true,
+                isActive: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -116,26 +117,26 @@ export default async function handler(
             });
         }
 
-        const existing = await prisma.user.findUnique({ where: { email } });
+        const existing = await prisma.adminUser.findUnique({ where: { email } });
         if (existing) {
             return res.status(409).json({ message: "User already exists for this email" });
         }
 
         const passwordHash = await bcrypt.hash(password, 10);
-        const user = await prisma.user.create({
+        const user = await prisma.adminUser.create({
             data: {
                 email,
                 name,
                 passwordHash,
-                admin: true,
                 role,
+                isActive: true,
             },
             select: {
                 id: true,
                 email: true,
                 name: true,
-                admin: true,
                 role: true,
+                isActive: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -154,12 +155,12 @@ export default async function handler(
             return res.status(400).json({ message: "User id is required" });
         }
 
-        const target = await prisma.user.findUnique({
+        const target = await prisma.adminUser.findUnique({
             where: { id: userId },
             select: {
                 id: true,
                 role: true,
-                admin: true,
+                isActive: true,
             },
         });
 
@@ -177,7 +178,7 @@ export default async function handler(
             name?: string;
             email?: string;
             role?: AccessRole;
-            admin?: boolean;
+            isActive?: boolean;
             passwordHash?: string;
         } = {};
 
@@ -201,7 +202,7 @@ export default async function handler(
                 });
             }
             nextData.role = role;
-            nextData.admin = true;
+            nextData.isActive = true;
         }
 
         if (req.body?.password !== undefined) {
@@ -212,15 +213,15 @@ export default async function handler(
             nextData.passwordHash = await bcrypt.hash(password, 10);
         }
 
-        const user = await prisma.user.update({
+        const user = await prisma.adminUser.update({
             where: { id: userId },
             data: nextData,
             select: {
                 id: true,
                 email: true,
                 name: true,
-                admin: true,
                 role: true,
+                isActive: true,
                 createdAt: true,
                 updatedAt: true,
             },
@@ -239,9 +240,9 @@ export default async function handler(
             return res.status(400).json({ message: "User id is required" });
         }
 
-        const target = await prisma.user.findUnique({
+        const target = await prisma.adminUser.findUnique({
             where: { id: userId },
-            select: { id: true, role: true, admin: true },
+            select: { id: true, role: true },
         });
 
         if (!target) {
@@ -254,7 +255,7 @@ export default async function handler(
             });
         }
 
-        await prisma.user.delete({ where: { id: userId } });
+        await prisma.adminUser.delete({ where: { id: userId } });
 
         const superAdminCount = await getSuperAdminCount();
         if (superAdminCount !== 1) {

@@ -6,6 +6,10 @@ import {
     Chip,
     CircularProgress,
     Container,
+    Dialog,
+    DialogActions,
+    DialogContent,
+    DialogTitle,
     Divider,
     Grid,
     Paper,
@@ -151,6 +155,211 @@ function adaptBookingForPdf(rawBooking) {
     ];
 }
 
+function AncillaryOfferingsDisplay({ data }) {
+    const flightSegmentMap = (() => {
+        const map = {};
+        const referenceLists = Array.isArray(data?.CatalogOfferingsAncillaryListResponse?.ReferenceList)
+            ? data.CatalogOfferingsAncillaryListResponse.ReferenceList
+            : [];
+        referenceLists.forEach((listItem) => {
+            const flights = Array.isArray(listItem?.Flight) ? listItem.Flight : [];
+            flights.forEach((flight) => {
+                const id = toText(flight?.id);
+                if (!id) return;
+                map[id] = {
+                    from: toText(flight?.Departure?.location, "-"),
+                    to: toText(flight?.Arrival?.location, "-"),
+                };
+            });
+        });
+        return map;
+    })();
+
+    const buildFullLegLabel = (refs) => {
+        const orderedRefs = Array.from(new Set((Array.isArray(refs) ? refs : []).map((ref) => toText(ref)).filter(Boolean)));
+        const segments = orderedRefs.map((ref) => flightSegmentMap[ref]).filter(Boolean);
+        if (!segments.length) return "All Routes";
+
+        const points = [];
+        segments.forEach((segment, index) => {
+            if (index === 0 && segment.from) points.push(segment.from);
+            if (segment.to) points.push(segment.to);
+        });
+
+        return points.filter(Boolean).join(" -> ") || "All Routes";
+    };
+
+    const offerings = (() => {
+        if (!data) return [];
+
+        const fromAncillaryList = data?.CatalogOfferingsAncillaryListResponse?.CatalogOfferingsID;
+        if (Array.isArray(fromAncillaryList)) {
+            const flattened = [];
+            for (const travelerBlock of fromAncillaryList) {
+                const travelerId = toText(travelerBlock?.id);
+                const travelerOffers = Array.isArray(travelerBlock?.CatalogOffering)
+                    ? travelerBlock.CatalogOffering
+                    : [];
+                travelerOffers.forEach((offer) => {
+                    flattened.push({
+                        travelerId,
+                        ...offer,
+                    });
+                });
+            }
+            if (flattened.length) return flattened;
+        }
+
+        const catalogOfferings =
+            data?.CatalogOfferingsResponse?.CatalogOfferings?.CatalogOffering ||
+            data?.CatalogOfferings?.CatalogOffering ||
+            data?.CatalogOffering;
+        if (Array.isArray(catalogOfferings)) return catalogOfferings;
+        if (catalogOfferings && typeof catalogOfferings === "object") return [catalogOfferings];
+        return [];
+    })();
+
+    if (!offerings.length) {
+        return (
+            <Typography sx={{ fontSize: 13, color: "#607890", py: 2, textAlign: "center" }}>
+                No ancillary offerings available for this booking.
+            </Typography>
+        );
+    }
+
+    const groupedByRoute = offerings.reduce((acc, offering, idx) => {
+        const products = Array.isArray(offering?.ProductOptions?.[0]?.Product)
+            ? offering.ProductOptions[0].Product
+            : [];
+        const primaryProduct = products[0] || {};
+        const ancillary = primaryProduct?.Ancillary || {};
+        const flightRefs = Array.isArray(ancillary?.FlightRef) ? ancillary.FlightRef : [];
+        const routeKey = buildFullLegLabel(flightRefs);
+
+        if (!acc[routeKey]) acc[routeKey] = [];
+        acc[routeKey].push({ offering, idx });
+        return acc;
+    }, {});
+
+    const orderedRoutes = Object.entries(groupedByRoute).sort((a, b) => a[0].localeCompare(b[0]));
+
+    const labeledRoutes = orderedRoutes.map(([route, rows], index, allRoutes) => {
+        const firstPoints = String(allRoutes[0]?.[0] || "").split(" -> ").map((item) => item.trim()).filter(Boolean);
+        const currentPoints = String(route || "").split(" -> ").map((item) => item.trim()).filter(Boolean);
+        const firstOrigin = firstPoints[0] || "";
+        const firstDestination = firstPoints[firstPoints.length - 1] || "";
+        const currentOrigin = currentPoints[0] || "";
+        const currentDestination = currentPoints[currentPoints.length - 1] || "";
+
+        let label = `Leg ${index + 1}`;
+        if (index === 0) {
+            label = "Outbound";
+        } else if (
+            firstOrigin &&
+            firstDestination &&
+            currentOrigin === firstDestination &&
+            currentDestination === firstOrigin
+        ) {
+            label = "Return";
+        }
+
+        return { route, rows, label };
+    });
+
+    return (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+            {labeledRoutes.map(({ route, rows, label }) => (
+                <Box key={`route-group-${route}`} sx={{ border: "1px solid #DCE8F4", borderRadius: "12px", p: 1.2, bgcolor: "#FAFDFF" }}>
+                    <Typography sx={{ fontWeight: 800, fontSize: 13, color: "#0f4b7d", mb: 1 }}>
+                        {label}: {route}
+                    </Typography>
+                    <Box sx={{ display: "flex", flexDirection: "column", gap: 1.1 }}>
+                        {rows.map(({ offering, idx }) => {
+                            const offerId = toText(offering?.id) || `off-${idx + 1}`;
+                            const travelerId = toText(offering?.travelerId);
+                            const products = Array.isArray(offering?.ProductOptions?.[0]?.Product)
+                                ? offering.ProductOptions[0].Product
+                                : [];
+                            const primaryProduct = products[0] || {};
+                            const ancillary = primaryProduct?.Ancillary || {};
+                            const descriptions = Array.isArray(ancillary?.Description)
+                                ? ancillary.Description
+                                : [];
+                            const primaryDescription =
+                                toText(descriptions?.[0]?.value) ||
+                                toText(ancillary?.Description?.value) ||
+                                toText(offering?.name || offering?.Name || offering?.description || offering?.Description) ||
+                                `Offering ${idx + 1}`;
+
+                            const price = offering?.Price || {};
+                            const termsAndConditions = offering?.TermsAndConditions || {};
+                            const currency =
+                                toText(price?.CurrencyCode?.value) || toText(price?.CurrencyCode) || "";
+                            const totalPrice = Number(price?.TotalPrice ?? price?.totalPrice ?? 0);
+                            const priceText = Number.isFinite(totalPrice) && totalPrice > 0
+                                ? `${totalPrice.toLocaleString()}${currency ? ` ${currency}` : ""}`
+                                : "N/A";
+                            const refundability =
+                                toText(termsAndConditions?.Refundability?.value) ||
+                                toText(termsAndConditions?.refundability?.value) ||
+                                "N/A";
+
+                            const flightRefs = Array.isArray(ancillary?.FlightRef)
+                                ? ancillary.FlightRef
+                                : [];
+                            const weight = ancillary?.Measurement?.[0];
+                            const weightText =
+                                weight && Number.isFinite(Number(weight?.value))
+                                    ? `${weight.value} ${toText(weight?.unit)}`
+                                    : "";
+
+                            return (
+                                <Box key={`anc-off-${route}-${idx}`} sx={{ border: "1px solid #E3E8EF", borderRadius: "10px", p: 1.2, bgcolor: "#fff" }}>
+                                    <Typography sx={{ fontWeight: 700, fontSize: 13, color: "#0f4b7d", mb: 0.8 }}>
+                                        {primaryDescription}
+                                    </Typography>
+                                    <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 0.7 }}>
+                                        <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                            Offer ID: <strong>{offerId}</strong>
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                            Price: <strong>{priceText}</strong>
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                            Type: <strong>{toText(ancillary?.["@type"], "N/A")}</strong>
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                            Quantity: <strong>{toText(primaryProduct?.Quantity, "1")}</strong>
+                                        </Typography>
+                                        <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                            Refundability: <strong>{refundability}</strong>
+                                        </Typography>
+                                        {weightText ? (
+                                            <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                                Allowance: <strong>{weightText}</strong>
+                                            </Typography>
+                                        ) : null}
+                                        {travelerId ? (
+                                            <Typography sx={{ fontSize: 12, color: "#15324f" }}>
+                                                Traveler: <strong>{travelerId}</strong>
+                                            </Typography>
+                                        ) : null}
+                                        {flightRefs.length ? (
+                                            <Typography sx={{ fontSize: 12, color: "#15324f", gridColumn: { xs: "1", md: "1 / span 2" } }}>
+                                                Flight Refs: <strong>{flightRefs.join(", ")}</strong>
+                                            </Typography>
+                                        ) : null}
+                                    </Box>
+                                </Box>
+                            );
+                        })}
+                    </Box>
+                </Box>
+            ))}
+        </Box>
+    );
+}
+
 export default function BookingDetailsPage() {
     const location = useLocation();
     const navigate = useNavigate();
@@ -194,6 +403,11 @@ export default function BookingDetailsPage() {
     const [ticketStatusOverride, setTicketStatusOverride] = useState("");
     const [issueMessage, setIssueMessage] = useState("");
     const [issueError, setIssueError] = useState("");
+
+    const [ancillaryLoading, setAncillaryLoading] = useState(false);
+    const [ancillaryData, setAncillaryData] = useState(null);
+    const [ancillaryOpen, setAncillaryOpen] = useState(false);
+    const [ancillaryError, setAncillaryError] = useState("");
 
     useEffect(() => {
         let cancelled = false;
@@ -319,6 +533,41 @@ export default function BookingDetailsPage() {
         return { bgcolor: "#F3F5F9", color: "#444" };
     })();
 
+    const handleShopAncillaries = async () => {
+        const shopPnr = toText(
+            booking?.locator ||
+            booking?.Locator ||
+            booking?.PNR ||
+            booking?.pnr ||
+            displayBooking?.PNR
+        );
+        if (!shopPnr) {
+            setAncillaryError("PNR/Locator not found for this booking.");
+            setAncillaryOpen(true);
+            return;
+        }
+        try {
+            setAncillaryLoading(true);
+            setAncillaryError("");
+            setAncillaryData(null);
+            const response = await fetch(
+                `/api/travelport/ancillary-shop-by-pnr?pnr=${encodeURIComponent(shopPnr)}`,
+                { method: "GET", credentials: "include" }
+            );
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.details || payload?.message || "Ancillary shop failed.");
+            }
+            setAncillaryData(payload);
+            setAncillaryOpen(true);
+        } catch (error) {
+            setAncillaryError(error instanceof Error ? error.message : "Ancillary shop failed.");
+            setAncillaryOpen(true);
+        } finally {
+            setAncillaryLoading(false);
+        }
+    };
+
     const handleIssueTicket = async () => {
         const issuePnr = toText(
             booking?.locator ||
@@ -429,16 +678,26 @@ export default function BookingDetailsPage() {
                                 </Typography>
                             </Box>
 
-                            {canIssueTicket && (
+                            <Box sx={{ display: "flex", gap: 1, flexWrap: "wrap" }}>
+                                {canIssueTicket && (
+                                    <Button
+                                        variant="contained"
+                                        onClick={handleIssueTicket}
+                                        disabled={issuingTicket}
+                                        sx={{ minWidth: 140 }}
+                                    >
+                                        {issuingTicket ? "Issuing..." : "Issue Ticket"}
+                                    </Button>
+                                )}
                                 <Button
-                                    variant="contained"
-                                    onClick={handleIssueTicket}
-                                    disabled={issuingTicket}
-                                    sx={{ minWidth: 140 }}
+                                    variant="outlined"
+                                    onClick={handleShopAncillaries}
+                                    disabled={ancillaryLoading}
+                                    sx={{ minWidth: 160 }}
                                 >
-                                    {issuingTicket ? "Issuing..." : "Issue Ticket"}
+                                    {ancillaryLoading ? <><CircularProgress size={14} sx={{ mr: 1 }} />Loading...</> : "Shop Ancillaries"}
                                 </Button>
-                            )}
+                            </Box>
                         </Box>
 
                         {issueMessage ? (
@@ -705,6 +964,26 @@ export default function BookingDetailsPage() {
                             </Box>
                         </Paper>
                     )}
+
+                    <Dialog open={ancillaryOpen} onClose={() => setAncillaryOpen(false)} maxWidth="md" fullWidth>
+                        <DialogTitle sx={{ fontWeight: 800, color: "#0f4b7d", fontSize: 16 }}>
+                            Ancillary Offerings — {pnr}
+                        </DialogTitle>
+                        <DialogContent dividers>
+                            {ancillaryError ? (
+                                <Alert severity="error">{ancillaryError}</Alert>
+                            ) : ancillaryData ? (
+                                <AncillaryOfferingsDisplay data={ancillaryData} />
+                            ) : (
+                                <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+                                    <CircularProgress />
+                                </Box>
+                            )}
+                        </DialogContent>
+                        <DialogActions>
+                            <Button onClick={() => setAncillaryOpen(false)}>Close</Button>
+                        </DialogActions>
+                    </Dialog>
 
                     <Paper sx={{ ...panelStyle, p: 1.4 }}>
                         <Typography sx={{ fontWeight: 800, color: "#0f4b7d", mb: 1, fontSize: 13 }}>
