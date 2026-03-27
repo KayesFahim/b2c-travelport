@@ -9,6 +9,14 @@ const nextConfig = {
   reactStrictMode: false,
   poweredByHeader: false,
   compress: true,
+  compiler:
+    process.env.NODE_ENV === "production"
+      ? {
+          removeConsole: {
+            exclude: ["error", "warn"],
+          },
+        }
+      : {},
   // Parent folder has its own package-lock.json; pin tracing + Turbopack to this app.
   outputFileTracingRoot: __dirname,
   outputFileTracingIncludes: {
@@ -30,8 +38,32 @@ const nextConfig = {
       "framer-motion",
     ],
   },
+  env: {
+    NEXT_PUBLIC_API_KEY: process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "",
+  },
   images: {
     formats: ["image/avif", "image/webp"],
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          { key: "X-DNS-Prefetch-Control", value: "on" },
+          {
+            key: "Permissions-Policy",
+            value: "camera=(), microphone=(), geolocation=()",
+          },
+        ],
+      },
+      {
+        source: "/api/:path*",
+        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
+      },
+    ];
   },
   webpack(config) {
     config.module.rules.push({

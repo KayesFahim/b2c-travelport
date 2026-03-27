@@ -873,6 +873,11 @@ const PreviewBooking = () => {
         : Array.isArray(bookingBody?.SeatSelections)
           ? bookingBody.SeatSelections
           : [],
+      ancillarySelections: Array.isArray(previewPayload?.ancillarySelections)
+        ? previewPayload.ancillarySelections
+        : Array.isArray(bookingBody?.AncillarySelections)
+          ? bookingBody.AncillarySelections
+          : [],
       adultCount: passengerCounts.adultCount,
       childCount: passengerCounts.childCount,
       infantCount: passengerCounts.infantCount,
@@ -1095,6 +1100,12 @@ const PreviewBooking = () => {
       }
       if (error?.status === 409 && error?.payload?.previousBooking) {
         const previous = error.payload.previousBooking || {};
+        const duplicateMessage =
+          toSafeText(error?.payload?.message) ||
+          "Duplicate booking blocked. Same flight/route/airline/date was already booked.";
+        const duplicateDetails =
+          toSafeText(error?.payload?.details) ||
+          "Previous booking returned instead of creating a duplicate booking.";
         const dailyCommittedCount = Number(error?.payload?.dailyCommittedCount || 0);
         const travelDate = previous?.travelDate || "N/A";
         const createdAt = previous?.createdAt
@@ -1103,12 +1114,12 @@ const PreviewBooking = () => {
         const result = await Swal.fire({
           icon: "info",
           title: "Duplicate Booking Blocked",
-          html: `A matching booking already exists, so a new booking session was not started.<br/><br/>Booking ID: <b>${previous?.id || "N/A"
+          html: `${duplicateMessage}<br/><small>${duplicateDetails}</small><br/><br/>Booking ID: <b>${previous?.id || "N/A"
             }</b><br/>Locator: <b>${previous?.locator || "N/A"}</b><br/>Reservation: <b>${previous?.reservationId || "N/A"
             }</b><br/>Route: <b>${previous?.routeKey || "N/A"}</b><br/>Airline: <b>${previous?.airlineCode || "N/A"
             }</b><br/>Travel date: <b>${travelDate}</b><br/>Booked at: <b>${createdAt}</b><br/>Today's committed bookings: <b>${dailyCommittedCount}</b>`,
           showCancelButton: true,
-          confirmButtonText: "Open Previous Booking",
+          confirmButtonText: "Go To This Booking",
           cancelButtonText: "Close",
           width: 640,
         });
@@ -1117,8 +1128,17 @@ const PreviewBooking = () => {
           const locator = String(previous?.locator || "").trim();
           const reservationId = String(previous?.reservationId || "").trim();
           const bookingId = String(previous?.id || "").trim();
-          const queryId = encodeURIComponent(bookingId || locator || reservationId || "");
-          navigate(`/my-account/bookingdetails?id=${queryId}`, {
+          const queryParts = [];
+          if (locator) {
+            queryParts.push(`pnr=${encodeURIComponent(locator)}`);
+          }
+          if (bookingId) {
+            queryParts.push(`id=${encodeURIComponent(bookingId)}`);
+          } else if (reservationId) {
+            queryParts.push(`id=${encodeURIComponent(reservationId)}`);
+          }
+          const queryString = queryParts.length ? `?${queryParts.join("&")}` : "";
+          navigate(`/bookingconfirmation${queryString}`, {
             state: {
               duplicateBooking: true,
               previousBooking: previous,

@@ -1,3 +1,11 @@
-# https://www.robotstxt.org/robotstxt.html
 User-agent: *
-Disallow:
+Allow: /
+Disallow: /api/
+Disallow: /admin/
+Disallow: /bookingdetails
+Disallow: /previewbooking
+Disallow: /bookingconfirmation
+Disallow: /selectedOffer
+Disallow: /onewaysearchresult
+
+Sitemap: https://www.flyjatt.com/sitemap.xml

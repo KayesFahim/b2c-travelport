@@ -523,7 +523,13 @@ const parseStoredUserData = (value) => {
   return {};
 };
 
-const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] }) => {
+const FlightForm = ({
+  data,
+  airPriceData,
+  selectedAirPrice,
+  seatSelections = [],
+  ancillarySelections = [],
+}) => {
   const token = secureLocalStorage.getItem("access_token");
   const userData = parseStoredUserData(secureLocalStorage.getItem("userData"));
   const [agreeToTerms, setAgreeToTerms] = useState(false);
@@ -915,6 +921,14 @@ const FlightForm = ({ data, airPriceData, selectedAirPrice, seatSelections = [] 
             : Array.isArray(activeAirPrice?.seatSelections)
               ? activeAirPrice.seatSelections
               : [],
+        ancillarySelections:
+          Array.isArray(ancillarySelections) && ancillarySelections.length
+            ? ancillarySelections
+            : Array.isArray(data?.ancillarySelections)
+              ? data.ancillarySelections
+              : Array.isArray(activeAirPrice?.ancillarySelections)
+                ? activeAirPrice.ancillarySelections
+                : [],
       };
 
       try {

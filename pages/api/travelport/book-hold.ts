@@ -19,6 +19,7 @@ type BookHoldBody = {
   bookingOfferKey?: string;
   bookingFlowExpiresAt?: number | string;
   seatSelections?: unknown;
+  ancillarySelections?: unknown;
   adultCount?: number | string;
   childCount?: number | string;
   infantCount?: number | string;
@@ -69,6 +70,7 @@ type SuccessResponse = {
   workbenchResponse: Record<string, unknown> | null;
   addOfferResponse: Record<string, unknown> | null;
   travelerResponse: Record<string, unknown> | null;
+  ancillaryOfferResponse: Record<string, unknown> | null;
   seatOfferResponse: Record<string, unknown> | null;
   specialServiceResponse?: Record<string, unknown> | null;
   primaryContactResponse: Record<string, unknown> | null;
@@ -538,6 +540,10 @@ function buildCompactBookingPayload(params: {
       infantCount: toNumber(params.body.infantCount, 0),
       ...(Array.isArray(params.body.seatSelections) && params.body.seatSelections.length
         ? { seatSelections: params.body.seatSelections }
+        : {}),
+      ...(Array.isArray(params.body.ancillarySelections) &&
+      params.body.ancillarySelections.length
+        ? { ancillarySelections: params.body.ancillarySelections }
         : {}),
     },
     ...(reservationResponse ? { ReservationResponse: reservationResponse } : {}),
@@ -1084,6 +1090,23 @@ type SeatSelectionResolved = {
   seatAssignment: string;
 };
 
+type AncillarySelectionResolved = {
+  offerListIdentifier: string;
+  offerIdentifier: string;
+  productIdentifier: string;
+  travelerIdentifier?: string;
+  travelerIndex?: number;
+  travelerTypeCode?: string;
+  travelerNumber?: number;
+};
+
+type TravelerSelectionInput = {
+  travelerIdentifier?: string;
+  travelerIndex?: number;
+  travelerTypeCode?: string;
+  travelerNumber?: number;
+};
+
 type TravelerReference = {
   identifier: string;
   paxTypeCode: string;
@@ -1277,6 +1300,201 @@ function resolveSeatSelections(
   return resolved;
 }
 
+function resolveAncillarySelections(
+  body: BookHoldBody,
+  selectedOffer: Record<string, unknown>
+): AncillarySelectionResolved[] {
+  const bodyRecord = body as unknown as Record<string, unknown>;
+  const selectedOfferRecord = selectedOffer as Record<string, unknown>;
+  const fallbackBodySelections = getArrayByKeys(bodyRecord, [
+    "selectedAncillaries",
+    "SelectedAncillaries",
+    "ancillaryOfferSelections",
+    "AncillaryOfferSelections",
+  ]);
+  const fallbackOfferSelections = getArrayByKeys(selectedOfferRecord, [
+    "ancillarySelections",
+    "AncillarySelections",
+    "selectedAncillaries",
+    "SelectedAncillaries",
+    "ancillaryOfferSelections",
+    "AncillaryOfferSelections",
+  ]);
+  const rawSelections = Array.isArray(body?.ancillarySelections)
+    ? body.ancillarySelections
+    : fallbackBodySelections.length
+      ? fallbackBodySelections
+      : fallbackOfferSelections;
+  if (!rawSelections.length) return [];
+
+  const defaultCatalogRequest = resolveCatalogOfferingsRequest(selectedOffer);
+  const resolved: AncillarySelectionResolved[] = [];
+  const dedupe = new Set<string>();
+
+  for (const selection of rawSelections) {
+    if (!selection || typeof selection !== "object") continue;
+    const item = selection as Record<string, unknown>;
+    const productIdentifier = toText(
+      getValueByKeys(item, [
+        "productIdentifier",
+        "ProductIdentifier",
+        "productId",
+        "ProductId",
+        "productRef",
+        "ProductRef",
+      ])
+    );
+    const offerListIdentifier =
+      toText(
+        getValueByKeys(item, [
+          "offerListIdentifier",
+          "OfferListIdentifier",
+          "catalogOfferingsIdentifier",
+          "CatalogOfferingsIdentifier",
+        ])
+      ) || toText(defaultCatalogRequest?.offerListIdentifier);
+    const offerIdentifier =
+      toText(
+        getValueByKeys(item, [
+          "offerIdentifier",
+          "OfferIdentifier",
+          "catalogOfferingIdentifier",
+          "CatalogOfferingIdentifier",
+        ])
+      ) || toText(defaultCatalogRequest?.offerIdentifier);
+    const travelerIdentifier = toText(
+      getValueByKeys(item, [
+        "travelerIdentifier",
+        "TravelerIdentifier",
+        "travelerIdentifierRef",
+        "TravelerIdentifierRef",
+      ])
+    );
+    const travelerIndex = toIndex(
+      getValueByKeys(item, [
+        "travelerIndex",
+        "TravelerIndex",
+        "passengerIndex",
+        "PassengerIndex",
+        "paxIndex",
+      ])
+    );
+    const travelerTypeRaw = toText(
+      getValueByKeys(item, [
+        "travelerTypeCode",
+        "TravelerTypeCode",
+        "passengerTypeCode",
+        "PassengerTypeCode",
+        "paxType",
+        "PaxType",
+        "travelerType",
+        "TravelerType",
+      ])
+    );
+    const travelerTypeCode = travelerTypeRaw
+      ? normalizePaxTypeCode(travelerTypeRaw)
+      : undefined;
+    const travelerNumber = toPositiveInteger(
+      getValueByKeys(item, [
+        "travelerNumber",
+        "TravelerNumber",
+        "passengerNumber",
+        "PassengerNumber",
+        "paxNumber",
+        "PaxNumber",
+        "travelerSequence",
+        "TravelerSequence",
+        "passengerSequence",
+        "PassengerSequence",
+      ])
+    );
+    const travelerCodeAndNumberFallback = parseTravelerCodeAndNumber(
+      getValueByKeys(item, [
+        "travelerKey",
+        "TravelerKey",
+        "traveler",
+        "Traveler",
+        "travelerLabel",
+        "TravelerLabel",
+      ])
+    );
+
+    if (!productIdentifier || !offerListIdentifier || !offerIdentifier) {
+      continue;
+    }
+
+    const dedupeKey = [
+      offerListIdentifier,
+      offerIdentifier,
+      productIdentifier,
+      travelerIdentifier,
+      travelerIndex ?? "",
+      travelerTypeCode || travelerCodeAndNumberFallback.travelerTypeCode || "",
+      travelerNumber || travelerCodeAndNumberFallback.travelerNumber || "",
+    ].join("::");
+    if (dedupe.has(dedupeKey)) continue;
+    dedupe.add(dedupeKey);
+
+    resolved.push({
+      offerListIdentifier,
+      offerIdentifier,
+      productIdentifier,
+      ...(travelerIdentifier ? { travelerIdentifier } : {}),
+      ...(travelerIndex !== undefined ? { travelerIndex } : {}),
+      ...(travelerTypeCode
+        ? { travelerTypeCode }
+        : travelerCodeAndNumberFallback.travelerTypeCode
+          ? { travelerTypeCode: travelerCodeAndNumberFallback.travelerTypeCode }
+          : {}),
+      ...(travelerNumber
+        ? { travelerNumber }
+        : travelerCodeAndNumberFallback.travelerNumber
+          ? { travelerNumber: travelerCodeAndNumberFallback.travelerNumber }
+          : {}),
+    });
+  }
+
+  return resolved;
+}
+
+function resolveTravelerIdentifierForSelection(params: {
+  selection: TravelerSelectionInput;
+  index: number;
+  travelerIdentifiers: string[];
+  travelerReferences: TravelerReference[];
+  referencesByType: Map<string, TravelerReference[]>;
+}): string | null {
+  let travelerIdentifier = params.selection.travelerIdentifier;
+
+  if (!travelerIdentifier && params.selection.travelerTypeCode) {
+    const normalizedTypeCode = normalizePaxTypeCode(params.selection.travelerTypeCode);
+    const typedReferences = params.referencesByType.get(normalizedTypeCode) || [];
+    if (params.selection.travelerNumber && params.selection.travelerNumber > 0) {
+      const matched = typedReferences.find(
+        (reference) => reference.travelerNumber === params.selection.travelerNumber
+      );
+      travelerIdentifier = matched?.identifier;
+    }
+    if (!travelerIdentifier && typedReferences.length > 0) {
+      travelerIdentifier = typedReferences[0].identifier;
+    }
+  }
+
+  if (!travelerIdentifier && params.selection.travelerIndex !== undefined) {
+    const fromReferences = params.travelerReferences[params.selection.travelerIndex];
+    travelerIdentifier =
+      fromReferences?.identifier ||
+      params.travelerIdentifiers[params.selection.travelerIndex];
+  }
+
+  const fallbackTravelerIdentifier =
+    params.selection.travelerIndex !== undefined
+      ? params.travelerIdentifiers[params.selection.travelerIndex]
+      : params.travelerIdentifiers[params.index] || params.travelerIdentifiers[0];
+
+  return travelerIdentifier || fallbackTravelerIdentifier || null;
+}
+
 function buildSeatAncillaryOffersPayload(params: {
   seatSelections: SeatSelectionResolved[];
   travelerIdentifiers: string[];
@@ -1292,33 +1510,13 @@ function buildSeatAncillaryOffersPayload(params: {
 
   const offers = params.seatSelections
     .map((selection, index) => {
-      let travelerIdentifier = selection.travelerIdentifier;
-
-      if (!travelerIdentifier && selection.travelerTypeCode) {
-        const normalizedTypeCode = normalizePaxTypeCode(selection.travelerTypeCode);
-        const typedReferences = referencesByType.get(normalizedTypeCode) || [];
-        if (selection.travelerNumber && selection.travelerNumber > 0) {
-          const matched = typedReferences.find(
-            (reference) => reference.travelerNumber === selection.travelerNumber
-          );
-          travelerIdentifier = matched?.identifier;
-        }
-        if (!travelerIdentifier && typedReferences.length > 0) {
-          travelerIdentifier = typedReferences[0].identifier;
-        }
-      }
-
-      if (!travelerIdentifier && selection.travelerIndex !== undefined) {
-        const fromReferences = params.travelerReferences[selection.travelerIndex];
-        travelerIdentifier =
-          fromReferences?.identifier || params.travelerIdentifiers[selection.travelerIndex];
-      }
-
-      const fallbackTravelerIdentifier =
-        selection.travelerIndex !== undefined
-          ? params.travelerIdentifiers[selection.travelerIndex]
-          : params.travelerIdentifiers[index] || params.travelerIdentifiers[0];
-      travelerIdentifier = travelerIdentifier || fallbackTravelerIdentifier;
+      const travelerIdentifier = resolveTravelerIdentifierForSelection({
+        selection,
+        index,
+        travelerIdentifiers: params.travelerIdentifiers,
+        travelerReferences: params.travelerReferences,
+        referencesByType,
+      });
       if (!travelerIdentifier) return null;
 
       return {
@@ -1342,6 +1540,62 @@ function buildSeatAncillaryOffersPayload(params: {
           value: travelerIdentifier,
         },
         SeatAssignment: selection.seatAssignment,
+      };
+    })
+    .filter(Boolean);
+
+  if (!offers.length) return null;
+
+  return {
+    "@type": "OfferQueryBuildAncillaryOffersFromCatalogOfferings",
+    BuildAncillaryOffersFromCatalogOfferings: offers,
+  };
+}
+
+function buildAncillaryOffersPayload(params: {
+  ancillarySelections: AncillarySelectionResolved[];
+  travelerIdentifiers: string[];
+  travelerReferences: TravelerReference[];
+}) {
+  const referencesByType = new Map<string, TravelerReference[]>();
+  params.travelerReferences.forEach((reference) => {
+    const typeCode = normalizePaxTypeCode(reference.paxTypeCode);
+    const list = referencesByType.get(typeCode) || [];
+    list.push(reference);
+    referencesByType.set(typeCode, list);
+  });
+
+  const offers = params.ancillarySelections
+    .map((selection, index) => {
+      const travelerIdentifier = resolveTravelerIdentifierForSelection({
+        selection,
+        index,
+        travelerIdentifiers: params.travelerIdentifiers,
+        travelerReferences: params.travelerReferences,
+        referencesByType,
+      });
+      if (!travelerIdentifier) return null;
+
+      return {
+        "@type": "BuildAncillaryOffersFromCatalogOfferingsAir",
+        CatalogOfferingsIdentifier: {
+          Identifier: {
+            value: selection.offerListIdentifier,
+          },
+        },
+        CatalogOfferingIdentifier: {
+          Identifier: {
+            value: selection.offerIdentifier,
+          },
+        },
+        ProductIdentifier: {
+          Identifier: {
+            value: selection.productIdentifier,
+          },
+        },
+        TravelerIdentifierRef: {
+          value: travelerIdentifier,
+        },
       };
     })
     .filter(Boolean);
@@ -3094,6 +3348,7 @@ export default async function handler(
         workbenchResponse: null,
         addOfferResponse: null,
         travelerResponse: null,
+        ancillaryOfferResponse: null,
         seatOfferResponse: null,
         primaryContactResponse: null,
         documentOverrideResponse: documentOverrideResult?.payload || null,
@@ -3519,9 +3774,62 @@ export default async function handler(
     }
     activeOfferIdentifiers = resolveOfferIdentifiers(addOfferPayloadResponse);
 
+    let ancillaryOfferPayloadResponse: Record<string, unknown> | null = null;
+    const ancillarySelections = resolveAncillarySelections(body, selectedOffer);
+    if (ancillarySelections.length) {
+      const ancillaryOfferPayload = buildAncillaryOffersPayload({
+        ancillarySelections,
+        travelerIdentifiers,
+        travelerReferences,
+      });
+      if (!ancillaryOfferPayload) {
+        warnings.push(
+          "Ancillary selections were provided but traveler mapping is missing — proceeding without ancillary add-ons."
+        );
+      } else {
+        const addAncillaryOfferUrl = `${bookingBaseUrl}/airoffer/reservationworkbench/${encodeURIComponent(
+          reservationId
+        )}/offers/buildancillaryoffersfromcatalogofferings`;
+        const addAncillaryOfferResponse = await fetch(addAncillaryOfferUrl, {
+          method: "POST",
+          headers: commonHeaders,
+          body: JSON.stringify(ancillaryOfferPayload),
+        });
+        const addAncillaryOfferPayloadResponse = (await parseJsonSafe(
+          addAncillaryOfferResponse
+        )) as Record<string, unknown>;
+        pushApiFlowLog({
+          logs: apiFlowLogs,
+          step: "precommit_add_ancillary_offer",
+          method: "POST",
+          url: addAncillaryOfferUrl,
+          requestBody: ancillaryOfferPayload,
+          status: addAncillaryOfferResponse.status,
+          ok:
+            addAncillaryOfferResponse.ok &&
+            !hasTravelportErrors(addAncillaryOfferPayloadResponse),
+          responseBody: addAncillaryOfferPayloadResponse,
+        });
+
+        if (
+          !addAncillaryOfferResponse.ok ||
+          hasTravelportErrors(addAncillaryOfferPayloadResponse)
+        ) {
+          const ancillaryOfferErrorDetail =
+            extractTravelportErrorMessage(addAncillaryOfferPayloadResponse) ||
+            `Add ancillary offer failed with status ${addAncillaryOfferResponse.status}`;
+          warnings.push(
+            `Ancillary offer could not be added — proceeding without selected add-ons. (${ancillaryOfferErrorDetail})`
+          );
+        } else {
+          ancillaryOfferPayloadResponse = addAncillaryOfferPayloadResponse;
+        }
+      }
+    }
+
     let seatOfferPayloadResponse: Record<string, unknown> | null = null;
     const seatSelections = resolveSeatSelections(body, selectedOffer);
-    if (seatSelections.length && !commitRequested) {
+    if (seatSelections.length) {
       const seatAncillaryPayload = buildSeatAncillaryOffersPayload({
         seatSelections,
         travelerIdentifiers,
@@ -3680,6 +3988,7 @@ export default async function handler(
       travelerRefIds,
       addOfferResponse: addOfferPayloadResponse,
       travelerResponse: travelerPayloadResponse,
+      ancillaryOfferResponse: ancillaryOfferPayloadResponse,
       seatOfferResponse: seatOfferPayloadResponse,
       specialServiceResponse: specialServicePayloadResponse,
       primaryContactResponse: primaryContactPayloadResponse,
@@ -3710,6 +4019,7 @@ export default async function handler(
         workbenchResponse: sessionPayload,
         addOfferResponse: addOfferPayloadResponse,
         travelerResponse: travelerPayloadResponse,
+        ancillaryOfferResponse: ancillaryOfferPayloadResponse,
         seatOfferResponse: seatOfferPayloadResponse,
         specialServiceResponse: specialServicePayloadResponse,
         primaryContactResponse: primaryContactPayloadResponse,
@@ -3799,9 +4109,15 @@ export default async function handler(
           },
           passengers: {
             select: {
+              prefix: true,
+              firstName: true,
+              lastName: true,
+              paxType: true,
+              gender: true,
+              birthDate: true,
+              passportNumber: true,
               email: true,
             },
-            take: 1,
           },
         },
       });
@@ -3822,6 +4138,8 @@ export default async function handler(
                 bookingRecord.totalFare
               ).toFixed(2)}`
               : "N/A",
+          payloadSnapshot: bookingRecord.payloadSnapshot,
+          bookingPassengers: bookingRecord.passengers || [],
         });
       }
     } catch {
@@ -3841,6 +4159,7 @@ export default async function handler(
       workbenchResponse: sessionPayload,
       addOfferResponse: addOfferPayloadResponse,
       travelerResponse: travelerPayloadResponse,
+      ancillaryOfferResponse: ancillaryOfferPayloadResponse,
       seatOfferResponse: seatOfferPayloadResponse,
       specialServiceResponse: specialServicePayloadResponse,
       primaryContactResponse: primaryContactPayloadResponse,

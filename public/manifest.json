@@ -1,6 +1,7 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "FlyJatt",
+  "name": "FlyJatt Flights and Ticketing",
+  "description": "Search flights, compare fares and complete bookings with FlyJatt.",
   "icons": [
     {
       "src": "favicon.ico",
@@ -18,8 +19,8 @@
       "sizes": "512x512"
     }
   ],
-  "start_url": ".",
+  "start_url": "/",
   "display": "standalone",
-  "theme_color": "#000000",
+  "theme_color": "#0f4b7d",
   "background_color": "#ffffff"
 }

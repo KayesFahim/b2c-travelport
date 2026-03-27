@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
     Box,
@@ -14,16 +14,29 @@ import {
     TableContainer,
     TableHead,
     TableRow,
-    Paper,
     Chip,
     Button,
+    Divider,
 } from "@mui/material";
 import TrendingUpIcon from "@mui/icons-material/TrendingUp";
 import EventNoteIcon from "@mui/icons-material/EventNote";
 import PeopleIcon from "@mui/icons-material/People";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
+import UpdateIcon from "@mui/icons-material/Update";
 import secureLocalStorage from "react-secure-storage";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+    PieChart,
+    Pie,
+    Cell,
+} from "recharts";
 
 const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
 
@@ -32,129 +45,165 @@ const getAuthHeaders = () => {
     return token ? { Authorization: `Bearer ${token}` } : {};
 };
 
-const COLORS = ["#0d9488", "#0ea5e9", "#f59e0b", "#ef4444"];
+const STATUS_COLORS = {
+    booked: "#f59e0b",
+    processing: "#0ea5e9",
+    ticketed: "#10b981",
+    completed: "#14b8a6",
+    cancelled: "#ef4444",
+    failed: "#64748b",
+};
 
-const StatCard = ({ title, value, icon: Icon, color, trend }) => (
-    <Card
-        sx={{
-            borderRadius: "16px",
-            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.07)",
-            border: `1px solid rgba(0, 0, 0, 0.05)`,
-            transition: "all 0.3s ease",
-            "&:hover": {
-                boxShadow: "0 10px 16px rgba(0, 0, 0, 0.1)",
-                transform: "translateY(-4px)",
-            },
-        }}
-    >
-        <CardContent>
-            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-                <Box>
-                    <Typography color="textSecondary" sx={{ fontSize: 12, fontWeight: 500, letterSpacing: 0.5 }}>
-                        {title}
-                    </Typography>
-                    <Typography
+function formatSignedPercent(value) {
+    const numeric = Number(value || 0);
+    if (!Number.isFinite(numeric)) return "0%";
+    const abs = Math.abs(numeric).toFixed(1).replace(/\.0$/, "");
+    return `${numeric >= 0 ? "+" : "-"}${abs}%`;
+}
+
+function formatMoney(value, currency = "BDT") {
+    const amount = Number(value);
+    if (!Number.isFinite(amount)) return String(value ?? "-");
+    return `${currency} ${amount.toLocaleString()}`;
+}
+
+const StatCard = ({ title, value, icon: Icon, color, growth }) => {
+    const positive = Number(growth || 0) >= 0;
+
+    return (
+        <Card
+            sx={{
+                borderRadius: "16px",
+                boxShadow: "0 8px 20px rgba(15, 23, 42, 0.07)",
+                border: "1px solid rgba(148, 163, 184, 0.2)",
+                height: "100%",
+                background: "linear-gradient(180deg, #ffffff 0%, #f8fafc 100%)",
+            }}
+        >
+            <CardContent>
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                    <Box>
+                        <Typography sx={{ color: "#64748b", fontSize: 12, fontWeight: 700, letterSpacing: 0.4 }}>
+                            {title}
+                        </Typography>
+                        <Typography sx={{ fontSize: 28, fontWeight: 800, color, mt: 1, mb: 1.2 }}>
+                            {value}
+                        </Typography>
+                        <Chip
+                            size="small"
+                            icon={<TrendingUpIcon sx={{ fontSize: "14px !important" }} />}
+                            label={`${formatSignedPercent(growth)} vs previous 30 days`}
+                            sx={{
+                                backgroundColor: positive ? "#dcfce7" : "#fee2e2",
+                                color: positive ? "#15803d" : "#b91c1c",
+                                fontWeight: 700,
+                                fontSize: 11,
+                                ".MuiChip-icon": {
+                                    color: positive ? "#15803d" : "#b91c1c",
+                                },
+                            }}
+                        />
+                    </Box>
+                    <Box
                         sx={{
-                            fontSize: 32,
-                            fontWeight: 800,
-                            color: color,
-                            mt: 1,
-                            mb: 1,
+                            width: 56,
+                            height: 56,
+                            borderRadius: "14px",
+                            backgroundColor: `${color}18`,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
                         }}
                     >
-                        {value}
-                    </Typography>
-                    {trend && (
-                        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-                            <TrendingUpIcon sx={{ fontSize: 14, color: "#10b981" }} />
-                            <Typography sx={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>
-                                {trend} from last month
-                            </Typography>
-                        </Box>
-                    )}
+                        <Icon sx={{ color, fontSize: 28 }} />
+                    </Box>
                 </Box>
-                <Box
-                    sx={{
-                        width: 60,
-                        height: 60,
-                        borderRadius: "12px",
-                        background: `${color}15`,
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                    }}
-                >
-                    <Icon sx={{ fontSize: 28, color }} />
-                </Box>
-            </Box>
-        </CardContent>
-    </Card>
-);
+            </CardContent>
+        </Card>
+    );
+};
 
 export default function AdminDashboardView() {
     const [dashboard, setDashboard] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [lastUpdated, setLastUpdated] = useState(null);
 
-    useEffect(() => {
-        let cancelled = false;
-
-        const loadDashboard = async () => {
-            try {
+    const loadDashboard = useCallback(async (isBackgroundRefresh = false) => {
+        try {
+            if (isBackgroundRefresh) {
+                setRefreshing(true);
+            } else {
                 setLoading(true);
-                setError("");
-                const response = await fetch("/api/admin/dashboard-stats", {
-                    method: "GET",
-                    credentials: "include",
-                    headers: {
-                        ...getAuthHeaders(),
-                    },
-                });
-                const payload = await response.json().catch(() => ({}));
-                if (!response.ok) {
-                    throw new Error(payload?.message || "Unable to load dashboard stats");
-                }
-                if (cancelled) return;
-                setDashboard(payload);
-            } catch (fetchError) {
-                if (!cancelled) {
-                    setDashboard(null);
-                    setError(fetchError instanceof Error ? fetchError.message : "Unable to load dashboard stats");
-                }
-            } finally {
-                if (!cancelled) setLoading(false);
             }
-        };
+            setError("");
 
-        loadDashboard();
+            const response = await fetch("/api/admin/dashboard-stats", {
+                method: "GET",
+                credentials: "include",
+                headers: {
+                    ...getAuthHeaders(),
+                },
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || "Unable to load dashboard stats");
+            }
 
-        return () => {
-            cancelled = true;
-        };
+            setDashboard(payload);
+            setLastUpdated(new Date());
+        } catch (fetchError) {
+            setDashboard((prev) => prev || null);
+            setError(fetchError instanceof Error ? fetchError.message : "Unable to load dashboard stats");
+        } finally {
+            setLoading(false);
+            setRefreshing(false);
+        }
     }, []);
 
-    const paymentMethodData = useMemo(() => {
-        const total = Number(dashboard?.totalBookings || 0);
-        const completed = Number(dashboard?.ticketedBookings || 0);
-        const pending = Number(dashboard?.pendingBookings || 0);
-        const cancelled = Number(dashboard?.cancelledBookings || 0);
-        if (!total) {
-            return [
-                { name: "Completed", value: 0 },
-                { name: "Pending", value: 0 },
-                { name: "Cancelled", value: 0 },
-            ];
-        }
+    useEffect(() => {
+        let active = true;
+
+        const start = async () => {
+            await loadDashboard(false);
+        };
+
+        start();
+
+        const interval = setInterval(() => {
+            if (active) {
+                loadDashboard(true).catch(() => {});
+            }
+        }, 45000);
+
+        return () => {
+            active = false;
+            clearInterval(interval);
+        };
+    }, [loadDashboard]);
+
+    const statusPieData = useMemo(() => {
+        const status = dashboard?.statusBreakdown || {};
         return [
-            { name: "Completed", value: Math.round((completed / total) * 100) },
-            { name: "Pending", value: Math.round((pending / total) * 100) },
-            { name: "Cancelled", value: Math.round((cancelled / total) * 100) },
-        ];
+            { name: "Booked", key: "booked", value: Number(status.booked || 0) },
+            { name: "Processing", key: "processing", value: Number(status.processing || 0) },
+            { name: "Ticketed", key: "ticketed", value: Number(status.ticketed || 0) },
+            { name: "Completed", key: "completed", value: Number(status.completed || 0) },
+            { name: "Cancelled", key: "cancelled", value: Number(status.cancelled || 0) },
+            { name: "Failed", key: "failed", value: Number(status.failed || 0) },
+        ].filter((row) => row.value > 0);
     }, [dashboard]);
+
+    const statusTotal = useMemo(
+        () => statusPieData.reduce((sum, item) => sum + item.value, 0),
+        [statusPieData]
+    );
 
     const getStatusColor = (status) => {
         switch (status) {
             case "Completed":
+            case "Ticketed":
                 return "#10b981";
             case "Booked":
             case "Pending":
@@ -162,19 +211,45 @@ export default function AdminDashboardView() {
             case "Processing":
                 return "#0ea5e9";
             case "Cancelled":
+            case "Failed":
                 return "#ef4444";
             default:
-                return "#6b7280";
+                return "#64748b";
         }
     };
 
     return (
         <Box>
-            {error ? (
-                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
-            ) : null}
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
+                <Box>
+                    <Typography sx={{ fontSize: 22, fontWeight: 800, color: "#0f172a" }}>
+                        Admin Performance Dashboard
+                    </Typography>
+                    <Typography sx={{ fontSize: 13, color: "#64748b" }}>
+                        Real-time booking, revenue, and customer intelligence
+                    </Typography>
+                </Box>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1.25 }}>
+                    {lastUpdated ? (
+                        <Typography sx={{ fontSize: 12, color: "#64748b" }}>
+                            Updated {lastUpdated.toLocaleTimeString()}
+                        </Typography>
+                    ) : null}
+                    <Button
+                        variant="outlined"
+                        size="small"
+                        startIcon={refreshing ? <CircularProgress size={14} /> : <UpdateIcon />}
+                        onClick={() => loadDashboard(true)}
+                        disabled={loading || refreshing}
+                        sx={{ borderRadius: "10px", textTransform: "none", fontWeight: 700 }}
+                    >
+                        Refresh
+                    </Button>
+                </Box>
+            </Box>
 
-            {/* KPI Cards */}
+            {error ? <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert> : null}
+
             <Grid container spacing={2.5} sx={{ mb: 3 }}>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
@@ -182,16 +257,16 @@ export default function AdminDashboardView() {
                         value={loading ? "-" : String(dashboard?.totalBookings ?? 0)}
                         icon={EventNoteIcon}
                         color="#0d9488"
-                        trend={null}
+                        growth={dashboard?.growth?.bookingsPct || 0}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
                         title="Total Revenue"
-                        value={loading ? "-" : `${dashboard?.currency || "BDT"} ${Number(dashboard?.totalRevenue || 0).toLocaleString()}`}
+                        value={loading ? "-" : formatMoney(dashboard?.totalRevenue, dashboard?.currency)}
                         icon={AttachMoneyIcon}
                         color="#0ea5e9"
-                        trend={null}
+                        growth={dashboard?.growth?.revenuePct || 0}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
@@ -200,60 +275,52 @@ export default function AdminDashboardView() {
                         value={loading ? "-" : String(dashboard?.totalCustomers ?? 0)}
                         icon={PeopleIcon}
                         color="#f59e0b"
-                        trend={null}
+                        growth={dashboard?.growth?.customersPct || 0}
                     />
                 </Grid>
                 <Grid item xs={12} sm={6} md={3}>
                     <StatCard
-                        title="Ticketed Bookings"
+                        title="Ticketed + Committed"
                         value={loading ? "-" : String(dashboard?.ticketedBookings ?? 0)}
                         icon={TrendingUpIcon}
                         color="#ef4444"
-                        trend={null}
+                        growth={dashboard?.growth?.bookingsPct || 0}
                     />
                 </Grid>
             </Grid>
 
-            {/* Charts Section */}
             <Grid container spacing={2.5} sx={{ mb: 3 }}>
                 <Grid item xs={12} md={8}>
-                    <Card
-                        sx={{
-                            borderRadius: "16px",
-                            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.07)",
-                            border: "1px solid rgba(0, 0, 0, 0.05)",
-                        }}
-                    >
+                    <Card sx={{ borderRadius: "16px", border: "1px solid rgba(148,163,184,0.2)", boxShadow: "0 8px 20px rgba(15,23,42,0.07)" }}>
                         <CardHeader
                             title="Bookings & Revenue Trend"
-                            subheader="Last 6 months performance"
+                            subheader="Last 6 months"
                             sx={{
-                                "& .MuiCardHeader-title": { fontWeight: 700, fontSize: 16 },
-                                "& .MuiCardHeader-subheader": { fontSize: 12 },
-                                borderBottom: "1px solid rgba(0, 0, 0, 0.05)",
+                                "& .MuiCardHeader-title": { fontWeight: 800, fontSize: 16 },
+                                "& .MuiCardHeader-subheader": { fontSize: 12, color: "#64748b" },
+                                borderBottom: "1px solid rgba(148,163,184,0.15)",
                             }}
                         />
                         <CardContent>
                             <ResponsiveContainer width="100%" height={300}>
                                 <LineChart data={Array.isArray(dashboard?.monthlyStats) ? dashboard.monthlyStats : []}>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" />
-                                    <XAxis dataKey="month" stroke="#9ca3af" />
-                                    <YAxis stroke="#9ca3af" />
+                                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.25)" />
+                                    <XAxis dataKey="month" stroke="#94a3b8" />
+                                    <YAxis stroke="#94a3b8" />
                                     <Tooltip
                                         contentStyle={{
-                                            backgroundColor: "#fff",
-                                            border: "1px solid rgba(0,0,0,0.1)",
-                                            borderRadius: "8px",
+                                            borderRadius: 12,
+                                            border: "1px solid rgba(148,163,184,0.25)",
                                         }}
                                     />
                                     <Legend />
-                                    <Line type="monotone" dataKey="bookings" stroke="#0d9488" strokeWidth={2} dot={{ r: 4 }} />
-                                    <Line type="monotone" dataKey="revenue" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 4 }} />
+                                    <Line type="monotone" dataKey="bookings" name="Bookings" stroke="#0d9488" strokeWidth={2.5} dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#0ea5e9" strokeWidth={2.5} dot={{ r: 3 }} />
                                 </LineChart>
                             </ResponsiveContainer>
                             {loading ? (
                                 <Box sx={{ display: "flex", justifyContent: "center", pt: 1 }}>
-                                    <CircularProgress size={20} />
+                                    <CircularProgress size={22} />
                                 </Box>
                             ) : null}
                         </CardContent>
@@ -261,68 +328,170 @@ export default function AdminDashboardView() {
                 </Grid>
 
                 <Grid item xs={12} md={4}>
-                    <Card
-                        sx={{
-                            borderRadius: "16px",
-                            boxShadow: "0 4px 6px rgba(0, 0, 0, 0.07)",
-                            border: "1px solid rgba(0, 0, 0, 0.05)",
-                            height: "100%",
-                        }}
-                    >
+                    <Card sx={{ borderRadius: "16px", border: "1px solid rgba(148,163,184,0.2)", boxShadow: "0 8px 20px rgba(15,23,42,0.07)", height: "100%" }}>
                         <CardHeader
-                            title="Payment Methods"
+                            title="Status Distribution"
+                            subheader={`Total ${statusTotal} bookings`}
                             sx={{
-                                "& .MuiCardHeader-title": { fontWeight: 700, fontSize: 16 },
-                                borderBottom: "1px solid rgba(0, 0, 0, 0.05)",
+                                "& .MuiCardHeader-title": { fontWeight: 800, fontSize: 16 },
+                                "& .MuiCardHeader-subheader": { fontSize: 12, color: "#64748b" },
+                                borderBottom: "1px solid rgba(148,163,184,0.15)",
                             }}
                         />
                         <CardContent>
-                            <ResponsiveContainer width="100%" height={250}>
+                            <ResponsiveContainer width="100%" height={220}>
                                 <PieChart>
-                                    <Pie data={paymentMethodData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
-                                        {paymentMethodData.map((entry, index) => (
-                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                    <Pie
+                                        data={statusPieData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={56}
+                                        outerRadius={84}
+                                        paddingAngle={1.5}
+                                        dataKey="value"
+                                    >
+                                        {statusPieData.map((entry) => (
+                                            <Cell key={entry.key} fill={STATUS_COLORS[entry.key] || "#94a3b8"} />
                                         ))}
                                     </Pie>
                                     <Tooltip />
                                 </PieChart>
                             </ResponsiveContainer>
-                            <Box sx={{ mt: 2 }}>
-                                {paymentMethodData.map((method, idx) => (
-                                    <Box key={idx} sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-                                        <Box sx={{ width: 12, height: 12, borderRadius: "50%", backgroundColor: COLORS[idx] }} />
-                                        <Typography sx={{ fontSize: 13, flex: 1 }}>{method.name}</Typography>
-                                        <Typography sx={{ fontSize: 13, fontWeight: 600, color: COLORS[idx] }}>{method.value}%</Typography>
-                                    </Box>
-                                ))}
+
+                            <Box sx={{ mt: 1 }}>
+                                {statusPieData.length ? statusPieData.map((item) => {
+                                    const percentage = statusTotal ? ((item.value / statusTotal) * 100).toFixed(1) : "0.0";
+                                    return (
+                                        <Box key={item.key} sx={{ display: "flex", alignItems: "center", mb: 0.8 }}>
+                                            <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: STATUS_COLORS[item.key], mr: 1 }} />
+                                            <Typography sx={{ fontSize: 12.5, color: "#334155", flex: 1 }}>{item.name}</Typography>
+                                            <Typography sx={{ fontSize: 12.5, fontWeight: 700, color: "#0f172a" }}>
+                                                {item.value} ({percentage}%)
+                                            </Typography>
+                                        </Box>
+                                    );
+                                }) : (
+                                    <Typography sx={{ fontSize: 12.5, color: "#64748b" }}>No status data available.</Typography>
+                                )}
                             </Box>
                         </CardContent>
                     </Card>
                 </Grid>
             </Grid>
 
-            {/* Recent Bookings Table */}
-            <Card
-                sx={{
-                    borderRadius: "16px",
-                    boxShadow: "0 4px 6px rgba(0, 0, 0, 0.07)",
-                    border: "1px solid rgba(0, 0, 0, 0.05)",
-                }}
-            >
+            <Grid container spacing={2.5} sx={{ mb: 3 }}>
+                <Grid item xs={12} md={6}>
+                    <Card sx={{ borderRadius: "16px", border: "1px solid rgba(148,163,184,0.2)", boxShadow: "0 8px 20px rgba(15,23,42,0.07)", height: "100%" }}>
+                        <CardHeader
+                            title="Top Routes"
+                            subheader="By revenue"
+                            sx={{
+                                "& .MuiCardHeader-title": { fontWeight: 800, fontSize: 16 },
+                                "& .MuiCardHeader-subheader": { fontSize: 12, color: "#64748b" },
+                                borderBottom: "1px solid rgba(148,163,184,0.15)",
+                            }}
+                        />
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ backgroundColor: "#f8fafc" }}>
+                                        <TableCell sx={{ fontWeight: 700 }}>Route</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">Bookings</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">Passengers</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">Revenue</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(dashboard?.topRoutes || []).map((row) => (
+                                        <TableRow key={row.route} hover>
+                                            <TableCell sx={{ fontWeight: 600, color: "#0f172a" }}>{row.route}</TableCell>
+                                            <TableCell align="right">{row.bookings}</TableCell>
+                                            <TableCell align="right">{row.passengers}</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 700, color: "#0d9488" }}>
+                                                {formatMoney(row.revenue, row.currency)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {!loading && !(dashboard?.topRoutes || []).length ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} align="center" sx={{ py: 3, color: "#64748b" }}>
+                                                No route performance data.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : null}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Card>
+                </Grid>
+
+                <Grid item xs={12} md={6}>
+                    <Card sx={{ borderRadius: "16px", border: "1px solid rgba(148,163,184,0.2)", boxShadow: "0 8px 20px rgba(15,23,42,0.07)", height: "100%" }}>
+                        <CardHeader
+                            title="Top Airlines"
+                            subheader="By revenue"
+                            sx={{
+                                "& .MuiCardHeader-title": { fontWeight: 800, fontSize: 16 },
+                                "& .MuiCardHeader-subheader": { fontSize: 12, color: "#64748b" },
+                                borderBottom: "1px solid rgba(148,163,184,0.15)",
+                            }}
+                        />
+                        <TableContainer>
+                            <Table size="small">
+                                <TableHead>
+                                    <TableRow sx={{ backgroundColor: "#f8fafc" }}>
+                                        <TableCell sx={{ fontWeight: 700 }}>Airline</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">Bookings</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">Passengers</TableCell>
+                                        <TableCell sx={{ fontWeight: 700 }} align="right">Revenue</TableCell>
+                                    </TableRow>
+                                </TableHead>
+                                <TableBody>
+                                    {(dashboard?.topAirlines || []).map((row) => (
+                                        <TableRow key={row.airline} hover>
+                                            <TableCell sx={{ fontWeight: 600 }}>{row.airline}</TableCell>
+                                            <TableCell align="right">{row.bookings}</TableCell>
+                                            <TableCell align="right">{row.passengers}</TableCell>
+                                            <TableCell align="right" sx={{ fontWeight: 700, color: "#0d9488" }}>
+                                                {formatMoney(row.revenue, row.currency)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                    {!loading && !(dashboard?.topAirlines || []).length ? (
+                                        <TableRow>
+                                            <TableCell colSpan={4} align="center" sx={{ py: 3, color: "#64748b" }}>
+                                                No airline performance data.
+                                            </TableCell>
+                                        </TableRow>
+                                    ) : null}
+                                </TableBody>
+                            </Table>
+                        </TableContainer>
+                    </Card>
+                </Grid>
+            </Grid>
+
+            <Card sx={{ borderRadius: "16px", border: "1px solid rgba(148,163,184,0.2)", boxShadow: "0 8px 20px rgba(15,23,42,0.07)" }}>
                 <CardHeader
                     title="Recent Bookings"
-                    action={<Button variant="text" size="small" sx={{ color: "#0d9488", fontWeight: 600 }}>View All</Button>}
+                    subheader={
+                        loading
+                            ? "Loading latest activity"
+                            : `Today: ${dashboard?.today?.bookings || 0} bookings • ${formatMoney(dashboard?.today?.revenue || 0, dashboard?.currency)}`
+                    }
                     sx={{
-                        "& .MuiCardHeader-title": { fontWeight: 700, fontSize: 16 },
-                        borderBottom: "1px solid rgba(0, 0, 0, 0.05)",
+                        "& .MuiCardHeader-title": { fontWeight: 800, fontSize: 16 },
+                        "& .MuiCardHeader-subheader": { fontSize: 12, color: "#64748b" },
+                        borderBottom: "1px solid rgba(148,163,184,0.15)",
                     }}
                 />
                 <TableContainer>
                     <Table>
                         <TableHead>
-                            <TableRow sx={{ backgroundColor: "rgba(0, 0, 0, 0.02)" }}>
+                            <TableRow sx={{ backgroundColor: "#f8fafc" }}>
                                 <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Booking ID</TableCell>
                                 <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Customer</TableCell>
+                                <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>PNR</TableCell>
                                 <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Route</TableCell>
                                 <TableCell sx={{ fontWeight: 700, fontSize: 12 }} align="right">Amount</TableCell>
                                 <TableCell sx={{ fontWeight: 700, fontSize: 12 }}>Status</TableCell>
@@ -332,23 +501,20 @@ export default function AdminDashboardView() {
                         <TableBody>
                             {loading ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 3 }}>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
                                         <CircularProgress size={24} />
                                     </TableCell>
                                 </TableRow>
                             ) : null}
                             {!loading && (dashboard?.recentBookings || []).map((booking) => (
-                                <TableRow
-                                    key={booking.id}
-                                    sx={{
-                                        borderBottom: "1px solid rgba(0, 0, 0, 0.05)",
-                                        "&:hover": { backgroundColor: "rgba(0, 0, 0, 0.02)" },
-                                    }}
-                                >
-                                    <TableCell sx={{ fontWeight: 600, color: "#0d9488", fontSize: 13 }}>{booking.id}</TableCell>
+                                <TableRow key={booking.id} hover>
+                                    <TableCell sx={{ fontWeight: 700, color: "#0d9488", fontSize: 13 }}>{booking.id}</TableCell>
                                     <TableCell sx={{ fontSize: 13 }}>{booking.customer}</TableCell>
+                                    <TableCell sx={{ fontSize: 13 }}>{booking.pnr}</TableCell>
                                     <TableCell sx={{ fontSize: 13 }}>{booking.route}</TableCell>
-                                    <TableCell sx={{ fontWeight: 600, fontSize: 13 }} align="right">{booking.amount} {booking.currency}</TableCell>
+                                    <TableCell sx={{ fontWeight: 700, fontSize: 13 }} align="right">
+                                        {formatMoney(booking.amount, booking.currency)}
+                                    </TableCell>
                                     <TableCell>
                                         <Chip
                                             label={booking.status}
@@ -356,8 +522,7 @@ export default function AdminDashboardView() {
                                             sx={{
                                                 backgroundColor: `${getStatusColor(booking.status)}20`,
                                                 color: getStatusColor(booking.status),
-                                                fontWeight: 600,
-                                                fontSize: 12,
+                                                fontWeight: 700,
                                             }}
                                         />
                                     </TableCell>
@@ -366,7 +531,7 @@ export default function AdminDashboardView() {
                             ))}
                             {!loading && !(dashboard?.recentBookings || []).length ? (
                                 <TableRow>
-                                    <TableCell colSpan={6} align="center" sx={{ py: 3, color: "#6b7280" }}>
+                                    <TableCell colSpan={7} align="center" sx={{ py: 3, color: "#64748b" }}>
                                         No recent bookings.
                                     </TableCell>
                                 </TableRow>
@@ -374,6 +539,12 @@ export default function AdminDashboardView() {
                         </TableBody>
                     </Table>
                 </TableContainer>
+                <Divider />
+                <Box sx={{ px: 2, py: 1.25 }}>
+                    <Typography sx={{ fontSize: 12, color: "#64748b" }}>
+                        Auto-refresh is enabled every 45 seconds to keep operational stats current.
+                    </Typography>
+                </Box>
             </Card>
         </Box>
     );

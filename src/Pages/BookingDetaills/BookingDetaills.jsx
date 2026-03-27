@@ -1,6 +1,7 @@
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Collapse,
   Container,
@@ -8,7 +9,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
+  FormControlLabel,
   Grid,
+  InputLabel,
+  MenuItem,
+  Select,
   Stack,
   Typography,
 } from "@mui/material";
@@ -229,6 +235,94 @@ const resolveAncillaryCategory = ({ name = "", classification = "", details = ""
   return "Other Addons";
 };
 
+const normalizePaxTypeCode = (value) => {
+  const code = String(value ?? "")
+    .trim()
+    .toUpperCase();
+  if (["ADT", "ADULT"].includes(code)) return "ADT";
+  if (["CHD", "CHILD", "CNN"].includes(code)) return "CHD";
+  if (["INF", "INFANT"].includes(code)) return "INF";
+  return "";
+};
+
+const getPaxTypeLabel = (value) => {
+  const normalized = normalizePaxTypeCode(value);
+  if (normalized === "ADT") return "Adult (ADT)";
+  if (normalized === "CHD") return "Child (CHD)";
+  if (normalized === "INF") return "Infant (INF)";
+  return "Passenger";
+};
+
+const parseTravelerReferenceRows = (value) => {
+  const rows = Array.isArray(value)
+    ? value
+    : value && typeof value === "object"
+      ? [value]
+      : [];
+  const parsed = [];
+  const dedupe = new Set();
+
+  rows.forEach((row, index) => {
+    const item = row && typeof row === "object" ? row : {};
+    const travelerIdentifier = normalizeIdentifier(
+      row && typeof row !== "object"
+        ? row
+        : getValueByKeys(item, [
+          "id",
+          "ID",
+          "Identifier",
+          "identifier",
+          "TravelerIdentifier",
+          "travelerIdentifier",
+          "TravelerIdentifierRef",
+          "travelerIdentifierRef",
+          "TravelerRef",
+          "travelerRef",
+        ])
+    );
+    const passengerTypeCode = normalizePaxTypeCode(
+      getValueByKeys(item, [
+        "passengerTypeCode",
+        "PassengerTypeCode",
+        "paxType",
+        "PaxType",
+        "travelerTypeCode",
+        "TravelerTypeCode",
+        "travelerType",
+        "TravelerType",
+      ])
+    );
+    const travelerNumberRaw = Number(
+      getValueByKeys(item, [
+        "travelerNumber",
+        "TravelerNumber",
+        "passengerNumber",
+        "PassengerNumber",
+        "travelerSequence",
+        "TravelerSequence",
+      ])
+    );
+    const travelerNumber =
+      Number.isFinite(travelerNumberRaw) && travelerNumberRaw > 0
+        ? Math.trunc(travelerNumberRaw)
+        : undefined;
+
+    if (!travelerIdentifier && !passengerTypeCode) return;
+    const key = `${travelerIdentifier || "idx"}::${passengerTypeCode || "UNK"}::${
+      travelerNumber ?? index + 1
+    }`;
+    if (dedupe.has(key)) return;
+    dedupe.add(key);
+    parsed.push({
+      travelerIdentifier,
+      passengerTypeCode: passengerTypeCode || "ADT",
+      ...(travelerNumber ? { travelerNumber } : {}),
+    });
+  });
+
+  return parsed;
+};
+
 const extractAncillaryItems = (payload) => {
   if (!payload || typeof payload !== "object") return [];
   const root =
@@ -236,14 +330,57 @@ const extractAncillaryItems = (payload) => {
       typeof payload.CatalogOfferingsAncillaryListResponse === "object"
       ? payload.CatalogOfferingsAncillaryListResponse
       : payload;
+  const rootCatalogOfferingsIdentifier = normalizeIdentifier(
+    getValueByKeys(root, [
+      "CatalogOfferingsIdentifier",
+      "catalogOfferingsIdentifier",
+      "Identifier",
+      "identifier",
+    ])
+  );
   const items = [];
   const dedupe = new Set();
 
-  const pushItem = ({ name, classification, details, amount, currencyCode, category }) => {
+  const pushItem = ({
+    name,
+    classification,
+    details,
+    amount,
+    currencyCode,
+    category,
+    offerListIdentifier = "",
+    offerIdentifier = "",
+    productIdentifier = "",
+    travelerReferences = [],
+  }) => {
     if (!name && !classification && amount === null) return;
     const normalizedName = name || classification || "Ancillary";
     const normalizedCategory = category || "Other Addons";
+    const normalizedTravelerReferences = Array.isArray(travelerReferences)
+      ? travelerReferences
+          .filter((row) => row && typeof row === "object")
+          .map((row) => ({
+            travelerIdentifier: normalizeIdentifier(row.travelerIdentifier),
+            passengerTypeCode: normalizePaxTypeCode(row.passengerTypeCode) || "ADT",
+            ...(Number.isFinite(Number(row.travelerNumber)) && Number(row.travelerNumber) > 0
+              ? { travelerNumber: Math.trunc(Number(row.travelerNumber)) }
+              : {}),
+          }))
+      : [];
+    const travelerRefKey = normalizedTravelerReferences
+      .map(
+        (ref) =>
+          `${ref.travelerIdentifier || "any"}:${ref.passengerTypeCode}:${
+            ref.travelerNumber || 0
+          }`
+      )
+      .sort()
+      .join("|");
     const key = [
+      offerListIdentifier,
+      offerIdentifier,
+      productIdentifier,
+      travelerRefKey,
       normalizedCategory.toLowerCase(),
       normalizedName.toLowerCase(),
       String(amount ?? ""),
@@ -251,6 +388,15 @@ const extractAncillaryItems = (payload) => {
     ].join("::");
     if (dedupe.has(key)) return;
     dedupe.add(key);
+
+    const passengerTypeCodes = Array.from(
+      new Set(
+        normalizedTravelerReferences
+          .map((reference) => normalizePaxTypeCode(reference.passengerTypeCode))
+          .filter(Boolean)
+      )
+    );
+
     items.push({
       category: normalizedCategory,
       name: normalizedName,
@@ -258,12 +404,26 @@ const extractAncillaryItems = (payload) => {
       details: details || "",
       amount,
       currencyCode: currencyCode || "",
+      offerListIdentifier,
+      offerIdentifier,
+      productIdentifier,
+      travelerReferences: normalizedTravelerReferences,
+      passengerTypeCodes: passengerTypeCodes.length ? passengerTypeCodes : ["ADT"],
+      isSelectable: Boolean(offerListIdentifier && offerIdentifier && productIdentifier),
     });
   };
 
   const processNodeAsItem = (node, context = {}) => {
     if (!node || typeof node !== "object") return;
+    const ancillaryNode =
+      getValueByKeys(node, ["Ancillary", "ancillary"]) &&
+      typeof getValueByKeys(node, ["Ancillary", "ancillary"]) === "object"
+        ? getValueByKeys(node, ["Ancillary", "ancillary"])
+        : null;
     const name =
+      toTextValue(
+        getValueByKeys(ancillaryNode || {}, ["Description", "description", "Name", "name"])
+      ) ||
       toTextValue(
         getValueByKeys(node, [
           "Name",
@@ -282,6 +442,7 @@ const extractAncillaryItems = (payload) => {
       ) ||
       toTextValue(getValueByKeys(node?.Brand || {}, ["Name", "name"]));
     const classification = toTextValue(
+      getValueByKeys(ancillaryNode || {}, ["@type", "type", "classification"]) ||
       getValueByKeys(node, [
         "@type",
         "type",
@@ -296,8 +457,15 @@ const extractAncillaryItems = (payload) => {
       ])
     );
     const inclusion = toTextValue(getValueByKeys(node, ["Inclusion", "inclusion"]));
-    const identifier = normalizeIdentifier(getValueByKeys(node, ["id", "ID"]));
-    const details = [classification, inclusion, identifier].filter(Boolean).join(" • ");
+    const identifier = normalizeIdentifier(
+      getValueByKeys(node, ["id", "ID", "ProductIdentifier", "productIdentifier"])
+    );
+    const ancillaryDescription = toTextValue(
+      getValueByKeys(ancillaryNode || {}, ["Description", "description", "value"])
+    );
+    const details = [ancillaryDescription, classification, inclusion, identifier]
+      .filter(Boolean)
+      .join(" • ");
     const price = resolvePriceFromNode(node);
     const amount = price.amount;
     const currencyCode = price.currencyCode || context.currencyCode || "";
@@ -306,6 +474,42 @@ const extractAncillaryItems = (payload) => {
       classification,
       details,
     });
+    const productIdentifier =
+      normalizeIdentifier(
+        getValueByKeys(node, [
+          "id",
+          "ID",
+          "ProductIdentifier",
+          "productIdentifier",
+          "Identifier",
+          "identifier",
+        ])
+      ) || normalizeIdentifier(context.productIdentifier);
+    const offerIdentifier = normalizeIdentifier(context.offerIdentifier);
+    const offerListIdentifier =
+      normalizeIdentifier(context.offerListIdentifier) || rootCatalogOfferingsIdentifier;
+    const contextualTravelerReferences = Array.isArray(context.travelerReferences)
+      ? context.travelerReferences
+      : [];
+    const travelerReferences = [
+      ...contextualTravelerReferences,
+      ...parseTravelerReferenceRows(
+        getValueByKeys(node, [
+          "TravelerIdentifierRef",
+          "travelerIdentifierRef",
+          "TravelerRef",
+          "travelerRef",
+        ])
+      ),
+      ...parseTravelerReferenceRows(
+        getValueByKeys(ancillaryNode || {}, [
+          "TravelerIdentifierRef",
+          "travelerIdentifierRef",
+          "TravelerRef",
+          "travelerRef",
+        ])
+      ),
+    ];
 
     pushItem({
       name,
@@ -314,6 +518,10 @@ const extractAncillaryItems = (payload) => {
       amount,
       currencyCode,
       category,
+      offerListIdentifier,
+      offerIdentifier,
+      productIdentifier,
+      travelerReferences,
     });
   };
 
@@ -323,9 +531,50 @@ const extractAncillaryItems = (payload) => {
   ]);
 
   catalogOfferingGroups.forEach((groupNode) => {
+    const groupOfferListIdentifier =
+      normalizeIdentifier(
+        getValueByKeys(groupNode, [
+          "offerListIdentifier",
+          "OfferListIdentifier",
+          "CatalogOfferingsIdentifier",
+          "catalogOfferingsIdentifier",
+          "Identifier",
+          "identifier",
+        ])
+      ) || rootCatalogOfferingsIdentifier;
+    const groupTravelerReferences = parseTravelerReferenceRows(
+      getValueByKeys(groupNode, [
+        "TravelerIdentifierRef",
+        "travelerIdentifierRef",
+        "TravelerRef",
+        "travelerRef",
+      ])
+    );
     const offerings = getArrayByKeys(groupNode, ["CatalogOffering", "catalogOffering"]);
     offerings.forEach((offeringNode) => {
       const offeringPrice = resolvePriceFromNode(offeringNode);
+      const offerIdentifier = normalizeIdentifier(
+        getValueByKeys(offeringNode, [
+          "id",
+          "ID",
+          "CatalogOfferingIdentifier",
+          "catalogOfferingIdentifier",
+          "Identifier",
+          "identifier",
+        ])
+      );
+      const offeringTravelerReferences = parseTravelerReferenceRows(
+        getValueByKeys(offeringNode, [
+          "TravelerIdentifierRef",
+          "travelerIdentifierRef",
+          "TravelerRef",
+          "travelerRef",
+        ])
+      );
+      const travelerReferences =
+        offeringTravelerReferences.length > 0
+          ? offeringTravelerReferences
+          : groupTravelerReferences;
       const productOptions = getArrayByKeys(offeringNode, [
         "ProductOptions",
         "productOptions",
@@ -340,7 +589,12 @@ const extractAncillaryItems = (payload) => {
           "products",
         ]);
         products.forEach((productNode) =>
-          processNodeAsItem(productNode, { currencyCode: offeringPrice.currencyCode })
+          processNodeAsItem(productNode, {
+            currencyCode: offeringPrice.currencyCode,
+            offerListIdentifier: groupOfferListIdentifier,
+            offerIdentifier,
+            travelerReferences,
+          })
         );
       });
 
@@ -351,7 +605,12 @@ const extractAncillaryItems = (payload) => {
         "products",
       ]);
       directProducts.forEach((productNode) =>
-        processNodeAsItem(productNode, { currencyCode: offeringPrice.currencyCode })
+        processNodeAsItem(productNode, {
+          currencyCode: offeringPrice.currencyCode,
+          offerListIdentifier: groupOfferListIdentifier,
+          offerIdentifier,
+          travelerReferences,
+        })
       );
     });
   });
@@ -414,6 +673,14 @@ const groupAncillaryItems = (items = []) => {
   });
 
   return groups;
+};
+
+const buildAncillarySelectionKey = (item) => {
+  const offerListIdentifier = normalizeIdentifier(item?.offerListIdentifier);
+  const offerIdentifier = normalizeIdentifier(item?.offerIdentifier);
+  const productIdentifier = normalizeIdentifier(item?.productIdentifier);
+  if (!offerListIdentifier || !offerIdentifier || !productIdentifier) return "";
+  return `${offerListIdentifier}::${offerIdentifier}::${productIdentifier}`;
 };
 
 const resolveSeatAvailabilityRequestFromOffer = (offer) => {
@@ -643,6 +910,7 @@ const BookingDetaills = () => {
   const [ancillaryLoading, setAncillaryLoading] = useState(false);
   const [ancillaryError, setAncillaryError] = useState("");
   const [ancillaryData, setAncillaryData] = useState(null);
+  const [ancillarySelectionState, setAncillarySelectionState] = useState({});
   const location = useLocation();
   const isPassengerInputPage = location?.pathname === "/bookingdetails";
   const [showFlightInfoSection, setShowFlightInfoSection] = useState(
@@ -801,6 +1069,53 @@ const BookingDetaills = () => {
     () => groupAncillaryItems(ancillaryItems),
     [ancillaryItems]
   );
+  const selectedAncillarySelections = useMemo(() => {
+    const selectedRows = [];
+    ancillaryItems.forEach((item) => {
+      if (!item?.isSelectable) return;
+      const key = buildAncillarySelectionKey(item);
+      if (!key) return;
+      const rowSelection = ancillarySelectionState?.[key];
+      if (!rowSelection?.selected) return;
+
+      const passengerTypeCodes = Array.isArray(item?.passengerTypeCodes)
+        ? item.passengerTypeCodes.map((code) => normalizePaxTypeCode(code)).filter(Boolean)
+        : [];
+      const selectedType =
+        normalizePaxTypeCode(rowSelection?.passengerTypeCode) ||
+        passengerTypeCodes[0] ||
+        "ADT";
+      const travelerReferences = Array.isArray(item?.travelerReferences)
+        ? item.travelerReferences
+        : [];
+      const matchedTravelerReference =
+        travelerReferences.find(
+          (reference) =>
+            normalizePaxTypeCode(reference?.passengerTypeCode) === selectedType
+        ) || travelerReferences[0];
+
+      selectedRows.push({
+        offerListIdentifier: normalizeIdentifier(item?.offerListIdentifier),
+        offerIdentifier: normalizeIdentifier(item?.offerIdentifier),
+        productIdentifier: normalizeIdentifier(item?.productIdentifier),
+        travelerTypeCode: selectedType,
+        ...(normalizeIdentifier(matchedTravelerReference?.travelerIdentifier)
+          ? {
+              travelerIdentifier: normalizeIdentifier(
+                matchedTravelerReference?.travelerIdentifier
+              ),
+            }
+          : {}),
+        ...(Number.isFinite(Number(matchedTravelerReference?.travelerNumber)) &&
+        Number(matchedTravelerReference?.travelerNumber) > 0
+          ? { travelerNumber: Math.trunc(Number(matchedTravelerReference?.travelerNumber)) }
+          : {}),
+      });
+    });
+    return selectedRows.filter(
+      (row) => row.offerListIdentifier && row.offerIdentifier && row.productIdentifier
+    );
+  }, [ancillaryItems, ancillarySelectionState]);
 
   const seatAvailabilityRequest = useMemo(
     () => resolveSeatAvailabilityRequestFromOffer(postBuildOfferForAncillaries || {}),
@@ -828,6 +1143,67 @@ const BookingDetaills = () => {
     seatAvailabilityRequest?.offerListIdentifier,
     seatAvailabilityRequest?.offerIdentifier,
   ]);
+
+  useEffect(() => {
+    setAncillarySelectionState({});
+    setAncillaryData(null);
+    setAncillaryError("");
+  }, [
+    selectedBrandKey,
+    ancillaryShopRequest?.offerListIdentifier,
+    ancillaryShopRequest?.offerIdentifier,
+    ancillaryShopRequest?.reservationId,
+  ]);
+
+  useEffect(() => {
+    setAncillarySelectionState((prevState) => {
+      const validKeys = new Set(
+        ancillaryItems
+          .map((item) => buildAncillarySelectionKey(item))
+          .filter(Boolean)
+      );
+      if (!validKeys.size) {
+        return Object.keys(prevState || {}).length ? {} : prevState;
+      }
+
+      let hasChange = false;
+      const nextState = {};
+      ancillaryItems.forEach((item) => {
+        const key = buildAncillarySelectionKey(item);
+        if (!key || !item?.isSelectable || !validKeys.has(key)) return;
+
+        const passengerTypeCodes = Array.isArray(item?.passengerTypeCodes)
+          ? item.passengerTypeCodes.map((code) => normalizePaxTypeCode(code)).filter(Boolean)
+          : [];
+        const fallbackType = passengerTypeCodes[0] || "ADT";
+        const previous = prevState?.[key];
+        const previousType = normalizePaxTypeCode(previous?.passengerTypeCode);
+        const resolvedType = passengerTypeCodes.includes(previousType)
+          ? previousType
+          : fallbackType;
+
+        const nextValue = {
+          selected: Boolean(previous?.selected),
+          passengerTypeCode: resolvedType,
+        };
+        nextState[key] = nextValue;
+        if (
+          !previous ||
+          previous.selected !== nextValue.selected ||
+          previous.passengerTypeCode !== nextValue.passengerTypeCode
+        ) {
+          hasChange = true;
+        }
+      });
+
+      const previousKeys = Object.keys(prevState || {});
+      if (previousKeys.length !== Object.keys(nextState).length) {
+        hasChange = true;
+      }
+
+      return hasChange ? nextState : prevState;
+    });
+  }, [ancillaryItems]);
 
   useEffect(() => {
     if (!loading && selectedAirPrice?.RePriceStatus === "PriceChanged") {
@@ -932,6 +1308,36 @@ const BookingDetaills = () => {
         section?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
     }
+  };
+
+  const handleAncillarySelectionToggle = (item, checked) => {
+    const key = buildAncillarySelectionKey(item);
+    if (!key) return;
+    const fallbackType =
+      (Array.isArray(item?.passengerTypeCodes)
+        ? item.passengerTypeCodes.map((code) => normalizePaxTypeCode(code)).find(Boolean)
+        : "") || "ADT";
+    setAncillarySelectionState((prevState) => ({
+      ...prevState,
+      [key]: {
+        selected: Boolean(checked),
+        passengerTypeCode:
+          normalizePaxTypeCode(prevState?.[key]?.passengerTypeCode) || fallbackType,
+      },
+    }));
+  };
+
+  const handleAncillaryPassengerTypeChange = (item, passengerTypeCode) => {
+    const key = buildAncillarySelectionKey(item);
+    if (!key) return;
+    const normalizedType = normalizePaxTypeCode(passengerTypeCode) || "ADT";
+    setAncillarySelectionState((prevState) => ({
+      ...prevState,
+      [key]: {
+        selected: Boolean(prevState?.[key]?.selected),
+        passengerTypeCode: normalizedType,
+      },
+    }));
   };
 
   const handleContinueWithAddonClick = async () => {
@@ -1203,6 +1609,7 @@ const BookingDetaills = () => {
                         airPriceData={airPriceData}
                         selectedAirPrice={selectedAirPrice}
                         seatSelections={seatSelections}
+                        ancillarySelections={selectedAncillarySelections}
                       />
                     )}
                     {/* <PassengerInfo data={selectedOffer} airPriceData={airPriceData} /> */}
@@ -1336,6 +1743,9 @@ const BookingDetaills = () => {
 
           {!ancillaryLoading && !ancillaryError && ancillaryItems.length > 0 ? (
             <Stack spacing={2}>
+              <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#1F507C" }}>
+                Selected add-ons: {selectedAncillarySelections.length}
+              </Typography>
               {Object.entries(groupedAncillaryItems).map(([category, rows]) =>
                 rows.length ? (
                   <Box key={category}>
@@ -1356,70 +1766,155 @@ const BookingDetaills = () => {
                         gap: 1.2,
                       }}
                     >
-                      {rows.map((item, index) => (
-                        <Box
-                          key={`${category}-${item?.name || "item"}-${index}`}
-                          sx={{
-                            border: "1px solid #D6E6F6",
-                            borderRadius: "10px",
-                            p: 1.2,
-                            bgcolor: "#FFFFFF",
-                          }}
-                        >
-                          <Typography
-                            sx={{
-                              fontSize: "13.5px",
-                              fontWeight: 700,
-                              color: "#1A4169",
-                              lineHeight: 1.3,
-                            }}
-                          >
-                            {item?.name || "Ancillary"}
-                          </Typography>
-                          {item?.details ? (
-                            <Typography
-                              sx={{
-                                mt: 0.4,
-                                fontSize: "12px",
-                                color: "#587796",
-                                lineHeight: 1.35,
-                              }}
-                            >
-                              {item.details}
-                            </Typography>
-                          ) : null}
+                      {rows.map((item, index) => {
+                        const selectionKey = buildAncillarySelectionKey(item);
+                        const rowSelection = selectionKey
+                          ? ancillarySelectionState?.[selectionKey]
+                          : null;
+                        const isChecked = Boolean(rowSelection?.selected);
+                        const passengerTypeCodes = Array.isArray(item?.passengerTypeCodes)
+                          ? item.passengerTypeCodes
+                              .map((code) => normalizePaxTypeCode(code))
+                              .filter(Boolean)
+                          : [];
+                        const fallbackPassengerType = passengerTypeCodes[0] || "ADT";
+                        const selectedPassengerType =
+                          normalizePaxTypeCode(rowSelection?.passengerTypeCode) ||
+                          fallbackPassengerType;
+
+                        return (
                           <Box
+                            key={`${category}-${item?.name || "item"}-${index}`}
                             sx={{
-                              mt: 0.9,
-                              display: "flex",
-                              justifyContent: "space-between",
-                              alignItems: "center",
-                              gap: 1,
+                              border: "1px solid #D6E6F6",
+                              borderRadius: "10px",
+                              p: 1.2,
+                              bgcolor: isChecked ? "#F2F9FF" : "#FFFFFF",
                             }}
                           >
-                            <Chip
-                              size="small"
-                              label={item?.classification || "Ancillary"}
-                              sx={{
-                                fontWeight: 700,
-                                color: "#21527E",
-                                backgroundColor: "#EAF4FF",
-                              }}
-                            />
                             <Typography
                               sx={{
-                                fontSize: "13px",
-                                fontWeight: 800,
-                                color: "#0E6E2E",
+                                fontSize: "13.5px",
+                                fontWeight: 700,
+                                color: "#1A4169",
+                                lineHeight: 1.3,
                               }}
                             >
-                              {item?.amount !== null
-                                ? `${item?.currencyCode ? `${item.currencyCode} ` : ""}${commaNumber(item.amount)}`
-                                : "Price: N/A"}
+                              {item?.name || "Ancillary"}
                             </Typography>
+                            {item?.details ? (
+                              <Typography
+                                sx={{
+                                  mt: 0.4,
+                                  fontSize: "12px",
+                                  color: "#587796",
+                                  lineHeight: 1.35,
+                                }}
+                              >
+                                {item.details}
+                              </Typography>
+                            ) : null}
+                            <Box
+                              sx={{
+                                mt: 0.9,
+                                display: "flex",
+                                justifyContent: "space-between",
+                                alignItems: "center",
+                                gap: 1,
+                              }}
+                            >
+                              <Chip
+                                size="small"
+                                label={item?.classification || "Ancillary"}
+                                sx={{
+                                  fontWeight: 700,
+                                  color: "#21527E",
+                                  backgroundColor: "#EAF4FF",
+                                }}
+                              />
+                              <Typography
+                                sx={{
+                                  fontSize: "13px",
+                                  fontWeight: 800,
+                                  color: "#0E6E2E",
+                                }}
+                              >
+                                {item?.amount !== null
+                                  ? `${item?.currencyCode ? `${item.currencyCode} ` : ""}${commaNumber(item.amount)}`
+                                  : "Price: N/A"}
+                              </Typography>
+                            </Box>
+                            <Box
+                              sx={{
+                                mt: 1,
+                                display: "flex",
+                                flexDirection: "column",
+                                gap: 0.8,
+                              }}
+                            >
+                              <FormControlLabel
+                                control={
+                                  <Checkbox
+                                    size="small"
+                                    checked={isChecked}
+                                    disabled={!item?.isSelectable}
+                                    onChange={(event) =>
+                                      handleAncillarySelectionToggle(item, event.target.checked)
+                                    }
+                                  />
+                                }
+                                label="Add on offer"
+                                sx={{
+                                  m: 0,
+                                  ".MuiFormControlLabel-label": {
+                                    fontSize: "12px",
+                                    fontWeight: 700,
+                                    color: "#184A75",
+                                  },
+                                }}
+                              />
+                              {item?.isSelectable ? (
+                                <FormControl
+                                  size="small"
+                                  fullWidth
+                                  sx={{ maxWidth: 230 }}
+                                  disabled={!isChecked || passengerTypeCodes.length === 0}
+                                >
+                                  <InputLabel id={`${selectionKey}-pax-label`}>
+                                    Passenger Type
+                                  </InputLabel>
+                                  <Select
+                                    labelId={`${selectionKey}-pax-label`}
+                                    value={selectedPassengerType}
+                                    label="Passenger Type"
+                                    onChange={(event) =>
+                                      handleAncillaryPassengerTypeChange(
+                                        item,
+                                        event.target.value
+                                      )
+                                    }
+                                  >
+                                    {passengerTypeCodes.map((code) => (
+                                      <MenuItem key={`${selectionKey}-${code}`} value={code}>
+                                        {getPaxTypeLabel(code)}
+                                      </MenuItem>
+                                    ))}
+                                  </Select>
+                                </FormControl>
+                              ) : (
+                                <Typography sx={{ fontSize: "11px", color: "#A11F32" }}>
+                                  This add-on cannot be auto-attached to offer for this response.
+                                </Typography>
+                              )}
+                              {isChecked ? (
+                                <Typography sx={{ fontSize: "11px", color: "#29577F" }}>
+                                  Selected for: {getPaxTypeLabel(selectedPassengerType)}
+                                </Typography>
+                              ) : null}
+                            </Box>
                           </Box>
-                        </Box>
-                      ))}
+                        );
+                      })}
                     </Box>
                   </Box>
                 ) : null
@@ -1427,7 +1922,10 @@ const BookingDetaills = () => {
             </Stack>
           ) : null}
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ justifyContent: "space-between", px: 2 }}>
+          <Typography sx={{ fontSize: "12px", color: "#4D6D8E", fontWeight: 600 }}>
+            Selected add-ons for booking: {selectedAncillarySelections.length}
+          </Typography>
           <Button
             onClick={() => setAncillaryDialogOpen(false)}
             sx={{

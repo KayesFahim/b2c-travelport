@@ -8,11 +8,11 @@ import DiscountSlider from "./DiscountSlider";
 import HotDeals from "../HotDeals/HotDeals";
 import TopDestination from "./TopDestination";
 import PartnerAirlines from "../../Shared/PartnerAirlines/PartnerAirlines";
-import sliderData from "../../data/sliderData.json";
+import { getHomepageData, getHomepageFallbackData } from "../../utils/homepageApi";
 
 const Home = () => {
   const [selectedTab, setSelectedTab] = useState("flight");
-  const [data, setData] = useState(null);
+  const [data, setData] = useState(() => getHomepageFallbackData());
   const [searchParams, setSearchParams] = useSearchParams();
 
   useEffect(() => {
@@ -40,20 +40,22 @@ const Home = () => {
   }, []);
 
   useEffect(() => {
-    fetch(`/api/homepage`)
-      .then((response) => {
-        if (!response.ok) throw new Error('API error');
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-          throw new Error('API returned non-JSON response');
-        }
-        return response.json();
+    let isMounted = true;
+    getHomepageData()
+      .then((payload) => {
+        if (!isMounted) return;
+        setData(payload);
       })
-      .then((data) => setData(data))
       .catch((error) => {
         console.error("Error fetching data, using fallback:", error);
-        setData(sliderData); // Use fallback data on error
+        if (isMounted) {
+          setData(getHomepageFallbackData());
+        }
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const handleTabChange = (newValue) => {
@@ -64,11 +66,11 @@ const Home = () => {
     <Box className="relative">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[920px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,_rgba(0,163,224,0.20),_rgba(0,59,113,0)_70%)]" />
       <NavBar />
-      <Banner onTabChange={handleTabChange} data={data || sliderData} />
+      <Banner onTabChange={handleTabChange} data={data} />
 
       {selectedTab === "flight" && (
         <div className="relative space-y-1 pb-3">
-          <DiscountSlider data={data || sliderData} />
+          <DiscountSlider data={data} />
           <TopDestination />
           <HotDeals />
           <PartnerAirlines />

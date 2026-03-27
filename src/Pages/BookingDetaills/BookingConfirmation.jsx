@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
+// ── Seat Selection Dialog State ──
+// (Placed at top for clarity)
+
 import {
   Alert,
   Box,
@@ -10,8 +13,12 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControl,
   Grid,
+  InputLabel,
+  MenuItem,
   Paper,
+  Select,
   Typography,
 } from "@mui/material";
 import CheckCircleOutlineRoundedIcon from "@mui/icons-material/CheckCircleOutlineRounded";
@@ -23,6 +30,7 @@ import { PDFDownloadLink } from "@react-pdf/renderer";
 import NavBar from "../../Shared/NavBar/NavBar";
 import FlightDetailsContent from "../ShowDetails/FlightDetailsContent";
 import PdfPageDesign from "../AllPDF/BookingAllPdf/PdfPageDesign";
+import RightSidebarInfo from "./RightSidebarInfo";
 
 const FONT = '"Manrope", sans-serif';
 
@@ -89,9 +97,30 @@ const paxLabel = (value) => {
   return value || "Passenger";
 };
 
+const normalizePaxTypeCode = (value) => {
+  const code = String(value || "").trim().toUpperCase();
+  if (["ADT", "ADULT"].includes(code)) return "ADT";
+  if (["CHD", "CNN", "CHILD"].includes(code)) return "CHD";
+  if (["INF", "INFANT"].includes(code)) return "INF";
+  return "ADT";
+};
+
+const buildAncillaryRowKey = (row) =>
+  [
+    toText(row?.offerListIdentifier),
+    toText(row?.offerId),
+    toText(row?.productIdentifier),
+    toText(row?.travelerId),
+  ].join("::");
+
 const isTicketedStatus = (value) => {
   const status = String(value || "").trim().toLowerCase();
   return status === "ticketed" || status === "issued" || status === "ticket issue done";
+};
+
+const isCancelledStatus = (value) => {
+  const status = String(value || "").trim().toLowerCase();
+  return status === "cancelled" || status === "canceled";
 };
 
 const toText = (value) => {
@@ -935,7 +964,14 @@ const buildPostCommitAncillaryServiceRows = (reservation) => {
   return rows;
 };
 
-const AncillaryOfferingsDialogContent = ({ data }) => {
+const AncillaryOfferingsDialogContent = ({
+  data,
+  passengers = [],
+  passengerSelectionMap = {},
+  onPassengerSelectionChange = () => {},
+  onAddAncillary = () => {},
+  loadingRowKey = "",
+}) => {
   const flightSegmentMap = (() => {
     const map = {};
     const referenceLists = Array.isArray(data?.CatalogOfferingsAncillaryListResponse?.ReferenceList)
@@ -957,6 +993,20 @@ const AncillaryOfferingsDialogContent = ({ data }) => {
     return map;
   })();
 
+  const passengerOptions = Array.isArray(passengers)
+    ? passengers.map((passenger, index) => {
+      const fullName = [passenger?.Title, passenger?.FirstName, passenger?.LastName]
+        .map((value) => toText(value))
+        .filter(Boolean)
+        .join(" ");
+      const paxType = normalizePaxTypeCode(passenger?.PaxType);
+      return {
+        index,
+        label: `${fullName || `Passenger ${index + 1}`} (${paxLabel(paxType)})`,
+      };
+    })
+    : [];
+
   const buildFullLegLabel = (refs) => {
     const orderedRefs = Array.from(new Set((Array.isArray(refs) ? refs : []).map((ref) => toText(ref)).filter(Boolean)));
     const segments = orderedRefs.map((ref) => flightSegmentMap[ref]).filter(Boolean);
@@ -972,49 +1022,89 @@ const AncillaryOfferingsDialogContent = ({ data }) => {
   };
 
   const offerings = (() => {
-    const travelerRows = data?.CatalogOfferingsAncillaryListResponse?.CatalogOfferingsID;
+    const root =
+      data?.CatalogOfferingsAncillaryListResponse &&
+        typeof data.CatalogOfferingsAncillaryListResponse === "object"
+        ? data.CatalogOfferingsAncillaryListResponse
+        : {};
+    const rootOfferListIdentifier = toText(
+      root?.CatalogOfferingsIdentifier ||
+      root?.Identifier ||
+      root?.id
+    );
+    const travelerRows = root?.CatalogOfferingsID;
     if (!Array.isArray(travelerRows)) return [];
 
     const flat = [];
     travelerRows.forEach((travelerItem) => {
       const travelerId = toText(travelerItem?.id);
+      const travelerOfferListIdentifier =
+        toText(
+          travelerItem?.CatalogOfferingsIdentifier ||
+          travelerItem?.catalogOfferingsIdentifier ||
+          travelerItem?.Identifier
+        ) || rootOfferListIdentifier;
       const travelerOffers = Array.isArray(travelerItem?.CatalogOffering)
         ? travelerItem.CatalogOffering
         : [];
 
       travelerOffers.forEach((offer) => {
-        const ancillary = offer?.ProductOptions?.[0]?.Product?.[0]?.Ancillary || {};
-        const descriptionRow = Array.isArray(ancillary?.Description)
-          ? ancillary.Description[0] || {}
-          : {};
         const price = offer?.Price || {};
-        const termsAndConditions = offer?.TermsAndConditions || {};
         const currency = toText(price?.CurrencyCode?.value || price?.CurrencyCode);
         const totalPrice = Number(price?.TotalPrice ?? 0);
-        const weight = ancillary?.Measurement?.[0] || {};
+        const offerId = toText(offer?.id || offer?.Identifier);
+        const termsAndConditions = offer?.TermsAndConditions || {};
+        const productOptions = Array.isArray(offer?.ProductOptions) ? offer.ProductOptions : [];
+        const directProducts = Array.isArray(offer?.Product) ? offer.Product : [];
+        const products = [
+          ...productOptions.flatMap((option) =>
+            Array.isArray(option?.Product) ? option.Product : []
+          ),
+          ...directProducts,
+        ];
 
-        flat.push({
-          travelerId,
-          offerId: toText(offer?.id),
-          ancillaryType: toText(ancillary?.["@type"]),
-          subCode: toText(descriptionRow?.subCode),
-          ssrCode: toText(descriptionRow?.ssrCode),
-          description:
-            toText(descriptionRow?.value) ||
-            toText(offer?.name || offer?.Name) ||
-            "Ancillary",
-          totalPrice: Number.isFinite(totalPrice) ? totalPrice : 0,
-          currency,
-          quantity: toText(offer?.ProductOptions?.[0]?.Product?.[0]?.Quantity) || "1",
-          flightRefs: Array.isArray(ancillary?.FlightRef) ? ancillary.FlightRef : [],
-          refundability:
-            toText(termsAndConditions?.Refundability?.value) ||
-            toText(termsAndConditions?.refundability?.value) ||
-            "N/A",
-          allowance:
-            toText(weight?.value) && toText(weight?.unit)
-              ? `${toText(weight?.value)} ${toText(weight?.unit)}`
-              : "",
+        products.forEach((product) => {
+          const ancillary = product?.Ancillary || {};
+          const descriptionRow = Array.isArray(ancillary?.Description)
+            ? ancillary.Description[0] || {}
+            : {};
+          const weight = ancillary?.Measurement?.[0] || {};
+          const productIdentifier = toText(
+            product?.Identifier?.value ||
+            product?.Identifier ||
+            product?.id ||
+            product?.ID
+          );
+
+          flat.push({
+            travelerId,
+            offerListIdentifier: travelerOfferListIdentifier,
+            offerId,
+            productIdentifier,
+            ancillaryType: toText(ancillary?.["@type"] || product?.["@type"]),
+            subCode: toText(descriptionRow?.subCode),
+            ssrCode: toText(descriptionRow?.ssrCode),
+            description:
+              toText(descriptionRow?.value) ||
+              toText(product?.name || product?.Name) ||
+              toText(offer?.name || offer?.Name) ||
+              "Ancillary",
+            totalPrice: Number.isFinite(totalPrice) ? totalPrice : 0,
+            currency,
+            quantity: toText(product?.Quantity || "1") || "1",
+            flightRefs: Array.isArray(ancillary?.FlightRef) ? ancillary.FlightRef : [],
+            refundability:
+              toText(termsAndConditions?.Refundability?.value) ||
+              toText(termsAndConditions?.refundability?.value) ||
+              "N/A",
+            allowance:
+              toText(weight?.value) && toText(weight?.unit)
+                ? `${toText(weight?.value)} ${toText(weight?.unit)}`
+                : "",
+            isSelectable: Boolean(
+              travelerOfferListIdentifier && offerId && productIdentifier
+            ),
+          });
         });
       });
     });
@@ -1097,6 +1187,18 @@ const AncillaryOfferingsDialogContent = ({ data }) => {
                 Number.isFinite(row.totalPrice) && row.totalPrice > 0
                   ? `${row.totalPrice.toLocaleString()}${row.currency ? ` ${row.currency}` : ""}`
                   : "N/A";
+              const rowKey = buildAncillaryRowKey(row);
+              const selectedPassengerIndexRaw = Number(
+                passengerSelectionMap?.[rowKey]
+              );
+              const selectedPassengerIndex =
+                Number.isFinite(selectedPassengerIndexRaw) &&
+                  selectedPassengerIndexRaw >= 0 &&
+                  selectedPassengerIndexRaw < passengerOptions.length
+                  ? selectedPassengerIndexRaw
+                  : 0;
+              const isLoading = loadingRowKey === rowKey;
+              const canAdd = row?.isSelectable && passengerOptions.length > 0;
 
               return (
                 <Box
@@ -1122,6 +1224,9 @@ const AncillaryOfferingsDialogContent = ({ data }) => {
                     Offer ID: <strong>{row.offerId || "N/A"}</strong>
                   </Typography>
                   <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
+                    Product ID: <strong>{row.productIdentifier || "N/A"}</strong>
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
                     Type: <strong>{row.ancillaryType || "N/A"}</strong>
                   </Typography>
                   <Typography sx={{ fontSize: 12, color: "#4A607A" }}>
@@ -1140,6 +1245,61 @@ const AncillaryOfferingsDialogContent = ({ data }) => {
                       Traveler: <strong>{row.travelerId}</strong>
                     </Typography>
                   ) : null}
+                  <Box
+                    sx={{
+                      gridColumn: { xs: "1", md: "1 / span 2" },
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      flexWrap: "wrap",
+                      mt: 0.4,
+                    }}
+                  >
+                    <FormControl size="small" sx={{ minWidth: 220 }}>
+                      <InputLabel id={`ancillary-passenger-label-${rowKey}`}>
+                        Add For
+                      </InputLabel>
+                      <Select
+                        labelId={`ancillary-passenger-label-${rowKey}`}
+                        label="Add For"
+                        value={selectedPassengerIndex}
+                        onChange={(event) =>
+                          onPassengerSelectionChange(
+                            rowKey,
+                            Number(event.target.value)
+                          )
+                        }
+                        sx={{ fontSize: 12, background: "#FFFFFF" }}
+                      >
+                        {passengerOptions.map((option) => (
+                          <MenuItem key={`${rowKey}-pax-${option.index}`} value={option.index}>
+                            {option.label}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      disabled={!canAdd || isLoading}
+                      onClick={() =>
+                        onAddAncillary(row, selectedPassengerIndex)
+                      }
+                      sx={{
+                        textTransform: "none",
+                        fontWeight: 700,
+                        bgcolor: "#0A527A",
+                        ":hover": { bgcolor: "#0A527A" },
+                      }}
+                    >
+                      {isLoading ? "Adding..." : "Add To Booking"}
+                    </Button>
+                    {!row?.isSelectable ? (
+                      <Typography sx={{ fontSize: 11, color: "#B3261E" }}>
+                        Missing catalog references for this option.
+                      </Typography>
+                    ) : null}
+                  </Box>
                   {row.flightRefs.length ? (
                     <Typography sx={{ fontSize: 12, color: "#4A607A", gridColumn: { xs: "1", md: "1 / span 2" } }}>
                       Flight Refs: <strong>{row.flightRefs.join(", ")}</strong>
@@ -1156,6 +1316,17 @@ const AncillaryOfferingsDialogContent = ({ data }) => {
 };
 
 const BookingConfirmation = () => {
+  // ── Seat Selection Dialog State ──
+  const [seatDialogOpen, setSeatDialogOpen] = useState(false);
+  const [seatDialogSegmentIdx, setSeatDialogSegmentIdx] = useState(0);
+  const [seatDialogPassengerIdx, setSeatDialogPassengerIdx] = useState(0);
+  const [seatEligibilityLoading, setSeatEligibilityLoading] = useState(false);
+  const [seatEligibilityResult, setSeatEligibilityResult] = useState(null);
+  const [seatEligibilityError, setSeatEligibilityError] = useState("");
+  const [seatDialogSelections, setSeatDialogSelections] = useState([]);
+  const [seatDialogAutoOpenKey, setSeatDialogAutoOpenKey] = useState(0);
+  const [seatAddLoading, setSeatAddLoading] = useState(false);
+  const [seatAddResult, setSeatAddResult] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = useMemo(
@@ -1183,13 +1354,19 @@ const BookingConfirmation = () => {
   const [reservationByPnrLoading, setReservationByPnrLoading] = useState(false);
   const [reservationByPnrError, setReservationByPnrError] = useState("");
   const [bookingDetailsDbPayload, setBookingDetailsDbPayload] = useState(null);
+  const [bookingStatusOverride, setBookingStatusOverride] = useState("");
   const [pnrRefreshTick, setPnrRefreshTick] = useState(0);
   const [issueTicketSubmitting, setIssueTicketSubmitting] = useState(false);
+  const [cancelBookingSubmitting, setCancelBookingSubmitting] = useState(false);
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [showPassengerTicketDownloads, setShowPassengerTicketDownloads] = useState(false);
   const [ancillaryShopLoading, setAncillaryShopLoading] = useState(false);
   const [ancillaryShopOpen, setAncillaryShopOpen] = useState(false);
   const [ancillaryShopData, setAncillaryShopData] = useState(null);
   const [ancillaryShopError, setAncillaryShopError] = useState("");
+  const [ancillaryPassengerSelectionMap, setAncillaryPassengerSelectionMap] = useState({});
+  const [ancillaryAddLoadingKey, setAncillaryAddLoadingKey] = useState("");
+  const [ancillaryAddResult, setAncillaryAddResult] = useState(null);
   const [issueTicketFeedback, setIssueTicketFeedback] = useState({
     severity: "",
     message: "",
@@ -1490,11 +1667,23 @@ const BookingConfirmation = () => {
     resolvedCommittedReservation
   );
   const bookingStatusText =
+    toText(bookingStatusOverride) ||
+    toText(
+      bookingDetailsDbPayload?.booking?.BookingStatus ||
+      bookingDetailsDbPayload?.booking?.bookingStatus ||
+      bookingDetailsDbPayload?.source?.status
+    ) ||
     toText(bookingPayload?.BookingStatus || bookingPayload?.bookingStatus) ||
     toText(finalCommitResponse?.BookingStatus || finalCommitResponse?.bookingStatus);
   const hasTicket = ticketNumbers.length > 0;
   const isAlreadyTicketed = hasTicket || isTicketedStatus(bookingStatusText);
-  const ticketStatusLabel = isAlreadyTicketed ? "Ticketed" : "Pending";
+  const isAlreadyCancelled = isCancelledStatus(bookingStatusText);
+  const canCancelBooking = !isAlreadyTicketed && !isAlreadyCancelled;
+  const ticketStatusLabel = isAlreadyCancelled
+    ? "Cancelled"
+    : isAlreadyTicketed
+      ? "Ticketed"
+      : "Pending";
   const ticketNumberText = hasTicket ? ticketNumbers.join(", ") : "N/A";
   const passengerTicketNumbers = useMemo(
     () => extractPassengerTicketNumbers(resolvedCommittedReservation, passengers.length),
@@ -1515,17 +1704,44 @@ const BookingConfirmation = () => {
       ),
     [passengers, dbPassengers, passengerTicketNumbers]
   );
+  const travelerSelectionRows = useMemo(() => {
+    const countsByType = {
+      ADT: 0,
+      CHD: 0,
+      INF: 0,
+    };
+    return passengersWithDbFallback.map((passenger, index) => {
+      const travelerTypeCode = normalizePaxTypeCode(passenger?.PaxType);
+      countsByType[travelerTypeCode] =
+        (countsByType[travelerTypeCode] || 0) + 1;
+      const travelerNumber = countsByType[travelerTypeCode] || 1;
+      const fullName = [passenger?.Title, passenger?.FirstName, passenger?.LastName]
+        .map((value) => toText(value))
+        .filter(Boolean)
+        .join(" ");
+      return {
+        index,
+        travelerTypeCode,
+        travelerNumber,
+        label: `${fullName || `Passenger ${index + 1}`} (${paxLabel(travelerTypeCode)})`,
+      };
+    });
+  }, [passengersWithDbFallback]);
   const bookingStatusForPdf = normalizeStatusForPdf(bookingStatusText, hasTicket);
   const canDownloadBookingCopy = ["booked", "hold"].includes(
     String(bookingStatusForPdf || "").trim().toLowerCase()
   );
   const canDownloadTicketCopy = isAlreadyTicketed;
-  const confirmationTitle = isAlreadyTicketed
-    ? "Ticket Confirmed!"
-    : "Booking Confirmed!";
-  const confirmationSubtitle = isAlreadyTicketed
-    ? "Your ticket is issued successfully. Save your PNR for check-in and support."
-    : "Your booking has been committed successfully. Save your PNR for check-in and support.";
+  const confirmationTitle = isAlreadyCancelled
+    ? "Booking Cancelled"
+    : isAlreadyTicketed
+      ? "Ticket Confirmed!"
+      : "Booking Confirmed!";
+  const confirmationSubtitle = isAlreadyCancelled
+    ? "This booking has been cancelled."
+    : isAlreadyTicketed
+      ? "Your ticket is issued successfully. Save your PNR for check-in and support."
+      : "Your booking has been committed successfully. Save your PNR for check-in and support.";
   const locator = finalCommitResponse?.locator || pnrFromQuery || "N/A";
   const airlinesPnr =
     extractAirlinesPnrFromReservation(resolvedCommittedReservation) ||
@@ -1604,6 +1820,83 @@ const BookingConfirmation = () => {
       })
       .filter(Boolean);
   }, [passengersWithDbFallback, passengerTicketNumbers, reservationId, locator, airlinesPnr, allLegs, priceRows, totals.total, finalCommitResponse?.createdAt, finalBrandName, finalAmenities, finalChangePolicies, finalCancellationPolicies]);
+  const seatDialogSeatAvailabilityRequest = useMemo(() => {
+    const offerListIdentifier =
+      toText(
+        getValueByPathList(seatEligibilityResult, [
+          "seatAvailabilityResponse.CatalogOfferingsAncillaryListResponse.CatalogOfferingsIdentifier.Identifier.value",
+          "seatAvailabilityResponse.CatalogOfferingsAncillaryListResponse.CatalogOfferingsIdentifier.Identifier",
+          "seatAvailabilityResponse.CatalogOfferingsAncillaryListResponse.CatalogOfferingsIdentifier.value",
+          "seatAvailabilityResponse.CatalogOfferingsAncillaryListResponse.CatalogOfferingsIdentifier",
+        ])
+      ) || "";
+    const offerIdentifier = toText(seatEligibilityResult?.offerIdentifier);
+    const productIdentifiers = Array.isArray(seatEligibilityResult?.productIdentifiers)
+      ? seatEligibilityResult.productIdentifiers.map((item) => toText(item)).filter(Boolean)
+      : [];
+
+    return {
+      offerListIdentifier,
+      offerIdentifier,
+      productIdentifiers,
+    };
+  }, [seatEligibilityResult]);
+  const seatDialogTravelerTypeCode =
+    travelerSelectionRows?.[seatDialogPassengerIdx]?.travelerTypeCode ||
+    normalizePaxTypeCode(passengersWithDbFallback?.[seatDialogPassengerIdx]?.PaxType);
+  const seatDialogTravelerData = useMemo(
+    () => ({
+      PriceBreakDown: [
+        {
+          PaxType: seatDialogTravelerTypeCode || "ADT",
+          PaxCount: 1,
+        },
+      ],
+    }),
+    [seatDialogTravelerTypeCode]
+  );
+  const selectedSeatOption = useMemo(() => {
+    const selectedRow = Array.isArray(seatDialogSelections) ? seatDialogSelections[0] : null;
+    if (!selectedRow) return null;
+
+    const seatNumber = toText(selectedRow?.seatAssignment);
+    if (!seatNumber) return null;
+
+    return {
+      seatNumber,
+      offerListIdentifier:
+        toText(selectedRow?.offerListIdentifier) ||
+        toText(seatDialogSeatAvailabilityRequest?.offerListIdentifier),
+      offerIdentifier:
+        toText(selectedRow?.offerIdentifier) ||
+        toText(seatDialogSeatAvailabilityRequest?.offerIdentifier),
+      productIdentifier: toText(selectedRow?.productIdentifier),
+      travelerIdentifier: toText(seatEligibilityResult?.travelerIdentifier),
+      segmentRef: toText(selectedRow?.segmentRef),
+    };
+  }, [seatDialogSelections, seatDialogSeatAvailabilityRequest, seatEligibilityResult]);
+  const selectedSeatPassengerName = useMemo(() => {
+    const passenger = passengersWithDbFallback?.[seatDialogPassengerIdx] || {};
+    const fullName = [passenger?.Title, passenger?.FirstName, passenger?.LastName]
+      .map((value) => toText(value))
+      .filter(Boolean)
+      .join(" ");
+    return fullName || `Passenger ${seatDialogPassengerIdx + 1}`;
+  }, [passengersWithDbFallback, seatDialogPassengerIdx]);
+
+  useEffect(() => {
+    if (!seatDialogOpen) return;
+    if (seatDialogSegmentIdx >= allLegs.length) {
+      setSeatDialogSegmentIdx(0);
+    }
+  }, [seatDialogOpen, seatDialogSegmentIdx, allLegs.length]);
+
+  useEffect(() => {
+    if (!seatDialogOpen) return;
+    if (seatDialogPassengerIdx >= passengersWithDbFallback.length) {
+      setSeatDialogPassengerIdx(0);
+    }
+  }, [seatDialogOpen, seatDialogPassengerIdx, passengersWithDbFallback.length]);
 
   if (reservationByPnrLoading) {
     return (
@@ -1754,6 +2047,204 @@ const BookingConfirmation = () => {
     }
   };
 
+  const handleCancelBooking = async () => {
+    const bookingDbId = toText(bookingDetailsDbPayload?.source?.bookingDbId);
+
+    setCancelBookingSubmitting(true);
+    setIssueTicketFeedback({ severity: "", message: "", needsPreviewRecovery: false });
+
+    try {
+      const response = await fetch("/api/user/cancel-booking", {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          Accept: "application/json",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: bookingDbId,
+          locator: toText(locator),
+          reservationId: toText(reservationId),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload?.message ||
+          payload?.details ||
+          `Cancel booking failed (${response.status})`
+        );
+      }
+
+      setBookingStatusOverride("Cancelled");
+      setCancelDialogOpen(false);
+      setIssueTicketFeedback({
+        severity: "success",
+        message: "Booking cancelled successfully.",
+        needsPreviewRecovery: false,
+      });
+      setPnrRefreshTick((prev) => prev + 1);
+    } catch (error) {
+      setIssueTicketFeedback({
+        severity: "error",
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to cancel booking right now.",
+        needsPreviewRecovery: false,
+      });
+    } finally {
+      setCancelBookingSubmitting(false);
+    }
+  };
+
+  const handleOpenSeatDialog = () => {
+    setSeatDialogOpen(true);
+    setSeatEligibilityError("");
+    setSeatEligibilityResult(null);
+    setSeatDialogSelections([]);
+    setSeatAddResult(null);
+    setSeatDialogAutoOpenKey((prev) => prev + 1);
+    void handleCheckSeatEligibility();
+  };
+
+  const handleCloseSeatDialog = () => {
+    setSeatDialogOpen(false);
+  };
+
+  const handleCheckSeatEligibility = async () => {
+    const activePnr = toText(locator) || toText(pnrFromQuery);
+    if (!activePnr || activePnr === "N/A") {
+      setSeatEligibilityError("PNR not found. Reload booking confirmation and try again.");
+      return;
+    }
+    if (!allLegs.length) {
+      setSeatEligibilityError("No flight segments available for seat selection.");
+      return;
+    }
+    if (!passengersWithDbFallback.length) {
+      setSeatEligibilityError("No passengers available for seat selection.");
+      return;
+    }
+
+    setSeatEligibilityLoading(true);
+    setSeatEligibilityError("");
+    setSeatEligibilityResult(null);
+    setSeatDialogSelections([]);
+    setSeatAddResult(null);
+    setSeatDialogAutoOpenKey((prev) => prev + 1);
+
+    try {
+      const response = await fetch("/api/travelport/seat-eligibility", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          pnr: activePnr,
+          segmentId: seatDialogSegmentIdx,
+          passengerId: seatDialogPassengerIdx,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload?.message ||
+          payload?.details ||
+          `Seat eligibility failed (${response.status})`
+        );
+      }
+      setSeatEligibilityResult(payload || {});
+    } catch (error) {
+      setSeatEligibilityError(
+        error instanceof Error
+          ? error.message
+          : "Unable to check seat eligibility right now."
+      );
+    } finally {
+      setSeatEligibilityLoading(false);
+    }
+  };
+
+  const handleAddSeat = async () => {
+    const activePnr = toText(locator) || toText(pnrFromQuery);
+    if (!activePnr || activePnr === "N/A") {
+      setSeatAddResult({
+        success: false,
+        message: "PNR not found. Reload booking confirmation and try again.",
+      });
+      return;
+    }
+    if (!selectedSeatOption?.seatNumber) {
+      setSeatAddResult({
+        success: false,
+        message: "Select a seat first.",
+      });
+      return;
+    }
+
+    setSeatAddLoading(true);
+    setSeatAddResult(null);
+    try {
+      const response = await fetch("/api/travelport/seat-add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          pnr: activePnr,
+          segmentId: seatDialogSegmentIdx,
+          passengerId: seatDialogPassengerIdx,
+          seatAssignment: selectedSeatOption.seatNumber,
+          seatNumber: selectedSeatOption.seatNumber,
+          offerListIdentifier: toText(selectedSeatOption?.offerListIdentifier),
+          offerIdentifier: toText(selectedSeatOption?.offerIdentifier),
+          productIdentifier: toText(selectedSeatOption?.productIdentifier),
+          travelerIdentifier: toText(selectedSeatOption?.travelerIdentifier),
+          segmentRef: toText(selectedSeatOption?.segmentRef),
+          travelerTypeCode:
+            travelerSelectionRows?.[seatDialogPassengerIdx]?.travelerTypeCode ||
+            normalizePaxTypeCode(passengersWithDbFallback?.[seatDialogPassengerIdx]?.PaxType),
+          travelerNumber:
+            travelerSelectionRows?.[seatDialogPassengerIdx]?.travelerNumber || 1,
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload?.message ||
+          payload?.details ||
+          `Seat add failed (${response.status})`
+        );
+      }
+      const success = payload?.success !== false;
+      setSeatAddResult({
+        success,
+        message:
+          toText(payload?.message) ||
+          (success
+            ? `Seat ${selectedSeatOption?.seatNumber} added successfully.`
+            : "Seat add request was not successful."),
+      });
+      if (success) {
+        setPnrRefreshTick((prev) => prev + 1);
+        setSeatDialogSelections([]);
+      }
+    } catch (error) {
+      setSeatAddResult({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to add seat right now.",
+      });
+    } finally {
+      setSeatAddLoading(false);
+    }
+  };
+
   const handleShopAncillaries = async () => {
     const shopPnr =
       toText(pnrFromQuery) ||
@@ -1771,6 +2262,8 @@ const BookingConfirmation = () => {
       setAncillaryShopLoading(true);
       setAncillaryShopError("");
       setAncillaryShopData(null);
+      setAncillaryAddResult(null);
+      setAncillaryAddLoadingKey("");
 
       const response = await fetch(
         `/api/travelport/ancillary-shop-by-pnr?pnr=${encodeURIComponent(shopPnr)}`,
@@ -1789,6 +2282,7 @@ const BookingConfirmation = () => {
       }
 
       setAncillaryShopData(payload);
+      setAncillaryPassengerSelectionMap({});
       setAncillaryShopOpen(true);
     } catch (error) {
       setAncillaryShopError(
@@ -1797,6 +2291,91 @@ const BookingConfirmation = () => {
       setAncillaryShopOpen(true);
     } finally {
       setAncillaryShopLoading(false);
+    }
+  };
+
+  const handleAncillaryPassengerSelectionChange = (rowKey, passengerIndex) => {
+    setAncillaryPassengerSelectionMap((previous) => ({
+      ...previous,
+      [rowKey]: Number.isFinite(Number(passengerIndex))
+        ? Number(passengerIndex)
+        : 0,
+    }));
+  };
+
+  const handleAddAncillary = async (row, passengerIndex) => {
+    const activePnr = toText(locator) || toText(pnrFromQuery);
+    if (!activePnr || activePnr === "N/A") {
+      setAncillaryAddResult({
+        success: false,
+        message: "PNR not found. Reload booking confirmation and try again.",
+      });
+      return;
+    }
+
+    const rowKey = buildAncillaryRowKey(row);
+    const travelerRow =
+      travelerSelectionRows?.[Number(passengerIndex)] || travelerSelectionRows?.[0] || null;
+    if (
+      !toText(row?.offerListIdentifier) ||
+      !toText(row?.offerId) ||
+      !toText(row?.productIdentifier)
+    ) {
+      setAncillaryAddResult({
+        success: false,
+        message: "This ancillary row is missing catalog references.",
+      });
+      return;
+    }
+
+    try {
+      setAncillaryAddLoadingKey(rowKey);
+      setAncillaryAddResult(null);
+
+      const response = await fetch("/api/travelport/ancillary-add", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          pnr: activePnr,
+          offerListIdentifier: toText(row?.offerListIdentifier),
+          offerIdentifier: toText(row?.offerId),
+          productIdentifier: toText(row?.productIdentifier),
+          travelerIdentifier: toText(row?.travelerId),
+          passengerId: Number(passengerIndex),
+          travelerTypeCode: travelerRow?.travelerTypeCode || "ADT",
+          travelerNumber: travelerRow?.travelerNumber || 1,
+          quantity: Math.max(1, toNumberValue(row?.quantity) || 1),
+        }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(
+          payload?.message ||
+          payload?.details ||
+          `Ancillary add failed (${response.status})`
+        );
+      }
+
+      setAncillaryAddResult({
+        success: payload?.success !== false,
+        message:
+          toText(payload?.message) ||
+          "Ancillary was added successfully.",
+      });
+      setPnrRefreshTick((prev) => prev + 1);
+    } catch (error) {
+      setAncillaryAddResult({
+        success: false,
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to add ancillary right now.",
+      });
+    } finally {
+      setAncillaryAddLoadingKey("");
     }
   };
 
@@ -2019,8 +2598,18 @@ const BookingConfirmation = () => {
                 size="small"
                 label={ticketStatusLabel}
                 sx={{
-                  background: hasTicket ? "#E7F7EE" : "#FFF7E8",
-                  color: hasTicket ? "#12753C" : "#A26200",
+                  background:
+                    ticketStatusLabel === "Cancelled"
+                      ? "#FDECEA"
+                      : hasTicket
+                        ? "#E7F7EE"
+                        : "#FFF7E8",
+                  color:
+                    ticketStatusLabel === "Cancelled"
+                      ? "#B71C1C"
+                      : hasTicket
+                        ? "#12753C"
+                        : "#A26200",
                   fontSize: 11,
                   fontWeight: 800,
                   fontFamily: FONT,
@@ -2330,7 +2919,7 @@ const BookingConfirmation = () => {
           <Button
             variant="outlined"
             onClick={handleShopAncillaries}
-            disabled={ancillaryShopLoading}
+            disabled={ancillaryShopLoading || isAlreadyCancelled}
             sx={{
               textTransform: "none",
               borderRadius: "10px",
@@ -2342,7 +2931,45 @@ const BookingConfirmation = () => {
           >
             {ancillaryShopLoading ? "Loading Ancillaries..." : "Shop Ancillaries"}
           </Button>
-          {!isAlreadyTicketed ? (
+
+          {/* ── Select Seats Button ── */}
+          <Button
+            variant="contained"
+            color="secondary"
+            sx={{
+              textTransform: "none",
+              borderRadius: "10px",
+              fontWeight: 700,
+              fontFamily: FONT,
+              bgcolor: "#1976d2",
+              ":hover": { bgcolor: "#115293" },
+            }}
+            onClick={handleOpenSeatDialog}
+            disabled={!allLegs.length || !passengersWithDbFallback.length || isAlreadyCancelled}
+          >
+            Select Seats
+          </Button>
+
+          {canCancelBooking ? (
+            <Button
+              variant="outlined"
+              onClick={() => setCancelDialogOpen(true)}
+              disabled={cancelBookingSubmitting}
+              sx={{
+                textTransform: "none",
+                borderRadius: "10px",
+                fontWeight: 700,
+                fontFamily: FONT,
+                borderColor: "#C62828",
+                color: "#C62828",
+                ":hover": { borderColor: "#C62828", backgroundColor: "#FFF4F4" },
+              }}
+            >
+              {cancelBookingSubmitting ? "Cancelling..." : "Cancel Booking"}
+            </Button>
+          ) : null}
+
+          {!isAlreadyTicketed && !isAlreadyCancelled ? (
             <Button
               variant="contained"
               onClick={handleIssueTicket}
@@ -2360,7 +2987,6 @@ const BookingConfirmation = () => {
             </Button>
           ) : null}
           <Button
-            onClick={handleGoToPreviewBooking}
             onClick={() => navigate("/")}
             sx={{
               textTransform: "none",
@@ -2427,15 +3053,259 @@ const BookingConfirmation = () => {
           ) : null
         }
 
+        <Dialog
+          open={cancelDialogOpen}
+          onClose={() => {
+            if (!cancelBookingSubmitting) setCancelDialogOpen(false);
+          }}
+          maxWidth="xs"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 800, color: "#982020", fontFamily: FONT }}>
+            Cancel This Booking?
+          </DialogTitle>
+          <DialogContent dividers>
+            <Typography sx={{ fontSize: 13, color: "#4A607A", fontFamily: FONT, mb: 1 }}>
+              This will mark the booking as cancelled in your account.
+            </Typography>
+            <Typography sx={{ fontSize: 12, color: "#8A5060", fontFamily: FONT }}>
+              PNR: <strong>{locator || "N/A"}</strong>
+            </Typography>
+          </DialogContent>
+          <DialogActions>
+            <Button
+              onClick={() => setCancelDialogOpen(false)}
+              disabled={cancelBookingSubmitting}
+            >
+              Keep Booking
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleCancelBooking}
+              disabled={cancelBookingSubmitting}
+              sx={{
+                bgcolor: "#C62828",
+                ":hover": { bgcolor: "#B71C1C" },
+                textTransform: "none",
+                fontWeight: 700,
+              }}
+            >
+              {cancelBookingSubmitting ? "Cancelling..." : "Yes, Cancel"}
+            </Button>
+          </DialogActions>
+        </Dialog>
+
+        <Dialog
+          open={seatDialogOpen}
+          onClose={handleCloseSeatDialog}
+          maxWidth="md"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 800, color: "#0f4b7d", fontSize: 16 }}>
+            Seat Selection - {locator || pnrFromQuery || "N/A"}
+          </DialogTitle>
+          <DialogContent dividers>
+            <Box
+              sx={{
+                border: "1px solid #D7E5F4",
+                borderRadius: "12px",
+                p: "11px",
+                background: "linear-gradient(165deg, #FBFDFF 0%, #F1F7FF 100%)",
+                mb: "10px",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  gap: "10px",
+                  flexWrap: "wrap",
+                }}
+              >
+                <Box sx={{ minWidth: 0 }}>
+                  <Typography
+                    sx={{
+                      fontSize: "12px",
+                      fontWeight: 800,
+                      color: "#1C3E60",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    Seat Map Overview
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontSize: "10px",
+                      fontWeight: 600,
+                      color: "#5E768E",
+                      lineHeight: 1.2,
+                    }}
+                  >
+                    {`Select seat for ${selectedSeatPassengerName}`}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, alignItems: "center" }}>
+                  <FormControl size="small" sx={{ minWidth: 185 }}>
+                    <InputLabel id="seat-segment-label">Segment</InputLabel>
+                    <Select
+                      labelId="seat-segment-label"
+                      value={seatDialogSegmentIdx}
+                      label="Segment"
+                      onChange={(event) => setSeatDialogSegmentIdx(Number(event.target.value))}
+                      sx={{ fontSize: 12, background: "#FFFFFF" }}
+                    >
+                      {allLegs.map((leg, index) => {
+                        const dep = toText(leg?.DepFrom) || "N/A";
+                        const arr = toText(leg?.ArrTo) || "N/A";
+                        return (
+                          <MenuItem key={`seat-segment-${index}`} value={index}>
+                            {`Leg ${index + 1}: ${dep} -> ${arr}`}
+                          </MenuItem>
+                        );
+                      })}
+                    </Select>
+                  </FormControl>
+                  <FormControl size="small" sx={{ minWidth: 230 }}>
+                    <InputLabel id="seat-passenger-label">Passenger</InputLabel>
+                    <Select
+                      labelId="seat-passenger-label"
+                      value={seatDialogPassengerIdx}
+                      label="Passenger"
+                      onChange={(event) => setSeatDialogPassengerIdx(Number(event.target.value))}
+                      sx={{ fontSize: 12, background: "#FFFFFF" }}
+                    >
+                      {passengersWithDbFallback.map((passenger, index) => {
+                        const name = [passenger?.Title, passenger?.FirstName, passenger?.LastName]
+                          .map((value) => toText(value))
+                          .filter(Boolean)
+                          .join(" ");
+                        return (
+                          <MenuItem key={`seat-passenger-${index}`} value={index}>
+                            {name || `Passenger ${index + 1}`}
+                          </MenuItem>
+                        );
+                      })}
+                    </Select>
+                  </FormControl>
+                  <Button
+                    variant="contained"
+                    onClick={handleCheckSeatEligibility}
+                    disabled={seatEligibilityLoading}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 700,
+                      bgcolor: "#0A527A",
+                      ":hover": { bgcolor: "#0A527A" },
+                    }}
+                  >
+                    {seatEligibilityLoading ? "Loading..." : "Refresh Seat Map"}
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
+
+            {seatEligibilityError ? (
+              <Alert severity="error" sx={{ mb: 2 }}>
+                {seatEligibilityError}
+              </Alert>
+            ) : null}
+
+            {seatEligibilityResult?.eligible === false ? (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                {toText(seatEligibilityResult?.reason) || "Seat selection is not allowed."}
+              </Alert>
+            ) : null}
+
+            {seatEligibilityResult?.seatAvailabilityResponse ? (
+              <RightSidebarInfo
+                data={seatDialogTravelerData}
+                seatAvailabilityData={seatEligibilityResult?.seatAvailabilityResponse || null}
+                seatAvailabilityLoading={seatEligibilityLoading}
+                seatAvailabilityError=""
+                seatAvailabilityRequest={{
+                  offerListIdentifier: toText(
+                    seatDialogSeatAvailabilityRequest?.offerListIdentifier
+                  ),
+                  offerIdentifier: toText(
+                    seatDialogSeatAvailabilityRequest?.offerIdentifier
+                  ),
+                  productIdentifiers: Array.isArray(
+                    seatDialogSeatAvailabilityRequest?.productIdentifiers
+                  )
+                    ? seatDialogSeatAvailabilityRequest.productIdentifiers
+                    : [],
+                }}
+                enablePostBuildFetch={false}
+                autoOpenSeatMap={seatDialogOpen}
+                autoOpenSeatMapKey={seatDialogAutoOpenKey}
+                seatMapOnly
+                seatSelections={seatDialogSelections}
+                onSeatSelectionsChange={(rows) => {
+                  setSeatDialogSelections(Array.isArray(rows) ? rows.slice(-1) : []);
+                  setSeatAddResult(null);
+                }}
+              />
+            ) : null}
+
+            {selectedSeatOption?.seatNumber ? (
+              <Box sx={{ mt: 2, display: "flex", flexDirection: "column", gap: 1 }}>
+                <Alert severity="info">
+                  Selected Seat: <strong>{selectedSeatOption.seatNumber}</strong> | Passenger:{" "}
+                  <strong>{selectedSeatPassengerName}</strong>
+                </Alert>
+                <Box>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    onClick={handleAddSeat}
+                    disabled={seatAddLoading}
+                    sx={{ textTransform: "none", fontWeight: 700 }}
+                  >
+                    {seatAddLoading ? "Adding Seat..." : "Confirm Seat Selection"}
+                  </Button>
+                </Box>
+              </Box>
+            ) : null}
+
+            {seatAddResult?.message ? (
+              <Alert
+                severity={seatAddResult?.success ? "success" : "error"}
+                sx={{ mt: 2 }}
+              >
+                {seatAddResult.message}
+              </Alert>
+            ) : null}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={handleCloseSeatDialog}>Close</Button>
+          </DialogActions>
+        </Dialog>
+
         <Dialog open={ancillaryShopOpen} onClose={() => setAncillaryShopOpen(false)} maxWidth="md" fullWidth>
           <DialogTitle sx={{ fontWeight: 800, color: "#0f4b7d", fontSize: 16 }}>
             Ancillary Offerings - {locator || pnrFromQuery || "N/A"}
           </DialogTitle>
           <DialogContent dividers>
+            {ancillaryAddResult?.message ? (
+              <Alert
+                severity={ancillaryAddResult?.success ? "success" : "error"}
+                sx={{ mb: 1.2 }}
+              >
+                {ancillaryAddResult.message}
+              </Alert>
+            ) : null}
             {ancillaryShopError ? (
               <Alert severity="error">{ancillaryShopError}</Alert>
             ) : ancillaryShopData ? (
-              <AncillaryOfferingsDialogContent data={ancillaryShopData} />
+              <AncillaryOfferingsDialogContent
+                data={ancillaryShopData}
+                passengers={passengersWithDbFallback}
+                passengerSelectionMap={ancillaryPassengerSelectionMap}
+                onPassengerSelectionChange={handleAncillaryPassengerSelectionChange}
+                onAddAncillary={handleAddAncillary}
+                loadingRowKey={ancillaryAddLoadingKey}
+              />
             ) : (
               <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
                 <CircularProgress size={24} />

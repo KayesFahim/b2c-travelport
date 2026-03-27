@@ -1010,23 +1010,37 @@ export default async function handler(
                             name: true,
                         },
                     },
+                    passengers: {
+                        select: {
+                            prefix: true,
+                            firstName: true,
+                            lastName: true,
+                            paxType: true,
+                            gender: true,
+                            birthDate: true,
+                            passportNumber: true,
+                            email: true,
+                        },
+                    },
                 },
             });
 
+            let updatedPayloadSnapshot: Record<string, unknown> | null = null;
             if (bookingRecord) {
                 const locator = toText(commitResult.locator || bookingRecord.locator || pnr) || null;
+                updatedPayloadSnapshot = buildUpdatedBookingSnapshot({
+                    existingSnapshot: bookingRecord.payloadSnapshot,
+                    reservationId: reservationIdForCommit,
+                    locator,
+                    commitResponse: commitResult.payload,
+                });
                 await prisma.booking.update({
                     where: { id: bookingRecord.id },
                     data: {
                         reservationId: reservationIdForCommit || bookingRecord.reservationId,
                         locator,
                         status: "TICKETED",
-                        payloadSnapshot: buildUpdatedBookingSnapshot({
-                            existingSnapshot: bookingRecord.payloadSnapshot,
-                            reservationId: reservationIdForCommit,
-                            locator,
-                            commitResponse: commitResult.payload,
-                        }) as unknown as object,
+                        payloadSnapshot: updatedPayloadSnapshot as unknown as object,
                         rawCommit: buildCompactIssuedCommitPayload({
                             reservationId: reservationIdForCommit,
                             locator,
@@ -1049,6 +1063,15 @@ export default async function handler(
                     reservationId: String(reservationIdForCommit || bookingRecord.reservationId || "N/A"),
                     route: String(bookingRecord.routeKey || "N/A"),
                     ticketInfo,
+                    travelDate: bookingRecord.travelDate ? bookingRecord.travelDate.toISOString() : "",
+                    amount:
+                        bookingRecord.totalFare !== null && bookingRecord.totalFare !== undefined
+                            ? `${String(bookingRecord.currencyCode || "USD").trim()} ${Number(
+                                  bookingRecord.totalFare
+                              ).toFixed(2)}`
+                            : "",
+                    payloadSnapshot: updatedPayloadSnapshot || bookingRecord.payloadSnapshot,
+                    bookingPassengers: bookingRecord.passengers || [],
                 });
             }
         } catch {

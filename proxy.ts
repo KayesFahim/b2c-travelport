@@ -91,6 +91,25 @@ function getBearerToken(req: NextRequest): string {
     return authHeader.slice(7).trim();
 }
 
+function configuredApiKey(): string {
+    return String(process.env.API_KEY || "").trim();
+}
+
+function getApiKeyFromRequest(req: NextRequest): string {
+    const headerApiKey = String(req.headers.get("x-api-key") || "").trim();
+    if (headerApiKey) return headerApiKey;
+
+    const queryApiKey = String(req.nextUrl.searchParams.get("api_key") || "").trim();
+    if (queryApiKey) return queryApiKey;
+
+    const authHeader = String(req.headers.get("authorization") || "").trim();
+    if (authHeader.toLowerCase().startsWith("apikey ")) {
+        return authHeader.slice(7).trim();
+    }
+
+    return "";
+}
+
 function hasSessionCookie(req: NextRequest): boolean {
     const bookingCookie = String(req.cookies.get(BOOKING_SESSION_COOKIE)?.value || "").trim();
     if (bookingCookie) return true;
@@ -108,6 +127,16 @@ export async function proxy(req: NextRequest) {
     const { pathname } = req.nextUrl;
     if (!pathname.startsWith("/api/")) {
         return NextResponse.next();
+    }
+
+    const apiKey = configuredApiKey();
+    if (!apiKey) {
+        return NextResponse.json({ message: "Server API key is not configured" }, { status: 500 });
+    }
+
+    const requestApiKey = getApiKeyFromRequest(req);
+    if (!requestApiKey || requestApiKey !== apiKey) {
+        return NextResponse.json({ message: "Valid API key is required" }, { status: 401 });
     }
 
     if (!isClientIpAllowed(req)) {

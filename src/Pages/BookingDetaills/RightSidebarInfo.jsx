@@ -30,7 +30,7 @@ import {
   Tooltip,
   Typography,
 } from "@mui/material";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { extractUnifiedPenaltyRows } from "../../utils/flightPolicyUtils";
 import secureLocalStorage from "react-secure-storage";
 import { fetchTravelportFarePolicy } from "../../utils/travelportFarePolicy";
@@ -2299,10 +2299,14 @@ const RightSidebarInfo = ({
   seatAvailabilityError = "",
   seatAvailabilityRequest = null,
   enablePostBuildFetch = false,
+  autoOpenSeatMap = false,
+  autoOpenSeatMapKey = "",
+  seatMapOnly = false,
   seatSelections = [],
   onSeatSelectionsChange = () => {},
 }) => {
   const token = secureLocalStorage.getItem("access_token");
+  const lastAutoOpenSeatMapKeyRef = useRef("");
   const [isSeatMapModalOpen, setIsSeatMapModalOpen] = useState(false);
   const [isFarePolicyModalOpen, setIsFarePolicyModalOpen] = useState(false);
   const [seatPassengerFilter, setSeatPassengerFilter] = useState("all");
@@ -2632,6 +2636,25 @@ const RightSidebarInfo = ({
     }
   }, [seatAssignmentTravelerKey, travelerSeatOptions]);
 
+  useEffect(() => {
+    if (!autoOpenSeatMap) return;
+    if (seatAvailabilityLoading) return;
+    if (seatAvailabilityError) return;
+    if (!hasSeatAvailabilityData) return;
+
+    const nextKey = toText(autoOpenSeatMapKey) || "default";
+    if (lastAutoOpenSeatMapKeyRef.current === nextKey) return;
+
+    lastAutoOpenSeatMapKeyRef.current = nextKey;
+    setIsSeatMapModalOpen(true);
+  }, [
+    autoOpenSeatMap,
+    autoOpenSeatMapKey,
+    hasSeatAvailabilityData,
+    seatAvailabilityError,
+    seatAvailabilityLoading,
+  ]);
+
   return (
     <Box
       sx={{
@@ -2641,7 +2664,7 @@ const RightSidebarInfo = ({
         p: "12px",
       }}
     >
-      <Box>
+      <Box sx={seatMapOnly ? { display: "none" } : undefined}>
         <Typography sx={sectionTitleSx}>
           <RuleRounded sx={{ fontSize: "16px", color: "var(--primary-button)" }} />
           Fare Rules
@@ -2697,9 +2720,9 @@ const RightSidebarInfo = ({
         </Box>
       </Box>
 
-      <Divider sx={{ my: "10px" }} />
+      <Divider sx={{ my: "10px", display: seatMapOnly ? "none" : "block" }} />
 
-      <Box>
+      <Box sx={seatMapOnly ? { display: "none" } : undefined}>
         <Typography sx={sectionTitleSx}>
           <RuleRounded sx={{ fontSize: "16px", color: "var(--primary-button)" }} />
           Fare Policy
@@ -2742,7 +2765,7 @@ const RightSidebarInfo = ({
         </Box>
       </Box>
 
-      <Divider sx={{ my: "10px" }} />
+      <Divider sx={{ my: "10px", display: seatMapOnly ? "none" : "block" }} />
 
       <Box>
         <Typography sx={sectionTitleSx}>

@@ -65,6 +65,11 @@ function isTicketedStatus(value) {
     return status === "ticketed" || status === "issued" || status === "ticket issue done";
 }
 
+function isCancelledStatus(value) {
+    const status = String(value || "").trim().toLowerCase();
+    return status === "cancelled" || status === "canceled";
+}
+
 function formatDateTime(value) {
     if (!value) return "-";
     const date = parseDateValue(value);
@@ -403,6 +408,10 @@ export default function BookingDetailsPage() {
     const [ticketStatusOverride, setTicketStatusOverride] = useState("");
     const [issueMessage, setIssueMessage] = useState("");
     const [issueError, setIssueError] = useState("");
+    const [cancellingBooking, setCancellingBooking] = useState(false);
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+    const [cancelMessage, setCancelMessage] = useState("");
+    const [cancelError, setCancelError] = useState("");
 
     const [ancillaryLoading, setAncillaryLoading] = useState(false);
     const [ancillaryData, setAncillaryData] = useState(null);
@@ -524,7 +533,8 @@ export default function BookingDetailsPage() {
     const currency = priceRows?.[0]?.CurrencyCode || "BDT";
     const pnr = toText(displayBooking?.PNR, "-");
     const effectiveStatus = toText(ticketStatusOverride || displayBooking?.BookingStatus, "Booked");
-    const canIssueTicket = !isTicketedStatus(effectiveStatus);
+    const canIssueTicket = !isTicketedStatus(effectiveStatus) && !isCancelledStatus(effectiveStatus);
+    const canCancelBooking = !isTicketedStatus(effectiveStatus) && !isCancelledStatus(effectiveStatus);
     const statusColor = (() => {
         const s = String(effectiveStatus || "").toLowerCase();
         if (s === "ticketed" || s === "issued") return { bgcolor: "#E6F9EE", color: "#1A7A41" };
@@ -614,6 +624,53 @@ export default function BookingDetailsPage() {
         }
     };
 
+    const handleCancelBooking = async () => {
+        const bookingDbId = toText(booking?.id || booking?.bookingDbId || booking?.BookingDbId);
+        try {
+            setCancellingBooking(true);
+            setCancelError("");
+            setCancelMessage("");
+
+            const response = await fetch("/api/user/cancel-booking", {
+                method: "POST",
+                credentials: "include",
+                headers: {
+                    "Content-Type": "application/json",
+                    Accept: "application/json",
+                },
+                body: JSON.stringify({
+                    id: bookingDbId,
+                    locator: toText(booking?.locator || booking?.PNR || displayBooking?.PNR),
+                    reservationId: toText(booking?.reservationId),
+                }),
+            });
+
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(payload?.message || payload?.details || "Cancel booking failed.");
+            }
+
+            setTicketStatusOverride("Cancelled");
+            setCancelDialogOpen(false);
+            setIssueMessage("");
+            setIssueError("");
+            setCancelMessage("Booking cancelled successfully.");
+            setBooking((prev) =>
+                prev
+                    ? {
+                        ...prev,
+                        BookingStatus: "Cancelled",
+                        bookingStatus: "Cancelled",
+                    }
+                    : prev
+            );
+        } catch (error) {
+            setCancelError(error instanceof Error ? error.message : "Cancel booking failed.");
+        } finally {
+            setCancellingBooking(false);
+        }
+    };
+
     return (
         <Box>
             <NavBar />
@@ -689,10 +746,20 @@ export default function BookingDetailsPage() {
                                         {issuingTicket ? "Issuing..." : "Issue Ticket"}
                                     </Button>
                                 )}
+                                {canCancelBooking && (
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => setCancelDialogOpen(true)}
+                                        disabled={cancellingBooking}
+                                        sx={{ minWidth: 150, borderColor: "#C62828", color: "#C62828" }}
+                                    >
+                                        {cancellingBooking ? "Cancelling..." : "Cancel Booking"}
+                                    </Button>
+                                )}
                                 <Button
                                     variant="outlined"
                                     onClick={handleShopAncillaries}
-                                    disabled={ancillaryLoading}
+                                    disabled={ancillaryLoading || isCancelledStatus(effectiveStatus)}
                                     sx={{ minWidth: 160 }}
                                 >
                                     {ancillaryLoading ? <><CircularProgress size={14} sx={{ mr: 1 }} />Loading...</> : "Shop Ancillaries"}
@@ -709,6 +776,16 @@ export default function BookingDetailsPage() {
                         {issueError ? (
                             <Alert severity="error" sx={{ mt: 1.2 }}>
                                 {issueError}
+                            </Alert>
+                        ) : null}
+                        {cancelMessage ? (
+                            <Alert severity="success" sx={{ mt: 1.2 }}>
+                                {cancelMessage}
+                            </Alert>
+                        ) : null}
+                        {cancelError ? (
+                            <Alert severity="error" sx={{ mt: 1.2 }}>
+                                {cancelError}
                             </Alert>
                         ) : null}
                     </Paper>
@@ -982,6 +1059,48 @@ export default function BookingDetailsPage() {
                         </DialogContent>
                         <DialogActions>
                             <Button onClick={() => setAncillaryOpen(false)}>Close</Button>
+                        </DialogActions>
+                    </Dialog>
+
+                    <Dialog
+                        open={cancelDialogOpen}
+                        onClose={() => {
+                            if (!cancellingBooking) setCancelDialogOpen(false);
+                        }}
+                        maxWidth="xs"
+                        fullWidth
+                    >
+                        <DialogTitle sx={{ fontWeight: 800, color: "#982020", fontSize: 18 }}>
+                            Cancel This Booking?
+                        </DialogTitle>
+                        <DialogContent dividers>
+                            <Typography sx={{ fontSize: 13, color: "#4A607A", mb: 1 }}>
+                                This will mark the booking as cancelled in your account.
+                            </Typography>
+                            <Typography sx={{ fontSize: 12, color: "#8A5060" }}>
+                                PNR: <strong>{pnr || "N/A"}</strong>
+                            </Typography>
+                        </DialogContent>
+                        <DialogActions>
+                            <Button
+                                onClick={() => setCancelDialogOpen(false)}
+                                disabled={cancellingBooking}
+                            >
+                                Keep Booking
+                            </Button>
+                            <Button
+                                variant="contained"
+                                onClick={handleCancelBooking}
+                                disabled={cancellingBooking}
+                                sx={{
+                                    bgcolor: "#C62828",
+                                    ":hover": { bgcolor: "#B71C1C" },
+                                    textTransform: "none",
+                                    fontWeight: 700,
+                                }}
+                            >
+                                {cancellingBooking ? "Cancelling..." : "Yes, Cancel"}
+                            </Button>
                         </DialogActions>
                     </Dialog>
 

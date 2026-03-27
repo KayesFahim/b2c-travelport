@@ -72,6 +72,7 @@ export async function createTravelportBookHold({
   selectedOffer,
   passengers = [],
   seatSelections = [],
+  ancillarySelections = [],
   adultCount = 0,
   childCount = 0,
   infantCount = 0,
@@ -91,6 +92,7 @@ export async function createTravelportBookHold({
     selectedOffer,
     passengers,
     seatSelections,
+    ancillarySelections,
     adultCount,
     childCount,
     infantCount,
@@ -130,6 +132,10 @@ export async function createTravelportBookHold({
       }
       throw currentError;
     } catch (error) {
+      const status = Number(error?.status);
+      if (Number.isFinite(status) && status !== 404) {
+        throw error;
+      }
       lastError =
         error instanceof Error
           ? error

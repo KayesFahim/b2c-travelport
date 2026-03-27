@@ -8,6 +8,7 @@ import YouTubeIcon from "@mui/icons-material/YouTube";
 import FlightTakeoffRoundedIcon from "@mui/icons-material/FlightTakeoffRounded";
 import SupportAgentRoundedIcon from "@mui/icons-material/SupportAgentRounded";
 import LanguageRoundedIcon from "@mui/icons-material/LanguageRounded";
+import { getHomepageData } from "../../utils/homepageApi";
 
 const linkStyle = {
   color: "var(--footer-text-color)",
@@ -26,21 +27,24 @@ const Footer = () => {
   });
 
   useEffect(() => {
-    fetch("/api/homepage")
-      .then((response) => response.json())
+    let isMounted = true;
+    getHomepageData()
       .then((payload) => {
-        if (payload && typeof payload === "object") {
-          setHomepageSettings((prev) => ({
-            ...prev,
-            contactEmail: String(payload.contactEmail || prev.contactEmail),
-            contactPhone: String(payload.contactPhone || ""),
-            copyright: String(payload.copyright || ""),
-          }));
-        }
+        if (!isMounted || !payload || typeof payload !== "object") return;
+        setHomepageSettings((prev) => ({
+          ...prev,
+          contactEmail: String(payload.contactEmail || prev.contactEmail),
+          contactPhone: String(payload.contactPhone || ""),
+          copyright: String(payload.copyright || ""),
+        }));
       })
       .catch(() => {
         // Keep defaults when API is unavailable.
       });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   return (
