@@ -265,7 +265,7 @@ export default function AdminDashboard() {
 
     if (authLoading) {
         return (
-            <Box sx={{ minHeight: "70vh", display: "grid", placeItems: "center" }}>
+            <Box className="travelport-page" sx={{ minHeight: "70vh", display: "grid", placeItems: "center" }}>
                 <Box sx={{ textAlign: "center" }}>
                     <CircularProgress />
                     <Typography sx={{ mt: 1.5, color: "#64748b" }}>
@@ -278,7 +278,7 @@ export default function AdminDashboard() {
 
     if (authError) {
         return (
-            <Box sx={{ minHeight: "70vh", display: "grid", placeItems: "center", px: 2 }}>
+            <Box className="travelport-page" sx={{ minHeight: "70vh", display: "grid", placeItems: "center", px: 2 }}>
                 <Alert severity="error" sx={{ maxWidth: 520, borderRadius: "12px" }}>
                     {authError}
                 </Alert>
@@ -287,7 +287,7 @@ export default function AdminDashboard() {
     }
 
     return (
-        <Box sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#f9fafb" }}>
+        <Box className="travelport-page" sx={{ display: "flex", minHeight: "100vh", backgroundColor: "#f9fafb" }}>
             {/* Desktop Drawer */}
             <Drawer
                 variant="permanent"

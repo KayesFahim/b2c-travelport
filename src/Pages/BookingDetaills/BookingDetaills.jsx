@@ -1371,9 +1371,9 @@ const BookingDetaills = () => {
   };
 
   return (
-    <Box sx={{ backgroundColor: "#EBF0F4", height: "100%" }}>
+    <Box className="travelport-page" sx={{ backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
       <NavBar />
-      <Container>
+      <Container maxWidth="xl">
         <Grid container sx={{ pt: "50px" }} spacing={2}>
           <Grid
             item

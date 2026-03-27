@@ -1190,7 +1190,7 @@ const PreviewBooking = () => {
 
   if (!passengers.length || !Object.keys(flightInfoSource || {}).length) {
     return (
-      <Box>
+      <Box className="travelport-page">
         <NavBar />
         <Container maxWidth="lg" sx={{ py: 4 }}>
           <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1209,10 +1209,10 @@ const PreviewBooking = () => {
   }
 
   return (
-    <Box>
+    <Box className="travelport-page">
       <NavBar />
       <Container maxWidth="lg" sx={{ py: 3 }}>
-        <Paper elevation={0} sx={{ p: 1.5, border: "1px solid #E3EBF7", mb: 2 }}>
+        <Paper className="travelport-soft-surface" elevation={0} sx={{ p: 1.5, border: "1px solid #E3EBF7", mb: 2 }}>
           <Typography sx={{ fontSize: 13, fontWeight: 700, color: "#123d66", mb: 1 }}>
             Booking Flow
           </Typography>
@@ -1239,6 +1239,7 @@ const PreviewBooking = () => {
         </Paper>
 
         <Paper
+          className="travelport-soft-surface"
           elevation={0}
           sx={{
             p: 1.5,

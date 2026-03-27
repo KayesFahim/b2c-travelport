@@ -494,7 +494,7 @@ export default function BookingDetailsPage() {
 
     if (loadingDetails) {
         return (
-            <Box>
+            <Box className="travelport-page">
                 <NavBar />
                 <Container maxWidth="lg" sx={{ py: 3 }}>
                     <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -507,7 +507,7 @@ export default function BookingDetailsPage() {
 
     if (!booking) {
         return (
-            <Box>
+            <Box className="travelport-page">
                 <NavBar />
                 <Container maxWidth="lg" sx={{ py: 3 }}>
                     <Alert severity="warning" sx={{ mb: 2 }}>
@@ -672,7 +672,7 @@ export default function BookingDetailsPage() {
     };
 
     return (
-        <Box>
+        <Box className="travelport-page">
             <NavBar />
             <Container maxWidth="lg" sx={{ py: 3 }}>
                 <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 1.5 }}>

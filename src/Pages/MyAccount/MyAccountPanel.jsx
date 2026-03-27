@@ -2096,6 +2096,7 @@ export default function MyAccountPanel() {
 
     return (
         <Box
+            className="travelport-page"
             sx={{
                 minHeight: "100vh",
                 background:

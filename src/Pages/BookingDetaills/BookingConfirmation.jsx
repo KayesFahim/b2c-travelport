@@ -2415,12 +2415,13 @@ const BookingConfirmation = () => {
   };
 
   return (
-    <Box sx={{ fontFamily: FONT, backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
+    <Box className="travelport-page" sx={{ fontFamily: FONT, backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
       <NavBar />
       <Container maxWidth="lg" sx={{ py: 3 }}>
 
         {/* ── Confirmed banner ── */}
         <Box
+          className="travelport-hero-surface"
           sx={{
             p: { xs: 2.5, md: 3 },
             borderRadius: "16px",
