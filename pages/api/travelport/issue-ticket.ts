@@ -474,8 +474,21 @@ async function runIssueTicketPaymentStep(params: {
         requestInit.body = JSON.stringify(payloadBody);
     }
 
+
     const response = await fetch(url, requestInit);
     const payload = (await parseJsonSafe(response)) as Record<string, unknown>;
+
+    // Log raw request and response
+    try {
+        const { logTravelportApi } = await import("@/utils/travelportLogger");
+        logTravelportApi({
+            endpoint: url,
+            request: requestInit,
+            response: payload,
+            status: response.status,
+            meta: { api: "issue-ticket", step: params.stepName },
+        });
+    } catch { }
 
     pushApiFlowLog({
         logs: params.logs,
@@ -1067,8 +1080,8 @@ export default async function handler(
                     amount:
                         bookingRecord.totalFare !== null && bookingRecord.totalFare !== undefined
                             ? `${String(bookingRecord.currencyCode || "USD").trim()} ${Number(
-                                  bookingRecord.totalFare
-                              ).toFixed(2)}`
+                                bookingRecord.totalFare
+                            ).toFixed(2)}`
                             : "",
                     payloadSnapshot: updatedPayloadSnapshot || bookingRecord.payloadSnapshot,
                     bookingPassengers: bookingRecord.passengers || [],

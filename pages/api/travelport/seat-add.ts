@@ -521,6 +521,20 @@ export default async function handler(
     const addSeatOfferPayloadResponse = (await parseJsonSafe(
       addSeatOfferResponse
     )) as Record<string, unknown>;
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: addSeatOfferUrl,
+        request: {
+          method: "POST",
+          headers,
+          body: addSeatOfferPayload,
+        },
+        response: addSeatOfferPayloadResponse,
+        status: addSeatOfferResponse.status,
+        meta: { api: "seat-add", step: "add-seat-offer" },
+      });
+    } catch { }
 
     if (!addSeatOfferResponse.ok || hasTravelportErrors(addSeatOfferPayloadResponse)) {
       return res.status(502).json({

@@ -3,6 +3,7 @@ import {
   type LegacySegment,
 } from "./search-flight";
 import { getTravelportAccessToken } from "./_token-cache";
+import { logTravelportApi } from "@/utils/travelportLogger";
 
 type BuildFromProductsBody = {
   selectedOffer?: Record<string, unknown>;
@@ -171,15 +172,15 @@ function buildPayloadSegments(offer: Record<string, unknown>): LegacySegment[] {
         {}) as Record<string, unknown>;
       const depDate = splitDateTime(
         getValueByKeys(legObj, ["DepDate", "depDate"]) ??
-          getValueByKeys(firstSegment, ["DepTime", "depTime"])
+        getValueByKeys(firstSegment, ["DepTime", "depTime"])
       ).date;
       const depfrom = toText(
         getValueByKeys(legObj, ["DepFrom", "depFrom"]) ??
-          getValueByKeys(firstSegment, ["DepFrom", "depFrom"])
+        getValueByKeys(firstSegment, ["DepFrom", "depFrom"])
       );
       const arrto = toText(
         getValueByKeys(legObj, ["ArrTo", "arrTo"]) ??
-          getValueByKeys(lastSegment, ["ArrTo", "arrTo"])
+        getValueByKeys(lastSegment, ["ArrTo", "arrTo"])
       );
 
       return {
@@ -323,8 +324,8 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
         segmentSequence,
         brandTier: toText(
           getValueByKeys(segment, ["brandTier", "BrandTier"]) ??
-            getValueByKeys(brandFeatures, ["tier", "Tier"]) ??
-            "1"
+          getValueByKeys(brandFeatures, ["tier", "Tier"]) ??
+          "1"
         ),
         AvailabilitySourceCode: toText(
           getValueByKeys(segment, ["AvailabilitySourceCode"])
@@ -784,12 +785,12 @@ function resolveFarePolicyRequestFromOffer(offer: Record<string, unknown>) {
       "productIdentifier",
       "ProductIdentifier",
     ]) ??
-      getValueByKeys(unifiedSource, [
-        "productIdentifiers",
-        "ProductIdentifiers",
-        "productIdentifier",
-        "ProductIdentifier",
-      ])
+    getValueByKeys(unifiedSource, [
+      "productIdentifiers",
+      "ProductIdentifiers",
+      "productIdentifier",
+      "ProductIdentifier",
+    ])
   );
 
   if (!offerIdentifier) {
@@ -817,10 +818,10 @@ function normalizePenaltyAmountFromTravelport(penaltyRule: any) {
   const currencyCode =
     String(
       amount?.currencyCode ??
-        amount?.CurrencyCode ??
-        amount?.code ??
-        amount?.Code ??
-        ""
+      amount?.CurrencyCode ??
+      amount?.code ??
+      amount?.Code ??
+      ""
     ).trim() || null;
   const value = toNullableNumber(amount?.value ?? amount?.Value);
 
@@ -837,9 +838,9 @@ function mapPenaltyEntry(penaltyRule: any, fallbackPassengerTypes: string[]) {
   const appliesTo =
     String(
       penaltyRule?.PenaltyAppliesTo ??
-        penaltyRule?.penaltyAppliesTo ??
-        penaltyRule?.AppliesTo ??
-        ""
+      penaltyRule?.penaltyAppliesTo ??
+      penaltyRule?.AppliesTo ??
+      ""
     ).trim() || null;
 
   return {
@@ -987,8 +988,8 @@ function mapOfferListToLegacyResults(params: {
     const currencyCode =
       toText(
         getValueByKeys(price, ["CurrencyCode", "currencyCode", "Currency"]) &&
-          (getValueByKeys(price, ["CurrencyCode", "currencyCode", "Currency"]) as any)
-            ?.value
+        (getValueByKeys(price, ["CurrencyCode", "currencyCode", "Currency"]) as any)
+          ?.value
       ) ||
       toText(getValueByKeys(price, ["CurrencyCode", "currencyCode", "Currency"])) ||
       normalizeCurrencyCode(params.requestedCurrencyCode) ||
@@ -1051,8 +1052,8 @@ function mapOfferListToLegacyResults(params: {
           (segment as any)?.universalProductAttributeRefs
         )
           ? (segment as any).universalProductAttributeRefs.map((ref: unknown) =>
-              String(ref)
-            )
+            String(ref)
+          )
           : [];
 
         const refAmenities = amenityRefs
@@ -1065,12 +1066,12 @@ function mapOfferListToLegacyResults(params: {
           .map((item) => toUniversalProductAttributeItem(item));
         const inlineAmenities = mapInlineAmenityItems(
           (segment as any)?.Amenities?.items ??
-            (segment as any)?.Amenities ??
-            (segment as any)?.amenities
+          (segment as any)?.Amenities ??
+          (segment as any)?.amenities
         );
         const inlineUniversalAttributes = mapInlineUniversalAttributes(
           (segment as any)?.Amenities?.universalProductAttributes ??
-            (segment as any)?.universalProductAttributes
+          (segment as any)?.universalProductAttributes
         );
 
         const mappedAmenities = [...refAmenities, ...inlineAmenities];
@@ -1296,17 +1297,17 @@ function mapOfferListToLegacyResults(params: {
       OfferIdentifier: resolvedOfferIdentifier,
       Identifier: resolvedOfferIdentifier
         ? {
-            value: resolvedOfferIdentifier,
-          }
+          value: resolvedOfferIdentifier,
+        }
         : null,
       farePolicyRequest: selectedFarePolicyRequest,
       seatAvailabilityRequest:
         offerListIdentifier && seatOfferIdentifier && seatProductIdentifiers.length > 0
           ? {
-              offerListIdentifier,
-              offerIdentifier: seatOfferIdentifier,
-              productIdentifiers: seatProductIdentifiers,
-            }
+            offerListIdentifier,
+            offerIdentifier: seatOfferIdentifier,
+            productIdentifiers: seatProductIdentifiers,
+          }
           : null,
       RePriceStatus: fareChanged ? "PriceChanged" : "Success",
       sourceBuildFromProducts: true,
@@ -1350,10 +1351,10 @@ export default async function handler(
     const body = (req.body ?? {}) as BuildFromProductsBody;
     const requestedCurrencyCode = normalizeCurrencyCode(
       body?.currencyCode ||
-        body?.currency ||
-        process.env.TRAVELPORT_BUILD_FROM_PRODUCTS_CURRENCY ||
-        process.env.TRAVELPORT_DEFAULT_CURRENCY ||
-        "USD"
+      body?.currency ||
+      process.env.TRAVELPORT_BUILD_FROM_PRODUCTS_CURRENCY ||
+      process.env.TRAVELPORT_DEFAULT_CURRENCY ||
+      "USD"
     );
     const selectedOffer = resolveOffer(body);
     if (!Object.keys(selectedOffer).length) {
@@ -1377,7 +1378,7 @@ export default async function handler(
     const version = process.env.TRAVELPORT_VERSION || "11";
     const buildFromProductsUrl = resolveBuildFromProductsUrl(version);
 
-    const response = await fetch(buildFromProductsUrl, {
+    const fetchOptions = {
       method: "POST",
       headers: {
         Accept: "application/json",
@@ -1388,9 +1389,17 @@ export default async function handler(
         Authorization: `Bearer ${accessToken}`,
       },
       body: JSON.stringify(requestPayload),
-    });
-
+    };
+    const response = await fetch(buildFromProductsUrl, fetchOptions);
     const responsePayload = await response.json().catch(() => ({}));
+    // Log raw request and response
+    logTravelportApi({
+      endpoint: buildFromProductsUrl,
+      request: fetchOptions,
+      response: responsePayload,
+      status: response.status,
+      meta: { api: "build-from-products" },
+    });
     if (!response.ok) {
       return res.status(502).json({
         message: `Travelport build-from-products failed (${response.status})`,
