@@ -22,75 +22,6 @@ const PROTECTED_PREFIXES = [
 const BOOKING_SESSION_COOKIE = "flyjatt_booking_session";
 const ADMIN_SESSION_COOKIE = "flyjatt_admin_session";
 
-function getAllowedOrigins(requestOrigin: string): Set<string> {
-    const configured = String(process.env.ALLOWED_API_ORIGINS || "")
-        .split(",")
-        .map((entry) => entry.trim())
-        .filter(Boolean);
-
-    return new Set([requestOrigin, ...configured]);
-}
-
-function normalizeIp(ipRaw: string): string {
-    const ip = String(ipRaw || "").trim();
-    if (!ip) return "";
-    if (ip.startsWith("::ffff:")) {
-        return ip.replace("::ffff:", "");
-    }
-    return ip;
-}
-
-function getClientIp(req: NextRequest): string {
-    const forwarded = String(req.headers.get("x-forwarded-for") || "").trim();
-    const firstForwarded = forwarded.split(",")[0]?.trim();
-    if (firstForwarded) return normalizeIp(firstForwarded);
-
-    const realIp = String(req.headers.get("x-real-ip") || "").trim();
-    if (realIp) return normalizeIp(realIp);
-
-    return normalizeIp(String((req as unknown as { ip?: string }).ip || ""));
-}
-
-function isLocalhostIp(ip: string): boolean {
-    return ip === "127.0.0.1" || ip === "::1" || ip === "localhost";
-}
-
-function isClientIpAllowed(_req: NextRequest): boolean {
-    return true;
-}
-
-function isOriginAllowed(req: NextRequest): boolean {
-    const requestOrigin = req.nextUrl.origin;
-    const allowedOrigins = getAllowedOrigins(requestOrigin);
-
-    const originHeader = req.headers.get("origin");
-    if (originHeader && !allowedOrigins.has(originHeader)) {
-        return false;
-    }
-
-    const refererHeader = req.headers.get("referer");
-    if (refererHeader) {
-        try {
-            const refererOrigin = new URL(refererHeader).origin;
-            if (!allowedOrigins.has(refererOrigin)) {
-                return false;
-            }
-        } catch {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-function getBearerToken(req: NextRequest): string {
-    const authHeader = String(req.headers.get("authorization") || "").trim();
-    if (!authHeader.toLowerCase().startsWith("bearer ")) {
-        return "";
-    }
-    return authHeader.slice(7).trim();
-}
-
 function configuredApiKey(): string {
     return String(process.env.API_KEY || "").trim();
 }
@@ -108,6 +39,14 @@ function getApiKeyFromRequest(req: NextRequest): string {
     }
 
     return "";
+}
+
+function getBearerToken(req: NextRequest): string {
+    const authHeader = String(req.headers.get("authorization") || "").trim();
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
+        return "";
+    }
+    return authHeader.slice(7).trim();
 }
 
 function hasSessionCookie(req: NextRequest): boolean {
@@ -137,14 +76,6 @@ export async function proxy(req: NextRequest) {
     const requestApiKey = getApiKeyFromRequest(req);
     if (!requestApiKey || requestApiKey !== apiKey) {
         return NextResponse.json({ message: "Valid API key is required" }, { status: 401 });
-    }
-
-    if (!isClientIpAllowed(req)) {
-        return NextResponse.json({ message: "API access denied for this IP" }, { status: 403 });
-    }
-
-    if (!isOriginAllowed(req)) {
-        return NextResponse.json({ message: "API access denied from this origin" }, { status: 403 });
     }
 
     if (!isProtectedPath(pathname)) {
