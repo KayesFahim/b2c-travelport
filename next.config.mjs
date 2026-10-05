@@ -25,6 +25,9 @@ const nextConfig = {
       "./node_modules/tesseract.js/dist/worker.min.js",
       "./tessdata/**/*.traineddata",
     ],
+    "/api/travelport/search-flight": [
+      "./sample/**/*.json",
+    ],
   },
   turbopack: {
     root: __dirname,

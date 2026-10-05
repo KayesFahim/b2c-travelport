@@ -21,6 +21,7 @@ dist
 .env.development.local
 .env.test.local
 .env.production.local
+env.txt
 .vscode
 
 # local V11 GDS Air payload exports
@@ -38,8 +39,8 @@ yarn-error.log*
 # tessdata/
 /*.traineddata
 
-# local sample payload/data folders
-sample/
+# local sample payload/data folders (sample committed so Vercel serverless has fallback)
+# sample/
 sample data/
 sample-data/
 sample_data/

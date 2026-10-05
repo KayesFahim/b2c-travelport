@@ -1,0 +1,72 @@
+{
+  "@type": "CatalogProductOfferingsQueryRequest",
+  "CatalogProductOfferingsRequest": {
+    "@type": "CatalogProductOfferingsRequestAir",
+    "maxNumberOfUpsellsToReturn": 4,
+    "offersPerPage": 20,
+    "contentSourceList": [
+      "GDS"
+    ],
+    "PassengerCriteria": [
+      {
+        "@type": "PassengerCriteria",
+        "passengerTypeCode": "ADT",
+        "number": 2
+      },
+      {
+        "@type": "PassengerCriteria",
+        "passengerTypeCode": "CHD",
+        "number": 1
+      },
+      {
+        "@type": "PassengerCriteria",
+        "passengerTypeCode": "INF",
+        "number": 1
+      }
+    ],
+    "SearchCriteriaFlight": [
+      {
+        "@type": "SearchCriteriaFlight",
+        "departureDate": "2026-05-01",
+        "From": {
+          "value": "DXB"
+        },
+        "To": {
+          "value": "JFK"
+        }
+      },
+      {
+        "@type": "SearchCriteriaFlight",
+        "departureDate": "2026-05-30",
+        "From": {
+          "value": "JFK"
+        },
+        "To": {
+          "value": "DXB"
+        }
+      }
+    ],
+    "CustomResponseModifiersAir": {
+      "@type": "CustomResponseModifiersAir",
+      "includeFlightAmenitiesInd": true,
+      "includeUniversalProductAttributesInd": true,
+      "excludeBaggageFeesInd": true,
+      "includeCo2EmissionsDataInd": true
+    },
+    "SearchModifiersAir": {
+      "@type": "SearchModifiersAir",
+      "CarrierPreference": [
+        {
+          "preferenceType": "PreferredWithUpgrade",
+          "cabins": [
+            "Economy"
+          ]
+        }
+      ]
+    },
+    "PricingModifiersAir": {
+      "@type": "PricingModifiersAir",
+      "currencyCode": "USD"
+    }
+  }
+}

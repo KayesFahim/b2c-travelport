@@ -428,13 +428,21 @@ async function persistSearchResponseSamples(params: {
 }
 
 async function readSampleJson<T>(filename: string): Promise<T | null> {
-  try {
-    const filePath = path.join(process.cwd(), "sample", filename);
-    const raw = await readFile(filePath, "utf8");
-    return JSON.parse(raw) as T;
-  } catch {
-    return null;
+  const candidatePaths = [
+    path.join(process.cwd(), "sample", filename),
+    path.join(process.cwd(), "Sample", filename),
+    path.join(__dirname, "..", "..", "sample", filename),
+    path.join(__dirname, "..", "..", "Sample", filename),
+  ];
+  for (const filePath of candidatePaths) {
+    try {
+      const raw = await readFile(filePath, "utf8");
+      return JSON.parse(raw) as T;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 function getRequiredEnv(name: string): string {
@@ -2581,12 +2589,19 @@ export default async function handler(
       responsePayload = await response.json().catch(() => ({}));
       if (response.ok) {
         unifiedResults = toUnifiedSearchResult(payloadSegments, responsePayload);
+        console.log(
+          `[search-flight] Live Travelport status ${response.status}: parsed ${unifiedResults.length} offers`
+        );
       } else {
         liveSearchFailed = true;
         liveSearchErrorMessage =
           (responsePayload?.message as string) ||
           (responsePayload?.error_description as string) ||
           `Travelport flight search failed (${response.status})`;
+        console.warn(
+          `[search-flight] Live Travelport failed (${response.status}):`,
+          liveSearchErrorMessage
+        );
       }
     } catch (liveSearchError) {
       liveSearchFailed = true;
@@ -2594,6 +2609,7 @@ export default async function handler(
         liveSearchError instanceof Error
           ? liveSearchError.message
           : "Travelport flight search failed";
+      console.error("[search-flight] Live Travelport error:", liveSearchErrorMessage);
     }
 
     if (!Array.isArray(unifiedResults) || unifiedResults.length === 0) {
