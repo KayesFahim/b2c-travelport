@@ -1,0 +1,240 @@
+{
+  "OfferListResponse": {
+    "@type": "OfferListResponse",
+    "transactionId": "e8912b7a3c4f567821b3a9c02345ef01",
+    "traceId": "9b418a02-7c34-4e2a-8219-4501a3cf8812",
+    "OfferID": [
+      {
+        "@type": "OfferID",
+        "id": "off-kul-jfk-qr-001",
+        "Identifier": {
+          "authority": "Travelport",
+          "value": "8e012150-408b-4709-a042-11ac8b21a800_PC"
+        },
+        "Offer": [
+          {
+            "@type": "Offer",
+            "id": "off-kul-jfk-qr-001",
+            "Identifier": {
+              "authority": "Travelport",
+              "value": "8e012150-408b-4709-a042-11ac8b21a800_PC"
+            },
+            "TotalPrice": {
+              "@type": "PriceDetail",
+              "CurrencyCode": {
+                "decimalPlace": 2,
+                "value": "MYR"
+              },
+              "Base": 14200.0,
+              "TotalTaxes": 4180.0,
+              "TotalFees": 0.0,
+              "TotalPrice": 18380.0
+            },
+            "PriceBreakdown": [
+              {
+                "@type": "PriceBreakdownAir",
+                "quantity": 1,
+                "requestedPassengerType": "ADT",
+                "Amount": {
+                  "@type": "Amount",
+                  "CurrencyCode": {
+                    "decimalPlace": 2,
+                    "value": "MYR"
+                  },
+                  "Base": 7200.0,
+                  "Taxes": {
+                    "@type": "TaxesDetail",
+                    "TotalTaxes": 2040.0,
+                    "Tax": [
+                      {
+                        "taxCode": "MY",
+                        "value": 73.0
+                      },
+                      {
+                        "taxCode": "D8",
+                        "value": 1.0
+                      },
+                      {
+                        "taxCode": "US",
+                        "value": 188.0
+                      },
+                      {
+                        "taxCode": "YC",
+                        "value": 32.0
+                      },
+                      {
+                        "taxCode": "XY",
+                        "value": 31.0
+                      },
+                      {
+                        "taxCode": "XA",
+                        "value": 26.0
+                      },
+                      {
+                        "taxCode": "AY",
+                        "value": 25.0
+                      },
+                      {
+                        "taxCode": "XF",
+                        "value": 20.0
+                      },
+                      {
+                        "taxCode": "YQ",
+                        "value": 680.0
+                      },
+                      {
+                        "taxCode": "YR",
+                        "value": 964.0
+                      }
+                    ]
+                  },
+                  "Total": 9240.0
+                }
+              },
+              {
+                "@type": "PriceBreakdownAir",
+                "quantity": 1,
+                "requestedPassengerType": "CHD",
+                "Amount": {
+                  "@type": "Amount",
+                  "CurrencyCode": {
+                    "decimalPlace": 2,
+                    "value": "MYR"
+                  },
+                  "Base": 5500.0,
+                  "Taxes": {
+                    "@type": "TaxesDetail",
+                    "TotalTaxes": 1940.0,
+                    "Tax": [
+                      {
+                        "taxCode": "MY",
+                        "value": 73.0
+                      },
+                      {
+                        "taxCode": "D8",
+                        "value": 1.0
+                      },
+                      {
+                        "taxCode": "US",
+                        "value": 188.0
+                      },
+                      {
+                        "taxCode": "YC",
+                        "value": 32.0
+                      },
+                      {
+                        "taxCode": "XY",
+                        "value": 31.0
+                      },
+                      {
+                        "taxCode": "XA",
+                        "value": 26.0
+                      },
+                      {
+                        "taxCode": "AY",
+                        "value": 25.0
+                      },
+                      {
+                        "taxCode": "XF",
+                        "value": 20.0
+                      },
+                      {
+                        "taxCode": "YQ",
+                        "value": 680.0
+                      },
+                      {
+                        "taxCode": "YR",
+                        "value": 864.0
+                      }
+                    ]
+                  },
+                  "Total": 7440.0
+                }
+              },
+              {
+                "@type": "PriceBreakdownAir",
+                "quantity": 1,
+                "requestedPassengerType": "INF",
+                "Amount": {
+                  "@type": "Amount",
+                  "CurrencyCode": {
+                    "decimalPlace": 2,
+                    "value": "MYR"
+                  },
+                  "Base": 1500.0,
+                  "Taxes": {
+                    "@type": "TaxesDetail",
+                    "TotalTaxes": 200.0,
+                    "Tax": [
+                      {
+                        "taxCode": "US",
+                        "value": 50.0
+                      },
+                      {
+                        "taxCode": "YQ",
+                        "value": 70.0
+                      },
+                      {
+                        "taxCode": "YR",
+                        "value": 80.0
+                      }
+                    ]
+                  },
+                  "Total": 1700.0
+                }
+              }
+            ],
+            "Product": [
+              {
+                "@type": "ProductAir",
+                "id": "p0",
+                "FlightSegment": [
+                  {
+                    "@type": "FlightSegment",
+                    "sequence": 1,
+                    "flightRef": "s1"
+                  },
+                  {
+                    "@type": "FlightSegment",
+                    "sequence": 2,
+                    "flightRef": "s2"
+                  }
+                ]
+              },
+              {
+                "@type": "ProductAir",
+                "id": "p1",
+                "FlightSegment": [
+                  {
+                    "@type": "FlightSegment",
+                    "sequence": 1,
+                    "flightRef": "s3"
+                  },
+                  {
+                    "@type": "FlightSegment",
+                    "sequence": 2,
+                    "flightRef": "s4"
+                  }
+                ]
+              }
+            ],
+            "TermsAndConditions": {
+              "@type": "TermsAndConditionsAir",
+              "id": "T0",
+              "ValidatingAirline": [
+                {
+                  "@type": "ValidatingAirline",
+                  "ValidatingAirline": "QR"
+                }
+              ],
+              "PaymentTimeLimit": "2026-10-31T23:59:00Z"
+            }
+          }
+        ]
+      }
+    ],
+    "Identifier": {
+      "value": "8e012150-408b-4709-a042-11ac8b21a800_PC"
+    }
+  }
+}

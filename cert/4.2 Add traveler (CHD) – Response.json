@@ -1,0 +1,12 @@
+{
+  "TravelerResponse": {
+    "@type": "TravelerResponse",
+    "Traveler": {
+      "@type": "TravelerIdentifier",
+      "Identifier": {
+        "authority": "Travelport",
+        "value": "trv-chd-002"
+      }
+    }
+  }
+}

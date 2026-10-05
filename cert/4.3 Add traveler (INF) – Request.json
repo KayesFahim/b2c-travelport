@@ -1,0 +1,35 @@
+{
+  "Traveler": {
+    "@type": "Traveler",
+    "passengerTypeCode": "INF",
+    "gender": "Female",
+    "birthDate": "2025-09-05",
+    "accompaniedBy": "travelerRefId_1",
+    "PersonName": {
+      "@type": "PersonNameDetail",
+      "Given": "NUR",
+      "Surname": "BINTI AHMAD"
+    },
+    "TravelDocument": [
+      {
+        "@type": "TravelDocumentDetail",
+        "docNumber": "A73829104",
+        "docType": "Passport",
+        "issueDate": "2025-10-15",
+        "expireDate": "2030-10-15",
+        "issueCountry": "MYS",
+        "birthDate": "2025-09-05",
+        "birthPlace": "KUL",
+        "Gender": "Female",
+        "PersonName": {
+          "@type": "PersonNameDetail",
+          "Given": "NUR",
+          "Surname": "BINTI AHMAD"
+        },
+        "IssuedForGeoPoliticalArea": {
+          "value": "MYS"
+        }
+      }
+    ]
+  }
+}

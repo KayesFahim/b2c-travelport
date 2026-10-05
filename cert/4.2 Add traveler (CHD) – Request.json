@@ -1,0 +1,34 @@
+{
+  "Traveler": {
+    "@type": "Traveler",
+    "passengerTypeCode": "CHD",
+    "gender": "Male",
+    "birthDate": "2020-04-10",
+    "PersonName": {
+      "@type": "PersonNameDetail",
+      "Given": "HARIS",
+      "Surname": "BIN AHMAD"
+    },
+    "TravelDocument": [
+      {
+        "@type": "TravelDocumentDetail",
+        "docNumber": "A61928374",
+        "docType": "Passport",
+        "issueDate": "2020-05-20",
+        "expireDate": "2030-05-20",
+        "issueCountry": "MYS",
+        "birthDate": "2020-04-10",
+        "birthPlace": "KUL",
+        "Gender": "Male",
+        "PersonName": {
+          "@type": "PersonNameDetail",
+          "Given": "HARIS",
+          "Surname": "BIN AHMAD"
+        },
+        "IssuedForGeoPoliticalArea": {
+          "value": "MYS"
+        }
+      }
+    ]
+  }
+}

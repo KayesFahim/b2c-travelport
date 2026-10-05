@@ -1,0 +1,56 @@
+{
+  "OfferQueryBuildFromProducts": {
+    "BuildFromProductsRequest": {
+      "@type": "BuildFromProductsRequestAir",
+      "PassengerCriteria": [
+        {
+          "@type": "PassengerCriteria",
+          "number": 1,
+          "passengerTypeCode": "ADT"
+        },
+        {
+          "@type": "PassengerCriteria",
+          "number": 1,
+          "passengerTypeCode": "CHD"
+        },
+        {
+          "@type": "PassengerCriteria",
+          "number": 1,
+          "passengerTypeCode": "INF"
+        }
+      ],
+      "ProductCriteriaAir": [
+        {
+          "flightRefs": [
+            "s1",
+            "s2"
+          ],
+          "sequence": 1,
+          "ClassOfService": "T",
+          "Brand": {
+            "@type": "BrandID",
+            "BrandRef": "b0"
+          }
+        },
+        {
+          "flightRefs": [
+            "s3",
+            "s4"
+          ],
+          "sequence": 2,
+          "ClassOfService": "T",
+          "Brand": {
+            "@type": "BrandID",
+            "BrandRef": "b0"
+          }
+        }
+      ],
+      "PricingModifiersAir": {
+        "@type": "PricingModifiersAirDefault",
+        "CurrencyCode": {
+          "value": "MYR"
+        }
+      }
+    }
+  }
+}

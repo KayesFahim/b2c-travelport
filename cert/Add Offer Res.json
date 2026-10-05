@@ -1,0 +1,15 @@
+{
+  "OfferListResponse": {
+    "@type": "OfferListResponse",
+    "OfferID": [
+      {
+        "@type": "OfferID",
+        "id": "offer_1",
+        "Identifier": {
+          "authority": "Travelport",
+          "value": "bdd271ca-5996-42a1-99c6-3064bd3bc125"
+        }
+      }
+    ]
+  }
+}

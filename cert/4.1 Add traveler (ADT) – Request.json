@@ -1,0 +1,49 @@
+{
+  "Traveler": {
+    "@type": "Traveler",
+    "passengerTypeCode": "ADT",
+    "gender": "Male",
+    "birthDate": "1994-05-15",
+    "PersonName": {
+      "@type": "PersonNameDetail",
+      "Given": "AHMAD",
+      "Surname": "BIN ABDULLAH"
+    },
+    "Telephone": [
+      {
+        "@type": "Telephone",
+        "countryAccessCode": "60",
+        "areaCityCode": "3",
+        "phoneNumber": "88997766",
+        "role": "Mobile"
+      }
+    ],
+    "Email": [
+      {
+        "value": "ahmad.abdullah@flyjatt.com",
+        "comment": "Primary Contact Email"
+      }
+    ],
+    "TravelDocument": [
+      {
+        "@type": "TravelDocumentDetail",
+        "docNumber": "A58291043",
+        "docType": "Passport",
+        "issueDate": "2021-08-12",
+        "expireDate": "2031-08-12",
+        "issueCountry": "MYS",
+        "birthDate": "1994-05-15",
+        "birthPlace": "KUL",
+        "Gender": "Male",
+        "PersonName": {
+          "@type": "PersonNameDetail",
+          "Given": "AHMAD",
+          "Surname": "BIN ABDULLAH"
+        },
+        "IssuedForGeoPoliticalArea": {
+          "value": "MYS"
+        }
+      }
+    ]
+  }
+}

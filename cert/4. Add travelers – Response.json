@@ -1,0 +1,60 @@
+{
+  "TravelerListResponse": {
+    "@type": "TravelerListResponse",
+    "ReferenceList": [
+      {
+        "@type": "ReferenceListTraveler",
+        "Traveler": [
+          {
+            "@type": "Traveler",
+            "id": "travelerRefId_1",
+            "passengerTypeCode": "ADT",
+            "gender": "Male",
+            "birthDate": "1994-05-15",
+            "Identifier": {
+              "authority": "Travelport",
+              "value": "trv-adt-001"
+            },
+            "PersonName": {
+              "@type": "PersonNameDetail",
+              "Given": "AHMAD",
+              "Surname": "BIN ABDULLAH"
+            }
+          },
+          {
+            "@type": "Traveler",
+            "id": "travelerRefId_2",
+            "passengerTypeCode": "CHD",
+            "gender": "Male",
+            "birthDate": "2020-04-10",
+            "Identifier": {
+              "authority": "Travelport",
+              "value": "trv-chd-002"
+            },
+            "PersonName": {
+              "@type": "PersonNameDetail",
+              "Given": "HARIS",
+              "Surname": "BIN AHMAD"
+            }
+          },
+          {
+            "@type": "Traveler",
+            "id": "travelerRefId_3",
+            "passengerTypeCode": "INF",
+            "gender": "Female",
+            "birthDate": "2025-09-05",
+            "Identifier": {
+              "authority": "Travelport",
+              "value": "trv-inf-003"
+            },
+            "PersonName": {
+              "@type": "PersonNameDetail",
+              "Given": "NUR",
+              "Surname": "BINTI AHMAD"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

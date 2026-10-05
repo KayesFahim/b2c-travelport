@@ -1,0 +1,74 @@
+{
+  "CatalogProductOfferingsQueryRequest": {
+    "CatalogProductOfferingsRequest": {
+      "@type": "CatalogProductOfferingsRequestAir",
+      "maxNumberOfUpsellsToReturn": 4,
+      "offersPerPage": 50,
+      "contentSourceList": [
+        "GDS"
+      ],
+      "PassengerCriteria": [
+        {
+          "@type": "PassengerCriteria",
+          "number": 1,
+          "age": 30,
+          "passengerTypeCode": "ADT"
+        },
+        {
+          "@type": "PassengerCriteria",
+          "number": 1,
+          "age": 6,
+          "passengerTypeCode": "CHD"
+        },
+        {
+          "@type": "PassengerCriteria",
+          "number": 1,
+          "age": 1,
+          "passengerTypeCode": "INF"
+        }
+      ],
+      "SearchCriteriaFlight": [
+        {
+          "@type": "SearchCriteriaFlight",
+          "departureDate": "2026-11-01",
+          "From": {
+            "value": "KUL"
+          },
+          "To": {
+            "value": "JFK"
+          }
+        },
+        {
+          "@type": "SearchCriteriaFlight",
+          "departureDate": "2026-12-01",
+          "From": {
+            "value": "JFK"
+          },
+          "To": {
+            "value": "KUL"
+          }
+        }
+      ],
+      "SearchModifiersAir": {
+        "@type": "SearchModifiersAir",
+        "CabinPreference": [
+          {
+            "@type": "CabinPreference",
+            "preferenceType": "Permitted",
+            "cabins": [
+              "Economy"
+            ]
+          }
+        ],
+        "ConnectionPreferences": [
+          {
+            "@type": "ConnectionPreferencesAir",
+            "FlightType": {
+              "connectionType": "Any"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

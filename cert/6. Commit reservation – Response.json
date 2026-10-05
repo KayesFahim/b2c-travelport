@@ -1,0 +1,196 @@
+{
+  "ReservationResponse": {
+    "@type": "ReservationResponse",
+    "Reservation": {
+      "@type": "Reservation",
+      "id": "c7821a94-3e1b-4f52-8921-9d201a4e5f67",
+      "Identifier": {
+        "authority": "Travelport",
+        "value": "c7821a94-3e1b-4f52-8921-9d201a4e5f67"
+      },
+      "Offer": [
+        {
+          "@type": "Offer",
+          "id": "offer_1",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "bdd271ca-5996-42a1-99c6-3064bd3bc125"
+          },
+          "ContentSource": "GDS",
+          "Product": [
+            {
+              "@type": "ProductAir",
+              "id": "prod_air_01",
+              "FlightSegment": [
+                {
+                  "@type": "FlightSegment",
+                  "sequence": 1,
+                  "flightRef": "Flight_01"
+                },
+                {
+                  "@type": "FlightSegment",
+                  "sequence": 2,
+                  "flightRef": "Flight_02"
+                },
+                {
+                  "@type": "FlightSegment",
+                  "sequence": 3,
+                  "flightRef": "Flight_03"
+                },
+                {
+                  "@type": "FlightSegment",
+                  "sequence": 4,
+                  "flightRef": "Flight_04"
+                }
+              ]
+            }
+          ],
+          "TotalPrice": {
+            "@type": "PriceDetail",
+            "CurrencyCode": {
+              "decimalPlace": 2,
+              "value": "MYR"
+            },
+            "Base": 14200.0,
+            "TotalTaxes": 4180.0,
+            "TotalFees": 0.0,
+            "TotalPrice": 18380.0
+          }
+        }
+      ],
+      "Traveler": [
+        {
+          "@type": "Traveler",
+          "id": "travelerRefId_1",
+          "birthDate": "1994-05-15",
+          "gender": "Male",
+          "passengerTypeCode": "ADT",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "trv-adt-001"
+          },
+          "PersonName": {
+            "@type": "PersonNameDetail",
+            "Given": "AHMAD",
+            "Surname": "BIN ABDULLAH"
+          }
+        },
+        {
+          "@type": "Traveler",
+          "id": "travelerRefId_2",
+          "birthDate": "2020-04-10",
+          "gender": "Male",
+          "passengerTypeCode": "CHD",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "trv-chd-002"
+          },
+          "PersonName": {
+            "@type": "PersonNameDetail",
+            "Given": "HARIS",
+            "Surname": "BIN AHMAD"
+          }
+        },
+        {
+          "@type": "Traveler",
+          "id": "travelerRefId_3",
+          "birthDate": "2025-09-05",
+          "gender": "Female",
+          "passengerTypeCode": "INF",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "trv-inf-003"
+          },
+          "PersonName": {
+            "@type": "PersonNameDetail",
+            "Given": "NUR",
+            "Surname": "BINTI AHMAD"
+          }
+        }
+      ],
+      "Receipt": [
+        {
+          "@type": "ReceiptConfirmation",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "1b1efb54-fddb-4eaf-9222-148968b478e7"
+          },
+          "Confirmation": {
+            "@type": "ConfirmationHold",
+            "OfferStatus": {
+              "@type": "OfferStatusAir",
+              "StatusAir": [
+                {
+                  "flightRefs": [
+                    "Flight_01",
+                    "Flight_02",
+                    "Flight_03",
+                    "Flight_04"
+                  ],
+                  "code": "HK",
+                  "value": "Confirmed"
+                }
+              ]
+            },
+            "Locator": {
+              "source": "1G",
+              "creationDate": "2026-09-19",
+              "value": "8X9K2L"
+            }
+          }
+        },
+        {
+          "@type": "ReceiptConfirmation",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "9cfe920a-7617-42d1-9d6d-43653753a189"
+          },
+          "Confirmation": {
+            "@type": "ConfirmationHold",
+            "Locator": {
+              "source": "QR",
+              "value": "QRPNR8"
+            }
+          }
+        }
+      ],
+      "SpecialService": [
+        {
+          "@type": "SpecialService",
+          "id": "SpecialService_1",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "97eef18b-d9ca-419e-9868-a9f98bcb9b46"
+          },
+          "AppliesTo": {
+            "@type": "AppliesToOfferProductSegment",
+            "travelerRef": "travelerRefId_3"
+          },
+          "ServiceCode": "INFT",
+          "Text": "NUR BINTI AHMAD 05SEP25"
+        },
+        {
+          "@type": "SpecialService",
+          "id": "SpecialService_2",
+          "Identifier": {
+            "authority": "Travelport",
+            "value": "a811fa92-e012-4210-b912-8e01ba432109"
+          },
+          "AppliesTo": {
+            "@type": "AppliesToOfferProductSegment",
+            "travelerRef": "travelerRefId_2"
+          },
+          "ServiceCode": "CHLD",
+          "Text": "10APR20"
+        }
+      ],
+      "ReservationDisplaySequence": [
+        {
+          "@type": "ReservationDisplaySequence",
+          "sequence": 1,
+          "displaySequence": 1
+        }
+      ]
+    }
+  }
+}

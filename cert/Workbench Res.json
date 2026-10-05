@@ -1,0 +1,12 @@
+{
+  "ReservationResponse": {
+    "@type": "ReservationResponse",
+    "Reservation": {
+      "@type": "Reservation",
+      "id": "c7821a94-3e1b-4f52-8921-9d201a4e5f67",
+      "Identifier": {
+        "value": "c7821a94-3e1b-4f52-8921-9d201a4e5f67"
+      }
+    }
+  }
+}

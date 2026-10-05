@@ -1,0 +1,119 @@
+{
+  "TravelerListRequest": {
+    "@type": "TravelerListRequest",
+    "Traveler": [
+      {
+        "@type": "Traveler",
+        "passengerTypeCode": "ADT",
+        "gender": "Male",
+        "birthDate": "1994-05-15",
+        "PersonName": {
+          "@type": "PersonNameDetail",
+          "Given": "AHMAD",
+          "Surname": "BIN ABDULLAH"
+        },
+        "Telephone": [
+          {
+            "@type": "Telephone",
+            "countryAccessCode": "60",
+            "areaCityCode": "3",
+            "phoneNumber": "88997766",
+            "role": "Mobile"
+          }
+        ],
+        "Email": [
+          {
+            "value": "ahmad.abdullah@flyjatt.com",
+            "comment": "Primary Contact Email"
+          }
+        ],
+        "TravelDocument": [
+          {
+            "@type": "TravelDocumentDetail",
+            "docNumber": "A58291043",
+            "docType": "Passport",
+            "issueDate": "2021-08-12",
+            "expireDate": "2031-08-12",
+            "issueCountry": "MYS",
+            "birthDate": "1994-05-15",
+            "birthPlace": "KUL",
+            "Gender": "Male",
+            "PersonName": {
+              "@type": "PersonNameDetail",
+              "Given": "AHMAD",
+              "Surname": "BIN ABDULLAH"
+            },
+            "IssuedForGeoPoliticalArea": {
+              "value": "MYS"
+            }
+          }
+        ]
+      },
+      {
+        "@type": "Traveler",
+        "passengerTypeCode": "CHD",
+        "gender": "Male",
+        "birthDate": "2020-04-10",
+        "PersonName": {
+          "@type": "PersonNameDetail",
+          "Given": "HARIS",
+          "Surname": "BIN AHMAD"
+        },
+        "TravelDocument": [
+          {
+            "@type": "TravelDocumentDetail",
+            "docNumber": "A61928374",
+            "docType": "Passport",
+            "issueDate": "2020-05-20",
+            "expireDate": "2030-05-20",
+            "issueCountry": "MYS",
+            "birthDate": "2020-04-10",
+            "birthPlace": "KUL",
+            "Gender": "Male",
+            "PersonName": {
+              "@type": "PersonNameDetail",
+              "Given": "HARIS",
+              "Surname": "BIN AHMAD"
+            },
+            "IssuedForGeoPoliticalArea": {
+              "value": "MYS"
+            }
+          }
+        ]
+      },
+      {
+        "@type": "Traveler",
+        "passengerTypeCode": "INF",
+        "gender": "Female",
+        "birthDate": "2025-09-05",
+        "accompaniedBy": "travelerRefId_1",
+        "PersonName": {
+          "@type": "PersonNameDetail",
+          "Given": "NUR",
+          "Surname": "BINTI AHMAD"
+        },
+        "TravelDocument": [
+          {
+            "@type": "TravelDocumentDetail",
+            "docNumber": "A73829104",
+            "docType": "Passport",
+            "issueDate": "2025-10-15",
+            "expireDate": "2030-10-15",
+            "issueCountry": "MYS",
+            "birthDate": "2025-09-05",
+            "birthPlace": "KUL",
+            "Gender": "Female",
+            "PersonName": {
+              "@type": "PersonNameDetail",
+              "Given": "NUR",
+              "Surname": "BINTI AHMAD"
+            },
+            "IssuedForGeoPoliticalArea": {
+              "value": "MYS"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
