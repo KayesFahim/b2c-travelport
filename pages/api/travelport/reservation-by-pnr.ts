@@ -111,19 +111,30 @@ export default async function handler(
       endpoint.searchParams.set("viewBrandCompleteInfoInd", "true");
     }
 
+    const headers = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+      "Accept-Version": version,
+      "Content-Version": version,
+      Authorization: `Bearer ${accessToken}`,
+    };
     const response = await fetch(endpoint.toString(), {
       method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
-        "Accept-Version": version,
-        "Content-Version": version,
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers,
     });
 
     const payload = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: endpoint.toString(),
+        request: { method: "GET", headers },
+        response: payload,
+        status: response.status,
+        meta: { api: "reservation-by-pnr", pnr },
+      });
+    } catch { }
     if (!response.ok) {
       return res.status(502).json({
         message: `Travelport reservation retrieve failed (${response.status})`,

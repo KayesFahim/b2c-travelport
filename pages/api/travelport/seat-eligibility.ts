@@ -284,7 +284,11 @@ function resolveBookingBaseUrl(version: string): string {
 }
 
 function resolveSeatAvailabilityUrl(version: string): string {
-  const directUrl = process.env.TRAVELPORT_SEAT_AVAILABILITY_URL || process.env.TRAVELPORT_SEAT_MAP_URL || "";
+  const directUrl =
+    process.env.TRAVELPORT_SEAT_AVAILABILITY_URL ||
+    process.env.TRAVELPORT_SEAT_MAP_URL ||
+    process.env.TRAVELPORT_VIEW_SEAT_MAP ||
+    "";
   if (directUrl.trim()) return directUrl.trim();
 
   const baseUrl = process.env.TRAVELPORT_BASE_URL || "https://api.pp.travelport.net";
@@ -848,6 +852,22 @@ export default async function handler(
       }
       buildPayload = buildResult.payload;
       reservationId = reservationId || buildResult.reservationId;
+    } else if (reservationId) {
+      const wbUrl = `${bookingBaseUrl}/session/reservationworkbench/${encodeURIComponent(
+        reservationId
+      )}`;
+      const wbResponse = await fetch(wbUrl, { method: "GET", headers });
+      const wbPayload = (await parseJsonSafe(wbResponse)) as Record<string, unknown>;
+      if (!wbResponse.ok || hasTravelportErrors(wbPayload)) {
+        return res.status(502).json({
+          message: `Workbench retrieval failed (${wbResponse.status})`,
+          details:
+            extractTravelportErrorMessage(wbPayload) ||
+            "Unable to retrieve reservation workbench.",
+          stage: "get_workbench",
+        });
+      }
+      buildPayload = wbPayload;
     }
 
     if (!reservationId) {
@@ -932,6 +952,16 @@ export default async function handler(
     const seatAvailabilityPayload = (await parseJsonSafe(
       seatAvailabilityResponse
     )) as Record<string, unknown>;
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: seatAvailabilityUrl,
+        request: { method: "POST", headers, body: requestPayload },
+        response: seatAvailabilityPayload,
+        status: seatAvailabilityResponse.status,
+        meta: { api: "seat-eligibility", reservationId },
+      });
+    } catch { }
 
     if (!seatAvailabilityResponse.ok || hasTravelportErrors(seatAvailabilityPayload)) {
       return res.status(502).json({

@@ -151,15 +151,20 @@ const MultiCitySearchResult = () => {
           },
           token
         );
-        setFlights(data || []);
-        setFilteredFlights(data || []);
-        setInitialFetchData(data || []);
+        const safeData = Array.isArray(data) ? data : [];
+        setFlights(safeData);
+        setFilteredFlights(safeData);
+        setInitialFetchData(safeData);
 
-        // Calculate min and max price
-        const prices = data.map((item) => item.NetFare);
-        setMinPrice(Math.min(...prices));
-        setMaxPrice(Math.max(...prices));
-        setPriceRange([Math.min(...prices), Math.max(...prices)]);
+        // Calculate min and max price safely even on empty results
+        const prices = safeData
+          .map((item) => Number(item?.NetFare))
+          .filter((price) => Number.isFinite(price));
+        const minFound = prices.length ? Math.min(...prices) : 0;
+        const maxFound = prices.length ? Math.max(...prices) : 0;
+        setMinPrice(minFound);
+        setMaxPrice(maxFound);
+        setPriceRange([minFound, maxFound]);
       } catch (error) {
         if (
           error?.requiresLogin ||

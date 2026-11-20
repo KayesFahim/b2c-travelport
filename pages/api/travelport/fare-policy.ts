@@ -998,19 +998,28 @@ async function fetchFareRulesPayload(
   version: string,
   accessToken: string
 ) {
+  const { logTravelportApi } = await import("@/utils/travelportLogger");
+  const headers = {
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+    "Accept-Version": version,
+    "Content-Version": version,
+    Authorization: `Bearer ${accessToken}`,
+  };
   const response = await fetch(url, {
     method: "GET",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
-      "Accept-Version": version,
-      "Content-Version": version,
-      Authorization: `Bearer ${accessToken}`,
-    },
+    headers,
   });
 
   const payload = await response.json().catch(() => ({}));
+  logTravelportApi({
+    endpoint: url,
+    request: { method: "GET", headers },
+    response: payload,
+    status: response.status,
+    meta: { api: "fare-policy" },
+  });
   return { response, payload };
 }
 

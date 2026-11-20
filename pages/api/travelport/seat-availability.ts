@@ -146,6 +146,7 @@ function resolveSeatAvailabilityUrl(version: string): string {
   const directUrl =
     process.env.TRAVELPORT_SEAT_AVAILABILITY_URL ||
     process.env.TRAVELPORT_SEAT_MAP_URL ||
+    process.env.TRAVELPORT_VIEW_SEAT_MAP ||
     "";
   if (directUrl.trim()) {
     return directUrl.trim();
@@ -174,18 +175,10 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+
   try {
     const body = (req.body ?? {}) as SeatAvailabilityBody;
-    const sampleModeEnabled =
-      process.env.TRAVELPORT_USE_SAMPLE_SEAT_MAP === "true" ||
-      toBoolean(body?.useSampleData);
-
-    if (sampleModeEnabled) {
-      const samplePayload = await loadSampleSeatMapData();
-      if (samplePayload) {
-        return res.status(200).json(samplePayload);
-      }
-    }
 
     const {
       offerListIdentifier,
@@ -217,16 +210,17 @@ export default async function handler(
     const version = process.env.TRAVELPORT_VERSION || "11";
     const seatAvailabilityUrl = resolveSeatAvailabilityUrl(version);
 
+    const requestHeaders = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+      "Accept-Version": version,
+      "Content-Version": version,
+      Authorization: `Bearer ${accessToken}`,
+    };
     const response = await fetch(seatAvailabilityUrl, {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
-        "Accept-Version": version,
-        "Content-Version": version,
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: requestHeaders,
       body: JSON.stringify(requestPayload),
     });
 
@@ -234,6 +228,16 @@ export default async function handler(
       string,
       unknown
     >;
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: seatAvailabilityUrl,
+        request: { method: "POST", headers: requestHeaders, body: requestPayload },
+        response: responsePayload,
+        status: response.status,
+        meta: { api: "seat-availability" },
+      });
+    } catch { }
     if (!response.ok) {
       return res.status(502).json({
         message: `Travelport seat availability failed (${response.status})`,

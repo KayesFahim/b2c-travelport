@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getTravelportAccessToken } from "./_token-cache";
+import { logTravelportApi } from "@/utils/travelportLogger";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
 import { sendBookingConfirmationEmail } from "@/server/auth-email";
@@ -847,8 +848,10 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
                 ])
               ) || "A",
             ContentSource:
-              toText(getValueByKeys(segment, ["ContentSource", "contentSource"])) ||
-              "GDS",
+              String(process.env.TRAVELPORT_GDS_ONLY || "true").toLowerCase() !== "false"
+                ? "GDS"
+                : toText(getValueByKeys(segment, ["ContentSource", "contentSource"])) ||
+                  "GDS",
           };
 
           const boundFlightsInd = getValueByKeys(segment, [
@@ -1639,6 +1642,20 @@ function pushApiFlowLog(params: {
       ...(params.responseBody !== undefined ? { body: params.responseBody } : {}),
     },
   });
+  logTravelportApi({
+    endpoint: params.url,
+    request: {
+      method: params.method,
+      ...(params.requestBody !== undefined ? { body: params.requestBody } : {}),
+    },
+    response: params.responseBody ?? null,
+    status: params.status,
+    meta: {
+      api: "book-hold",
+      step: params.step,
+      ok: params.ok,
+    },
+  });
 }
 
 function isMissingBookingLogTableError(error: unknown): boolean {
@@ -2093,7 +2110,6 @@ function buildTravelersPayload(
         Given: given,
         ...(middleName ? { Middle: middleName } : {}),
         Surname: surname,
-        Suffix: paxTypeCode,
       },
       gender: resolvedGender,
       birthDate: resolvedBirthDate,
@@ -2666,17 +2682,24 @@ async function applyDocumentOverrides(params: {
   reservationId: string;
   headers: Record<string, string>;
   travelerRefIds?: string[];
+  commissionPercent?: number;
   logs?: ApiFlowLog[];
 }) {
   const overrideUrl = `${params.bookingBaseUrl}/documentoverride/Reservation/${encodeURIComponent(
     params.reservationId
   )}/documentoverrides`;
 
-  // Build commission structure - fixed 7% commission
+  const resolvedPercent =
+    typeof params.commissionPercent === "number" &&
+    Number.isFinite(params.commissionPercent) &&
+    params.commissionPercent > 0
+      ? Math.min(params.commissionPercent, 100)
+      : 5;
+
   const commissionStructure = {
     Commission: {
       "@type": "CommissionPercent",
-      Percent: 7,
+      Percent: resolvedPercent,
     },
   };
 
@@ -2902,6 +2925,8 @@ async function persistCommittedBooking(params: {
         "PassengerTypeCode",
       ])
     ),
+    prefix:
+      toText(getValueByKeys(passenger, ["Title", "title", "Prefix", "prefix"])) || null,
     firstName:
       toText(
         getValueByKeys(passenger, [
@@ -2933,6 +2958,43 @@ async function persistCommittedBooking(params: {
       toText(
         getValueByKeys(passenger, ["PassportNumber", "passportNumber", "passNo"])
       ) || null,
+    passportIssuingCountry:
+      toText(
+        getValueByKeys(passenger, [
+          "PassportIssuingCountry",
+          "passportIssuingCountry",
+          "passIssueCountry",
+        ])
+      ).toUpperCase() || null,
+    passportExpiryDate:
+      (() => {
+        const dateOnly = toDateOnly(
+          getValueByKeys(passenger, [
+            "PassportExpiryDate",
+            "passportExpiryDate",
+            "passEx",
+            "expireDate",
+          ])
+        );
+        return dateOnly ? new Date(`${dateOnly}T00:00:00.000Z`) : null;
+      })() || null,
+    nationality:
+      toText(
+        getValueByKeys(passenger, [
+          "PassportNationality",
+          "passportNationality",
+          "Nationality",
+          "nationality",
+          "passNation",
+        ])
+      ).toUpperCase() || null,
+    gender:
+      toText(getValueByKeys(passenger, ["Gender", "gender"])) || null,
+    phone:
+      toText(getValueByKeys(passenger, ["ContactNumber", "contactNumber", "phone", "Phone"])) ||
+      null,
+    email:
+      toText(getValueByKeys(passenger, ["Email", "email", "emailAddress"])) || null,
   }));
 
   await prisma.bookingPassenger.deleteMany({
@@ -2944,10 +3006,17 @@ async function persistCommittedBooking(params: {
       data: passengers.map((passenger) => ({
         bookingId: booking.id,
         paxType: passenger.paxType || "ADT",
+        prefix: passenger.prefix,
         firstName: passenger.firstName,
         lastName: passenger.lastName,
         birthDate: passenger.birthDate,
         passportNumber: passenger.passportNumber,
+        passportIssuingCountry: passenger.passportIssuingCountry,
+        passportExpiryDate: passenger.passportExpiryDate,
+        nationality: passenger.nationality,
+        gender: passenger.gender,
+        phone: passenger.phone,
+        email: passenger.email,
       })),
     });
   }
@@ -2966,6 +3035,8 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed", apiFlowLogs });
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+
   try {
     assertDatabaseConfigured();
 
@@ -2979,9 +3050,10 @@ export default async function handler(
       });
     }
 
-    // Enforce one-shot booking: always run full flow through commit in this endpoint.
-    const commitRequested = true;
-    const commitOnlyRequested = false;
+    const commitOnlyRequested = parseBooleanFlag(body.commitOnly, false);
+    const commitRequested = commitOnlyRequested
+      ? true
+      : parseBooleanFlag(body.commit ?? body.commitRequested, true);
     const explicitReservationId = toText(body.reservationId);
     const nowEpoch = Date.now();
     purgeExpiredBookingFlows(nowEpoch);
@@ -3172,7 +3244,11 @@ export default async function handler(
       let formOfPaymentResult: Record<string, unknown> | null = null;
       let applyPaymentResult: Record<string, unknown> | null = null;
 
-      if (hasCommitOnlyOffer) {
+      if (
+        hasCommitOnlyOffer &&
+        shouldApplyCommission(body) &&
+        parseBooleanFlag(process.env.TRAVELPORT_ENABLE_DOCUMENT_OVERRIDE, true)
+      ) {
         const passengerRows = normalizePassengerRows(body);
         const offerTravelerRefIds = Array.from(
           { length: passengerRows.length },
@@ -3184,17 +3260,27 @@ export default async function handler(
             reservationId: commitReservationId,
             headers: commonHeaders,
             travelerRefIds: offerTravelerRefIds,
+            commissionPercent: resolveCommissionPercent(body),
             logs: apiFlowLogs,
           });
 
           if (!documentOverrideResult.ok) {
-            return logAndRespondError({
-              status: 502,
-              message: `Travelport document override commission failed (${documentOverrideResult.status})`,
-              details: documentOverrideResult.errorMessage,
-              stage: "commit_only_document_override",
-              reservationId: commitReservationId,
-            });
+            const strictOverride = parseBooleanFlag(
+              process.env.TRAVELPORT_DOCUMENT_OVERRIDE_STRICT,
+              false
+            );
+            if (strictOverride) {
+              return logAndRespondError({
+                status: 502,
+                message: `Travelport document override commission failed (${documentOverrideResult.status})`,
+                details: documentOverrideResult.errorMessage,
+                stage: "commit_only_document_override",
+                reservationId: commitReservationId,
+              });
+            }
+            warnings.push(
+              `Document override commission warning: ${documentOverrideResult.errorMessage}`
+            );
           }
         }
       }
@@ -3364,8 +3450,7 @@ export default async function handler(
 
     const selectedOffer = resolveSelectedOffer(body);
 
-    // Check if this is a commitOnly request - if so, we don't need flight data
-    const isCommitOnly = body?.commitOnly === true && body?.commitRequested === true;
+    const isCommitOnly = commitOnlyRequested;
 
     if (!Object.keys(selectedOffer).length && !isCommitOnly) {
       const errorDetails = {
@@ -3962,23 +4047,38 @@ export default async function handler(
         (specialResult.payload as Record<string, unknown>) || null;
     }
 
-    documentOverrideResult = await applyDocumentOverrides({
-      bookingBaseUrl,
-      reservationId,
-      headers: commonHeaders,
-      travelerRefIds,
-      logs: apiFlowLogs,
-    });
-
-    if (!documentOverrideResult.ok) {
-      return logAndRespondError({
-        status: 502,
-        message: `Travelport document override commission failed (${documentOverrideResult.status})`,
-        details: documentOverrideResult.errorMessage,
-        warnings,
-        stage: "precommit_document_override",
-        destroyFlowKey: true,
+    if (
+      shouldApplyCommission(body) &&
+      parseBooleanFlag(process.env.TRAVELPORT_ENABLE_DOCUMENT_OVERRIDE, true)
+    ) {
+      documentOverrideResult = await applyDocumentOverrides({
+        bookingBaseUrl,
+        reservationId,
+        headers: commonHeaders,
+        travelerRefIds,
+        commissionPercent: resolveCommissionPercent(body),
+        logs: apiFlowLogs,
       });
+
+      if (!documentOverrideResult.ok) {
+        const strictOverride = parseBooleanFlag(
+          process.env.TRAVELPORT_DOCUMENT_OVERRIDE_STRICT,
+          false
+        );
+        if (strictOverride) {
+          return logAndRespondError({
+            status: 502,
+            message: `Travelport document override commission failed (${documentOverrideResult.status})`,
+            details: documentOverrideResult.errorMessage,
+            warnings,
+            stage: "precommit_document_override",
+            destroyFlowKey: true,
+          });
+        }
+        warnings.push(
+          `Document override commission warning: ${documentOverrideResult.errorMessage}`
+        );
+      }
     }
 
     const preCommitSnapshot: Record<string, unknown> = {

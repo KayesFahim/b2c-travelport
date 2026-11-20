@@ -282,14 +282,13 @@ function buildPassengerCriteria(
 function buildProductCriteriaAir(offer: Record<string, unknown>) {
   const allLegsInfo = getArrayByKeys(offer, ["AllLegsInfo", "allLegsInfo"]);
   const productCriteriaAir: Array<Record<string, unknown>> = [];
-  let segmentSequence = 1;
 
   for (const leg of allLegsInfo) {
     const legObj = (leg ?? {}) as Record<string, unknown>;
     const segments = normalizeSegments(legObj);
     if (!segments.length) continue;
 
-    const specificFlightCriteria = segments.map((rawSegment) => {
+    const specificFlightCriteria = segments.map((rawSegment, segIndex) => {
       const segment = (rawSegment ?? {}) as Record<string, unknown>;
       const dep = splitDateTime(getValueByKeys(segment, ["DepTime", "depTime"]));
       const arr = splitDateTime(getValueByKeys(segment, ["ArrTime", "arrTime"]));
@@ -301,8 +300,16 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
         (getValueByKeys(legObj, ["BrandFeatures", "brandFeatures"]) as
           | Record<string, unknown>
           | undefined) || {};
+      const availSourceCode = toText(
+        getValueByKeys(segment, ["AvailabilitySourceCode", "availabilitySourceCode"])
+      );
+      const rawBrandTier = toText(
+        getValueByKeys(segment, ["brandTier", "BrandTier"]) ??
+        getValueByKeys(legObj, ["brandTier", "BrandTier"]) ??
+        getValueByKeys(brandFeatures, ["tier", "Tier"])
+      );
 
-      const criteria = {
+      const criteria: Record<string, unknown> = {
         flightNumber: toText(
           getValueByKeys(segment, ["MarketingFlightNumber", "marketingFlightNumber"])
         ),
@@ -321,25 +328,23 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
         cabin: normalizeCabin(
           getValueByKeys(segmentCode, ["cabinCode", "CabinCode"])
         ),
-        segmentSequence,
-        brandTier: toText(
-          getValueByKeys(segment, ["brandTier", "BrandTier"]) ??
-          getValueByKeys(brandFeatures, ["tier", "Tier"]) ??
-          "1"
-        ),
-        AvailabilitySourceCode: toText(
-          getValueByKeys(segment, ["AvailabilitySourceCode"])
-        ) || "A",
+        segmentSequence: segIndex + 1,
+        ...(rawBrandTier ? { brandTier: rawBrandTier } : {}),
+        ...(availSourceCode && availSourceCode.toUpperCase() !== "N/A"
+          ? { AvailabilitySourceCode: availSourceCode }
+          : {}),
         ContentSource:
-          toText(getValueByKeys(segment, ["ContentSource"])) || "GDS",
+          String(process.env.TRAVELPORT_GDS_ONLY || "true").toLowerCase() !== "false"
+            ? "GDS"
+            : toText(getValueByKeys(segment, ["ContentSource", "contentSource"])) || "GDS",
       };
 
-      segmentSequence += 1;
       return criteria;
     });
 
     productCriteriaAir.push({
       SpecificFlightCriteria: specificFlightCriteria,
+      sequence: productCriteriaAir.length + 1,
     });
   }
 
@@ -368,9 +373,6 @@ function buildBuildFromProductsPayload(
       },
       ProductCriteriaAir: buildProductCriteriaAir(offer),
     },
-    validateInventoryInd: true,
-    lowFareFinderInd: true,
-    reCheckInventoryInd: true
   };
 }
 
@@ -937,12 +939,38 @@ function mapOfferListToLegacyResults(params: {
     ])
   );
   const transactionId = toText(offerListResponse?.transactionId) || "TRAVELPORT-BFP";
-  const offers = Array.isArray(offerListResponse?.OfferID)
+  const rawOfferEntries = Array.isArray(offerListResponse?.OfferID)
     ? (offerListResponse.OfferID as Array<Record<string, unknown>>)
     : [];
+  const offers: Array<Record<string, unknown>> = rawOfferEntries.flatMap((entry) => {
+    const nestedOffers = Array.isArray(entry?.Offer)
+      ? (entry.Offer as Array<Record<string, unknown>>)
+      : [];
+    if (nestedOffers.length > 0) {
+      return nestedOffers.map((nested) => ({
+        ...nested,
+        Identifier: nested?.Identifier ?? entry?.Identifier,
+      }));
+    }
+    return [entry];
+  });
   const referenceList = Array.isArray(offerListResponse?.ReferenceList)
     ? (offerListResponse.ReferenceList as Array<Record<string, unknown>>)
     : [];
+  const brands =
+    referenceList.find((item) => Array.isArray(item?.Brand))?.Brand ?? [];
+  const brandMap = new Map<string, Record<string, unknown>>(
+    (Array.isArray(brands) ? brands : [])
+      .filter((item) => item && typeof item === "object")
+      .map(
+        (item) =>
+          [
+            String((item as Record<string, unknown>).id ?? ""),
+            item as Record<string, unknown>,
+          ] as [string, Record<string, unknown>]
+      )
+      .filter(([id]) => Boolean(id))
+  );
   const amenities =
     referenceList.find((item) => Array.isArray(item?.Amenity))?.Amenity ?? [];
   const universalProductAttributes =
@@ -1092,15 +1120,31 @@ function mapOfferListToLegacyResults(params: {
           {} as Record<string, Array<{ id: string; category: string; text: string }>>
         );
 
+        const marketingCarrier = toText(flight?.carrier);
+        const operatingCarrier = toText(flight?.operatingCarrier || flight?.carrier);
+        const operatingCarrierName = toText(
+          flight?.operatingCarrierName || flight?.operatingCarrier || flight?.carrier
+        );
+        const marketingCarrierName =
+          toText(flight?.carrierName || flight?.marketingCarrierName) ||
+          (operatingCarrier &&
+          marketingCarrier &&
+          operatingCarrier.toUpperCase() === marketingCarrier.toUpperCase() &&
+          operatingCarrierName
+            ? operatingCarrierName
+            : marketingCarrier);
+        const availabilitySourceCode = toText(
+          flight?.AvailabilitySourceCode ?? flight?.availabilitySourceCode
+        );
+
         return {
-          MarketingCarrier: toText(flight?.carrier),
-          MarketingCarrierName: toText(flight?.carrier),
+          MarketingCarrier: marketingCarrier,
+          MarketingCarrierName: marketingCarrierName,
           MarketingFlightNumber: toText(flight?.number),
-          OperatingCarrier: toText(flight?.operatingCarrier || flight?.carrier),
+          OperatingCarrier: operatingCarrier,
           OperatingFlightNumber: toText(flight?.number),
-          OperatingCarrierName: toText(
-            flight?.operatingCarrierName || flight?.operatingCarrier || flight?.carrier
-          ),
+          OperatingCarrierName: operatingCarrierName,
+          ...(availabilitySourceCode ? { AvailabilitySourceCode: availabilitySourceCode } : {}),
           DepFrom: toText(departure?.location),
           DepAirPort: toText(departure?.location),
           DepLocation: toText(departure?.location),
@@ -1142,6 +1186,50 @@ function mapOfferListToLegacyResults(params: {
       const lastSegment = mappedSegments[mappedSegments.length - 1] ?? {};
       const selectedLeg = selectedOfferLegs[legIndex] ?? {};
 
+      let resolvedBrandObj: Record<string, unknown> | null = null;
+      const candidateBrandSources: unknown[] = [
+        (product as any)?.Brand,
+        (offer as any)?.Brand,
+      ];
+      for (const passengerFlight of passengerFlights) {
+        const flightProducts = Array.isArray(passengerFlight?.FlightProduct)
+          ? (passengerFlight.FlightProduct as Array<Record<string, unknown>>)
+          : [];
+        for (const fp of flightProducts) {
+          if (fp?.Brand) candidateBrandSources.push(fp.Brand);
+        }
+      }
+      for (const brandSource of candidateBrandSources) {
+        if (!brandSource || typeof brandSource !== "object") continue;
+        const bs = brandSource as Record<string, unknown>;
+        const refId = toText(bs?.BrandRef ?? bs?.brandRef ?? bs?.id);
+        const mappedBrand = refId ? brandMap.get(refId) : null;
+        if (mappedBrand) {
+          resolvedBrandObj = mappedBrand;
+          break;
+        }
+        if (bs?.name || bs?.Name || bs?.code || bs?.Code || Array.isArray(bs?.BrandAttribute)) {
+          resolvedBrandObj = bs;
+          break;
+        }
+      }
+
+      const resolvedBrandName =
+        toText(resolvedBrandObj?.name ?? resolvedBrandObj?.Name ?? (product as any)?.brandName ?? (offer as any)?.brandName) ||
+        toText(getValueByKeys(selectedLeg, ["BrandName", "brandName"])) ||
+        null;
+      const resolvedBrandCode =
+        toText(resolvedBrandObj?.code ?? resolvedBrandObj?.Code ?? (product as any)?.brandCode ?? (offer as any)?.brandCode) ||
+        toText(getValueByKeys(selectedLeg, ["BrandCode", "brandCode"])) ||
+        null;
+      const resolvedBrandFeatures =
+        resolvedBrandObj ||
+        ((getValueByKeys(selectedLeg, ["BrandFeatures", "brandFeatures"]) as Record<
+          string,
+          unknown
+        >) ||
+          null);
+
       return {
         DepDate:
           toText((firstSegment as Record<string, unknown>)?.DepTime) ||
@@ -1159,13 +1247,9 @@ function mapOfferListToLegacyResults(params: {
         TotalDurationISO:
           toText(product?.totalDuration) ||
           durationMinutesToIso(parseDurationToMinutes(product?.totalDuration)),
-        BrandName: toText(getValueByKeys(selectedLeg, ["BrandName", "brandName"])) || null,
-        BrandCode: toText(getValueByKeys(selectedLeg, ["BrandCode", "brandCode"])) || null,
-        BrandFeatures:
-          (getValueByKeys(selectedLeg, ["BrandFeatures", "brandFeatures"]) as Record<
-            string,
-            unknown
-          >) || null,
+        BrandName: resolvedBrandName,
+        BrandCode: resolvedBrandCode,
+        BrandFeatures: resolvedBrandFeatures,
         Segments: mappedSegments,
       };
     });
@@ -1223,15 +1307,35 @@ function mapOfferListToLegacyResults(params: {
 
     const penalties = Array.isArray(terms?.Penalties) ? terms.Penalties : [];
     const penaltiesCancellation = mapPenaltiesCancellationFromTerms(penalties as any[]);
-    const refundable = penaltiesCancellation.cancel.length > 0;
+    const rawCancelEntries = penalties.flatMap((group: any) =>
+      Array.isArray(group?.Cancel) ? group.Cancel : []
+    );
+    const refundable = rawCancelEntries.some((entry: any) => {
+      if (entry?.refundableInd === false || entry?.NotPermitted === true) {
+        return false;
+      }
+      const types = toStringList(entry?.penaltyTypes).map((item) => item.toLowerCase());
+      return !types.some(
+        (item) =>
+          item.includes("nonrefundable") ||
+          item.includes("notpermitted") ||
+          item.includes("norefund")
+      );
+    });
 
     const grossFare = toNumber(price?.TotalPrice, 0);
     const selectedNetFare = toNumber(
       getValueByKeys(params.selectedOffer, ["NetFare", "netFare", "GrossFare", "grossFare"]),
       0
     );
+    const selectedCurrencyCode = normalizeCurrencyCode(
+      getValueByKeys(params.selectedOffer, ["CurrencyCode", "currencyCode"])
+    );
     const fareChanged =
-      selectedNetFare > 0 && grossFare > 0 && Math.abs(grossFare - selectedNetFare) > 0.01;
+      selectedCurrencyCode === normalizeCurrencyCode(currencyCode) &&
+      selectedNetFare > 0 &&
+      grossFare > 0 &&
+      Math.abs(grossFare - selectedNetFare) > 0.01;
 
     const selectedResultId = toText(
       getValueByKeys(params.selectedOffer, ["ResultId", "resultId", "identifier", "Identifier"])
@@ -1276,6 +1380,9 @@ function mapOfferListToLegacyResults(params: {
         toText(validatingAirline?.ValidatingAirline) ||
         toText(allLegsInfo[0]?.Segments?.[0]?.MarketingCarrier),
       CarrierName:
+        toText((validatingAirline as any)?.ValidatingAirlineName) ||
+        toText(allLegsInfo[0]?.Segments?.[0]?.MarketingCarrierName) ||
+        toText(allLegsInfo[0]?.Segments?.[0]?.OperatingCarrierName) ||
         toText(validatingAirline?.ValidatingAirline) ||
         toText(allLegsInfo[0]?.Segments?.[0]?.MarketingCarrier),
       CurrencyCode: currencyCode,
@@ -1347,6 +1454,8 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+
   try {
     const body = (req.body ?? {}) as BuildFromProductsBody;
     const requestedCurrencyCode = normalizeCurrencyCode(
@@ -1401,9 +1510,17 @@ export default async function handler(
       meta: { api: "build-from-products" },
     });
     if (!response.ok) {
+      const tpErrors = (
+        (responsePayload as any)?.OfferListResponse?.Result?.Error ??
+        (responsePayload as any)?.Result?.Error
+      ) as Array<Record<string, unknown>> | undefined;
+      const tpErrorText = Array.isArray(tpErrors)
+        ? tpErrors.map((e) => toText(e?.Message ?? e?.message ?? e?.code)).filter(Boolean).join("; ")
+        : "";
       return res.status(502).json({
         message: `Travelport build-from-products failed (${response.status})`,
         details:
+          tpErrorText ||
           responsePayload?.message ||
           responsePayload?.error_description ||
           "Unable to build priced offer from selected products.",

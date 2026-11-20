@@ -126,16 +126,12 @@ export async function fetchTravelportSeatAvailability({
   const normalizedProductIdentifiers = normalizeIdentifierList(
     productIdentifiers ?? seatAvailabilityRequest?.productIdentifiers
   );
-  const sampleModeEnabled =
-    Boolean(useSampleData) ||
-    String(process.env.NEXT_PUBLIC_USE_SAMPLE_SEAT_MAP || "").toLowerCase() ===
-      "true";
+  const sampleModeEnabled = false;
 
   if (
-    !sampleModeEnabled &&
-    (!normalizedOfferListIdentifier ||
-      !normalizedOfferIdentifier ||
-      normalizedProductIdentifiers.length === 0)
+    !normalizedOfferListIdentifier ||
+    !normalizedOfferIdentifier ||
+    normalizedProductIdentifiers.length === 0
   ) {
     throw new Error(
       "offerListIdentifier, offerIdentifier, and productIdentifiers are required for seat availability."
@@ -153,6 +149,7 @@ export async function fetchTravelportSeatAvailability({
     try {
       const response = await fetch(url, {
         method: "POST",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),

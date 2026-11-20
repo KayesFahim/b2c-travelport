@@ -3,7 +3,7 @@ import commaNumber from "comma-number";
 import moment from "moment";
 import React from "react";
 import { convertMinutesToHoursAndMinutes } from "../common/funcation";
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const FlightDetailsLayout = ({ alllegs, flight, booking }) => {
   return (

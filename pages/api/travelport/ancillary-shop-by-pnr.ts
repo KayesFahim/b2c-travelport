@@ -112,7 +112,9 @@ function resolveBookingBaseUrl(version: string): string {
 }
 
 function resolveAncillaryShopUrl(version: string): string {
-    const directUrl = toText(process.env.TRAVELPORT_ANCILLARY_SHOP_URL);
+    const directUrl =
+        toText(process.env.TRAVELPORT_ANCILLARY_SHOP_URL) ||
+        toText(process.env.TRAVELPORT_SHOP_ANCILLARY);
     if (directUrl) return directUrl;
     const baseUrl = process.env.TRAVELPORT_BASE_URL || "https://api.pp.travelport.net";
     return `${baseUrl.replace(/\/+$/, "")}/${version}/air/ancillaryshop/catalogofferingsancillaries`;
@@ -212,8 +214,18 @@ export default async function handler(
             body: JSON.stringify(ancillaryRequestPayload),
         });
         const ancillaryData = await parseJsonSafe(ancillaryResponse);
+        try {
+            const { logTravelportApi } = await import("@/utils/travelportLogger");
+            logTravelportApi({
+                endpoint: ancillaryShopUrl,
+                request: { method: "POST", headers: commonHeaders, body: ancillaryRequestPayload },
+                response: ancillaryData,
+                status: ancillaryResponse.status,
+                meta: { api: "ancillary-shop-by-pnr", pnr, reservationId },
+            });
+        } catch { }
 
-        if (!ancillaryResponse.ok) {
+        if (!ancillaryResponse.ok || hasTravelportErrors(ancillaryData)) {
             return res.status(502).json({
                 message: `Ancillary shop failed (${ancillaryResponse.status})`,
                 details:

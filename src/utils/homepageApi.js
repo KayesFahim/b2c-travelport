@@ -83,28 +83,13 @@ export function getHomepageFallbackData() {
   return normalizeHomepagePayload(sliderData);
 }
 
-export async function getHomepageData(options = {}) {
-  const forceRefresh = Boolean(options.forceRefresh);
-  const now = Date.now();
-
-  if (!forceRefresh && memoryCache && memoryCacheExpiresAt > now) {
-    return memoryCache;
-  }
-
-  if (!forceRefresh) {
-    const sessionCachedEntry = readSessionCache();
-    if (sessionCachedEntry) {
-      memoryCache = sessionCachedEntry.data;
-      memoryCacheExpiresAt = sessionCachedEntry.expiresAt;
-      return sessionCachedEntry.data;
-    }
-  }
-
+export async function getHomepageData() {
   if (inFlightHomepageRequest) {
     return inFlightHomepageRequest;
   }
 
   inFlightHomepageRequest = fetch("/api/homepage", {
+    cache: "no-store",
     headers: { Accept: "application/json" },
   })
     .then((response) => {
@@ -117,14 +102,7 @@ export async function getHomepageData(options = {}) {
       }
       return response.json();
     })
-    .then((payload) => {
-      const normalized = normalizeHomepagePayload(payload);
-      const expiresAt = Date.now() + HOMEPAGE_CACHE_TTL_MS;
-      memoryCache = normalized;
-      memoryCacheExpiresAt = expiresAt;
-      writeSessionCache(normalized, expiresAt);
-      return normalized;
-    })
+    .then((payload) => normalizeHomepagePayload(payload))
     .finally(() => {
       inFlightHomepageRequest = null;
     });

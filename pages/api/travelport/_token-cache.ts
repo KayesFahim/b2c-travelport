@@ -1,3 +1,5 @@
+import { logTravelportApi } from "@/utils/travelportLogger";
+
 type TokenCacheEntry = {
   token: string;
   expiresAt: number;
@@ -74,6 +76,20 @@ async function requestNewToken(): Promise<{ token: string; expiresInSec: number 
   });
 
   const payload = await response.json().catch(() => ({}));
+  logTravelportApi({
+    endpoint: authUrl,
+    request: {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
+      body: { grant_type: grantType, useBasicAuth },
+    },
+    response: payload,
+    status: response.status,
+    meta: {
+      api: "oauth-token",
+      ok: Boolean(response.ok && payload?.access_token),
+    },
+  });
   if (!response.ok || !payload?.access_token) {
     throw new Error(
       payload?.error_description ||

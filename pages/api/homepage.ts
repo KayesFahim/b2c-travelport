@@ -49,12 +49,8 @@ export default async function handler(
   try {
     res.setHeader(
       "Cache-Control",
-      "public, max-age=300, s-maxage=300, stale-while-revalidate=1200"
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
     );
-
-    if (homepageCache && homepageCache.expiresAt > Date.now()) {
-      return res.status(200).json(homepageCache.payload);
-    }
 
     const rows = await prisma.siteSettings.findMany({
       where: { section: "homepage" },
@@ -66,18 +62,9 @@ export default async function handler(
     });
 
     const response = buildHomepagePayload(settings);
-    homepageCache = {
-      expiresAt: Date.now() + HOMEPAGE_SETTINGS_CACHE_TTL_MS,
-      payload: response,
-    };
-
     return res.status(200).json(response);
   } catch {
     const fallback = buildHomepagePayload({});
-    homepageCache = {
-      expiresAt: Date.now() + 10 * 1000,
-      payload: fallback,
-    };
     return res.status(200).json(fallback);
   }
 }

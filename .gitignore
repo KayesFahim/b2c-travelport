@@ -30,6 +30,8 @@ env.txt
 # live PNR / booking logs
 atpn.txt
 atpn_failed.txt
+travelport-api-logs/
+log/
 
 npm-debug.log*
 yarn-debug.log*

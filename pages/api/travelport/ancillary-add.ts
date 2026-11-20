@@ -443,6 +443,22 @@ export default async function handler(
       }
       buildPayload = buildResult.payload;
       reservationId = reservationId || buildResult.reservationId;
+    } else if (reservationId) {
+      const wbUrl = `${bookingBaseUrl}/session/reservationworkbench/${encodeURIComponent(
+        reservationId
+      )}`;
+      const wbResponse = await fetch(wbUrl, { method: "GET", headers });
+      const wbPayload = (await parseJsonSafe(wbResponse)) as Record<string, unknown>;
+      if (!wbResponse.ok || hasTravelportErrors(wbPayload)) {
+        return res.status(502).json({
+          message: `Workbench retrieval failed (${wbResponse.status})`,
+          details:
+            extractTravelportErrorMessage(wbPayload) ||
+            "Unable to retrieve reservation workbench.",
+          stage: "get_workbench",
+        });
+      }
+      buildPayload = wbPayload;
     }
 
     if (!reservationId) {
@@ -510,6 +526,16 @@ export default async function handler(
     const addAncillaryPayloadResponse = (await parseJsonSafe(
       addAncillaryResponse
     )) as Record<string, unknown>;
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: addAncillaryOfferUrl,
+        request: { method: "POST", headers, body: addAncillaryPayload },
+        response: addAncillaryPayloadResponse,
+        status: addAncillaryResponse.status,
+        meta: { api: "ancillary-add", step: "add-ancillary-offer", reservationId },
+      });
+    } catch { }
 
     if (!addAncillaryResponse.ok || hasTravelportErrors(addAncillaryPayloadResponse)) {
       return res.status(502).json({

@@ -44,7 +44,7 @@ import BrandWordmark from "../../BrandWordmark/BrandWordmark";
 import axios from "axios";
 import { config } from "../../../config";
 import { setBookingAuthToken } from "../../../utils/bookingAuth";
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;

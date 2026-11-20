@@ -40,7 +40,6 @@ import { config } from "../../config";
 import SignInWithGoogle from "../../Pages/GoogleLogIn";
 import BrandWordmark from "../BrandWordmark/BrandWordmark";
 import { setBookingAuthToken } from "../../utils/bookingAuth";
-const isMobile = window.innerWidth <= 768;
 
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -48,6 +47,23 @@ const Transition = React.forwardRef(function Transition(props, ref) {
 
 const NavBar = () => {
   const location = useLocation();
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined"
+      ? window.matchMedia("(max-width: 768px)").matches
+      : false
+  );
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const mediaQuery = window.matchMedia("(max-width: 768px)");
+    const syncMobile = () => setIsMobile(mediaQuery.matches);
+    syncMobile();
+    if (typeof mediaQuery.addEventListener === "function") {
+      mediaQuery.addEventListener("change", syncMobile);
+      return () => mediaQuery.removeEventListener("change", syncMobile);
+    }
+    mediaQuery.addListener(syncMobile);
+    return () => mediaQuery.removeListener(syncMobile);
+  }, []);
   const [openSignIn, setOpenSignIn] = useState(false);
   const [openSignUpOtp, setOpenSignUpOtp] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -580,18 +596,19 @@ const NavBar = () => {
 
   return (
     <Box
+      component="header"
       sx={{
         background: isDarkHeader
-          ? "linear-gradient(180deg, rgba(18, 26, 36, 0.92) 0%, rgba(30, 41, 59, 0.88) 100%)"
-          : "rgba(248, 252, 255, 0.82)",
-        backdropFilter: "blur(10px)",
+          ? "linear-gradient(180deg, rgba(10, 22, 42, 0.94) 0%, rgba(16, 36, 64, 0.9) 100%)"
+          : "rgba(248, 252, 255, 0.9)",
+        backdropFilter: "blur(12px)",
         borderBottom: isDarkHeader
-          ? "1px solid rgba(255, 255, 255, 0.08)"
+          ? "1px solid rgba(255, 255, 255, 0.1)"
           : "1px solid rgba(15, 39, 69, 0.1)",
         boxShadow: isDarkHeader
           ? "0px 12px 28px rgba(0, 0, 0, 0.24)"
           : "0px 8px 24px rgba(16, 42, 67, 0.08)",
-        minHeight: { xs: "76px", md: "88px" },
+        minHeight: { xs: "72px", md: "82px" },
         width: "100%",
         position: "sticky",
         top: 0,
@@ -599,33 +616,43 @@ const NavBar = () => {
       }}
     >
       <Box>
-        <Container>
+        <Container maxWidth="xl">
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 2,
-              py: { xs: 1.1, md: 1.4 },
+              py: { xs: 1, md: 1.25 },
             }}
           >
             <Box>
               <Link
-                style={{ textDecoration: "none", cursor: "pointer" }}
+                className="flyjatt-focus-ring"
+                style={{
+                  textDecoration: "none",
+                  cursor: "pointer",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  borderRadius: "10px",
+                  padding: "2px 6px",
+                }}
                 to="/"
               >
                 <Typography
                   sx={{
-                    fontSize: { xs: "28px", md: "34px" },
-                    letterSpacing: "0.4px",
-                    lineHeight: 1,
-                    background:
-                      "linear-gradient(120deg, #ffffff 0%, #d7e9ff 48%, #8fd6ff 100%)",
+                    fontSize: { xs: "26px", md: "32px" },
+                    fontWeight: 900,
+                    letterSpacing: "0.3px",
+                    lineHeight: 1.05,
+                    background: isDarkHeader
+                      ? "linear-gradient(120deg, #ffffff 0%, #d7e9ff 48%, #7dd3fc 100%)"
+                      : "linear-gradient(120deg, #061c39 0%, #0e4a7d 55%, #0082bd 100%)",
                     WebkitBackgroundClip: "text",
                     WebkitTextFillColor: "transparent",
                     textShadow: isDarkHeader
                       ? "0 8px 24px rgba(0,0,0,0.28)"
-                      : "0 6px 20px rgba(15,39,69,0.12)",
+                      : "none",
                   }}
                 >
                   Fly Jatt
@@ -634,48 +661,49 @@ const NavBar = () => {
             </Box>
 
             <Box
+              component="nav"
+              aria-label="Primary navigation"
               sx={{
                 display: { xs: "none", md: "flex" },
                 alignItems: "center",
-                gap: 0.8,
+                gap: 0.75,
                 px: 1,
-                py: 0.8,
+                py: 0.65,
                 borderRadius: "999px",
                 background: isDarkHeader
-                  ? "rgba(255, 255, 255, 0.06)"
-                  : "rgba(255, 255, 255, 0.9)",
+                  ? "rgba(255, 255, 255, 0.08)"
+                  : "rgba(255, 255, 255, 0.94)",
                 border: isDarkHeader
-                  ? "1px solid rgba(255,255,255,0.14)"
+                  ? "1px solid rgba(255,255,255,0.16)"
                   : "1px solid rgba(15,39,69,0.1)",
                 boxShadow: isDarkHeader
                   ? "none"
                   : "0 8px 20px rgba(15, 39, 69, 0.08)",
               }}
             >
-              {primaryNavItems.map((item) => (
-                <Link
-                  key={item.to}
-                  to={item.to}
-                  style={{
-                    textDecoration: "none",
-                    padding: "8px 14px",
-                    borderRadius: "999px",
-                    fontSize: "14px",
-                    fontWeight: 700,
-                    color: isNavItemActive(item.to)
-                      ? "#ffffff"
-                      : isDarkHeader
-                        ? "#e9f2ff"
-                        : "#15324f",
-                    background: isNavItemActive(item.to)
-                      ? "linear-gradient(120deg, var(--primary-color) 0%, var(--primary-button) 100%)"
-                      : "transparent",
-                    transition: "all 0.18s ease",
-                  }}
-                >
-                  {item.label}
-                </Link>
-              ))}
+              {primaryNavItems.map((item) => {
+                const active = isNavItemActive(item.to);
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    aria-current={active ? "page" : undefined}
+                    className="flyjatt-nav-link"
+                    style={{
+                      color: active
+                        ? "#ffffff"
+                        : isDarkHeader
+                          ? "#eaf2ff"
+                          : "#0f2745",
+                      background: active
+                        ? "linear-gradient(120deg, #0b4a82 0%, #0082c4 100%)"
+                        : "transparent",
+                    }}
+                  >
+                    {item.label}
+                  </Link>
+                );
+              })}
             </Box>
 
             <Box>
@@ -851,12 +879,14 @@ const NavBar = () => {
                       }}
                     >
                       <div>
-                        <Box>
-                          <MenuIcon
-                            onClick={toggleDrawer(true)}
-                            sx={{ color: navIconColor, fontSize: "25px" }}
-                          />
-                        </Box>
+                        <IconButton
+                          onClick={toggleDrawer(true)}
+                          aria-label="Open navigation menu"
+                          aria-expanded={isDrawerOpen ? "true" : "false"}
+                          sx={{ color: navIconColor, minWidth: 44, minHeight: 44 }}
+                        >
+                          <MenuIcon sx={{ fontSize: "26px" }} />
+                        </IconButton>
                         <Drawer
                           anchor="left"
                           open={isDrawerOpen}
@@ -927,21 +957,21 @@ const NavBar = () => {
                                               sx={{ pb: "30px" }}
                                             >
                                               <Box>
-                                                <Box>
+                                                  <Box>
                                                   {/* profile info  */}
                                                   <Link
                                                     style={{
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location?.pathname ===
-                                                          "/my-account"
+                                                          "/my-account/profile"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location?.pathname ===
-                                                          "/my-account"
-                                                          ? "#3D3A49"
+                                                          "/my-account/profile"
+                                                          ? "#FFFFFF"
                                                           : "#003E6B",
                                                       alignItems: "center",
                                                       height: "40px",
@@ -974,14 +1004,14 @@ const NavBar = () => {
                                                       textDecoration: "none",
                                                       backgroundColor:
                                                         location?.pathname ===
-                                                          "/my-account"
+                                                          "/my-account/booking"
                                                           ? "var(--primary-color)"
                                                           : "#E6ECF5",
                                                       display: "flex",
                                                       color:
                                                         location.pathname ===
-                                                          "/my-account"
-                                                          ? "#3D3A49"
+                                                          "/my-account/booking"
+                                                          ? "#FFFFFF"
                                                           : "#003E6B",
                                                       alignItems: "center",
                                                       height: "40px",
@@ -1896,20 +1926,22 @@ const NavBar = () => {
                       pt: "20px",
                     }}
                   >
-                    <Link
-                      style={{ textDecoration: "none" }}
+                    <button
+                      type="button"
                       onClick={handleForgetPassEmailOpen}
+                      className="flyjatt-focus-ring"
+                      style={{
+                        background: "none",
+                        border: "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        fontSize: "13px",
+                        color: "var(--primary-button)",
+                        fontWeight: 600,
+                      }}
                     >
-                      <Typography
-                        sx={{
-                          fontSize: "13px",
-                          color: "var(--primary-button)",
-                          fontWeight: 600,
-                        }}
-                      >
-                        Forgot Password ?
-                      </Typography>
-                    </Link>
+                      Forgot Password ?
+                    </button>
                   </Box>
                   {/* Phone input */}
 
@@ -1953,12 +1985,22 @@ const NavBar = () => {
                       }}
                     >
                       Don’t have an Account?{" "}
-                      <Link
+                      <button
+                        type="button"
                         onClick={handleClickSignUpOpen}
-                        style={{ textDecoration: "none", color: "#5F646C" }}
+                        className="flyjatt-focus-ring"
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: "pointer",
+                          color: "#5F646C",
+                          fontWeight: 700,
+                          fontSize: "14px",
+                        }}
                       >
                         Sign Up
-                      </Link>
+                      </button>
                     </Typography>
                   </Box>
                 </Box>

@@ -36,7 +36,7 @@ const SwitchBtnIcons = reactSvg(_SwitchBtnIcons);
 const DateIcons = reactSvg(_DateIcons);
 const TravlerIcons = reactSvg(_TravlerIcons);
 
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 const BpIcon = styled("span")(({ theme }) => ({
   borderRadius: "50%",
   width: 16,
@@ -1595,20 +1595,26 @@ const RoundWay = ({
                 </Grid>
                 <Grid item xs={12} sm={12} md={2} lg={2}>
                   <Button
-                    type="submit        "
+                    type="submit"
                     sx={{
-                      color: "var(--primary-text-color)",
-                      textTransform: "capitalize",
-                      borderRadius: "10px",
-                      fontWeight: 600,
+                      color: "#ffffff",
+                      textTransform: "none",
+                      borderRadius: "12px",
+                      fontWeight: 800,
+                      fontSize: "0.95rem",
+                      minHeight: "48px",
                       width: "100%",
-                      bgcolor: "var(--button-color)",
-                      ":hover": {
-                        bgcolor: "var(--button-color)",
+                      background: "linear-gradient(120deg, #0b4a82 0%, #0082c4 100%)",
+                      boxShadow: "0 10px 22px rgba(0, 130, 196, 0.28)",
+                      transition: "transform 160ms ease, box-shadow 160ms ease",
+                      "&:hover:not(:disabled)": {
+                        background: "linear-gradient(120deg, #083a66 0%, #006da6 100%)",
+                        transform: "translateY(-1px)",
+                        boxShadow: "0 14px 26px rgba(0, 130, 196, 0.34)",
                       },
                     }}
                   >
-                    Search
+                    Search Flights
                   </Button>
                 </Grid>
               </Grid>

@@ -78,13 +78,23 @@ export async function fetchTravelportBuildFromProducts({
   adultCount,
   childCount,
   infantCount,
+  currencyCode,
 }) {
   const urls = getCandidateBuildFromProductsUrls();
   let lastError = null;
+  const resolvedCurrencyCode =
+    String(
+      currencyCode ||
+        selectedOffer?.CurrencyCode ||
+        selectedOffer?.currencyCode ||
+        DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY
+    )
+      .trim()
+      .toUpperCase() || DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY;
 
   const payload = {
     selectedOffer,
-    currencyCode: DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY,
+    currencyCode: resolvedCurrencyCode,
     adultCount,
     childCount,
     infantCount,
@@ -94,6 +104,7 @@ export async function fetchTravelportBuildFromProducts({
     try {
       const response = await fetch(url, {
         method: "POST",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),

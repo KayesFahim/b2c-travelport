@@ -1,6 +1,6 @@
 import { Box, Grid, Skeleton } from "@mui/material";
 import React from "react";
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const FlightDetailsSkeleton = () => {
   return (

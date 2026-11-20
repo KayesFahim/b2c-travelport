@@ -49,7 +49,7 @@ const App: FC = () => {
       <a href="#main-content" className="travelport-skip-link">
         Skip to main content
       </a>
-      <div className="travelport-shell relative min-h-screen overflow-x-hidden">
+      <div className="travelport-shell relative min-h-screen overflow-x-clip">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(circle_at_10%_0%,rgba(0,154,214,0.24),transparent_58%)]" />
         <div className="pointer-events-none absolute right-[-120px] top-[120px] h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(20,184,166,0.2),transparent_70%)]" />
         <BrowserRouter

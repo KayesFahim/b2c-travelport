@@ -38,7 +38,7 @@ import { calculateTransitTime } from "../../Pages/common/funcation";
 import ShowDetails from "../ShowDetails/FlightDetails";
 import { config } from "../../config";
 import { setBookingAuthToken } from "../../utils/bookingAuth";
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });

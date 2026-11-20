@@ -5,7 +5,7 @@ import { Box, Button, Grid, Typography } from "@mui/material";
 import moment from "moment-timezone";
 import { calculateTransitTime } from "../../common/funcation";
 import { convertMinutesToHoursAndMinutes } from "../../common/funcation";
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const MulticityFlightDetails = ({ data }) => {
   const [value, setValue] = useState("0" || []);

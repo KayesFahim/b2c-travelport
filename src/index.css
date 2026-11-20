@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+/* Manrope webfont is loaded via <link> in pages/_document.tsx to avoid CSS @import request chains */
 
 @tailwind base;
 @tailwind components;
@@ -226,4 +226,178 @@
 
 .react-datepicker-popper {
   z-index: 1000 !important;
+}
+
+
+/* --- Modern Web Guidance Layout, Scroll-Snap Carousel & Focus Primitives --- */
+.flyjatt-cq {
+  container-type: inline-size;
+}
+
+.flyjatt-section-title {
+  font-size: clamp(1.35rem, 1.1rem + 1vw, 2rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: #0b2447;
+  line-height: 1.2;
+}
+
+.flyjatt-hero-heading {
+  font-size: clamp(1.75rem, 1.2rem + 2.3vw, 3.1rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.12;
+}
+
+.flyjatt-snap-track {
+  display: grid;
+  grid-auto-flow: column;
+  gap: 1rem;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-padding-inline: 0.25rem;
+  scrollbar-width: none;
+  touch-action: manipulation;
+  -webkit-overflow-scrolling: touch;
+}
+
+.flyjatt-snap-track::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .flyjatt-snap-track {
+    scroll-behavior: smooth;
+  }
+}
+
+.flyjatt-snap-slide {
+  scroll-snap-align: start;
+  min-inline-size: 0;
+}
+
+.flyjatt-promo-track {
+  grid-auto-columns: 100%;
+}
+
+@container (min-width: 600px) {
+  .flyjatt-promo-track {
+    grid-auto-columns: calc((100% - 1rem) / 2);
+  }
+}
+
+@container (min-width: 960px) {
+  .flyjatt-promo-track {
+    grid-auto-columns: calc((100% - 2rem) / 3);
+  }
+}
+
+.flyjatt-deals-track {
+  grid-auto-columns: 88%;
+}
+
+@container (min-width: 560px) {
+  .flyjatt-deals-track {
+    grid-auto-columns: calc((100% - 1rem) / 2);
+  }
+}
+
+@container (min-width: 900px) {
+  .flyjatt-deals-track {
+    grid-auto-columns: calc((100% - 2rem) / 3);
+  }
+}
+
+.flyjatt-deals-grid {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+}
+
+.flyjatt-touch-btn {
+  touch-action: manipulation;
+  transition: transform 160ms ease, background-color 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.flyjatt-touch-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.flyjatt-touch-btn:focus-visible,
+.flyjatt-focus-ring:focus-visible,
+.flyjatt-snap-track:focus-visible {
+  outline: 3px solid #009ad6;
+  outline-offset: 2px;
+}
+
+.flyjatt-nav-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  padding-block: 0.5rem;
+  padding-inline: 0.95rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  transition: background-color 160ms ease, color 160ms ease;
+}
+
+.flyjatt-nav-link:focus-visible {
+  outline: 3px solid #009ad6;
+  outline-offset: 2px;
+}
+
+.flyjatt-nav-link[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  inset-block-end: 0.2rem;
+  inset-inline: 0.95rem;
+  block-size: 2.5px;
+  border-radius: 999px;
+  background-color: #ffffff;
+}
+
+@keyframes flyjattPartnerMarquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.flyjatt-marquee-viewport {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.flyjatt-marquee-viewport::-webkit-scrollbar {
+  display: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .flyjatt-marquee-viewport {
+    overflow: clip;
+  }
+  .flyjatt-marquee-track {
+    display: flex;
+    width: max-content;
+    animation: flyjattPartnerMarquee 34s linear infinite;
+  }
+  .flyjatt-marquee-viewport:hover .flyjatt-marquee-track,
+  .flyjatt-marquee-viewport:focus-within .flyjatt-marquee-track {
+    animation-play-state: paused;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flyjatt-marquee-track {
+    display: flex;
+    gap: 0.85rem;
+    width: max-content;
+    animation: none;
+  }
+  .flyjatt-touch-btn:hover:not(:disabled) {
+    transform: none;
+  }
 }

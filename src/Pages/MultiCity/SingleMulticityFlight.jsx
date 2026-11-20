@@ -63,7 +63,7 @@ import { setBookingAuthToken } from "../../utils/bookingAuth";
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
 });
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const SingleMulticityFlight = ({ data }) => {
   const [flightDetails, setFlightDetails] = useState(false);

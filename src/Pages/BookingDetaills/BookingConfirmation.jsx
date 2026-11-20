@@ -572,10 +572,20 @@ const extractAirlinesPnrFromReservation = (reservation) => {
   if (!reservation || typeof reservation !== "object") return "";
 
   const receipts = Array.isArray(reservation?.Receipt) ? reservation.Receipt : [];
+  const gdsSources = new Set(["1G", "1V", "1P", "1S", "GDS"]);
 
-  // Explicit path requested: ReservationResponse.Reservation.Receipt[4].Confirmation.Locator.value
-  const explicit = toText(receipts?.[4]?.Confirmation?.Locator?.value);
-  if (explicit) return explicit;
+  // Prefer airline-sourced Confirmation.Locator (e.g. "QR", "ET") over GDS ("1G")
+  for (const receipt of receipts) {
+    const source = toText(receipt?.Confirmation?.Locator?.source).toUpperCase();
+    const candidate =
+      toText(receipt?.Confirmation?.Locator?.value) ||
+      toText(receipt?.Confirmation?.Locator) ||
+      toText(receipt?.Locator?.value) ||
+      toText(receipt?.Locator);
+    if (candidate && source && !gdsSources.has(source)) {
+      return candidate;
+    }
+  }
 
   for (const receipt of receipts) {
     const candidate =

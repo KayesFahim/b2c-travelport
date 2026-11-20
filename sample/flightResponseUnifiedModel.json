@@ -1,95 +1,48 @@
 {
   "provider": "Travelport",
-  "transactionId": "5e4a604b73095b92d70bc275522e0dcd",
-  "identifier": "o1_o2",
+  "transactionId": "56424fd50632caf9dbf40ddc324c3769",
+  "identifier": "o1",
   "offerIdentifier": "o1",
   "OfferIdentifier": "o1",
-  "offerListIdentifier": "84c7492d-c9d1-43d0-a300-5c7fe17058b5_PC",
+  "offerListIdentifier": "091f1298-3121-41b4-a192-5cb55aee5e6b",
   "productIdentifiers": [
-    "p0",
-    "p5"
+    "p0"
   ],
   "farePolicyRequest": {
     "offerIdentifier": "o1",
-    "offerListIdentifier": "84c7492d-c9d1-43d0-a300-5c7fe17058b5_PC",
+    "offerListIdentifier": "091f1298-3121-41b4-a192-5cb55aee5e6b",
     "productIdentifiers": [
-      "p0",
-      "p5"
+      "p0"
     ]
   },
   "instantPayment": false,
   "issuePermit": true,
   "isBookable": true,
-  "journeyType": "ROUND_TRIP",
-  "tripType": "ROUND_TRIP",
+  "journeyType": "ONE_WAY",
+  "tripType": "ONE_WAY",
   "fareType": "PublicFare",
-  "carrierCode": "HR",
-  "carrierName": "AZ",
+  "carrierCode": "ET",
+  "carrierName": "ET",
   "cabinClass": "Economy",
-  "currencyCode": "USD",
-  "baseFare": 652,
-  "taxes": 2018.62,
-  "netFare": 2670.62,
-  "grossFare": 2670.62,
+  "currencyCode": "ETB",
+  "baseFare": 92222,
+  "taxes": 112115,
+  "netFare": 204337,
+  "grossFare": 204337,
   "markUp": "0",
-  "timeLimit": "2026-04-03T18:05:00Z",
+  "timeLimit": "2026-05-31T23:59:00Z",
   "refundable": true,
-  "totalSegments": 4,
+  "totalSegments": 1,
   "amenities": {
-    "basic": [
-      {
-        "classification": "Refund",
-        "inclusion": "Not Offered"
-      },
-      {
-        "classification": "Rebooking",
-        "inclusion": "Chargeable"
-      },
-      {
-        "classification": "CarryOn",
-        "inclusion": "Included"
-      },
-      {
-        "classification": "SeatAssignment",
-        "inclusion": "Chargeable"
-      },
-      {
-        "classification": "WiFi",
-        "inclusion": "Chargeable"
-      },
-      {
-        "classification": "Meals",
-        "inclusion": "Included"
-      },
-      {
-        "classification": "CheckedBag",
-        "inclusion": "Chargeable"
-      }
-    ],
-    "additional": [
-      {
-        "classification": "Priority CheckIn",
-        "inclusion": "Not Offered"
-      },
-      {
-        "classification": "Mileage Accrual",
-        "inclusion": "Included"
-      },
-      {
-        "classification": "Lounge Access",
-        "inclusion": "Not Offered"
-      },
-      {
-        "classification": "Priority Security",
-        "inclusion": "Not Offered"
-      }
-    ]
+    "basic": [],
+    "additional": []
   },
   "penaltiesCancellation": {
     "change": [
       {
         "passengerTypeCodes": [
           "ADT",
+          "CHD",
           "INF"
         ],
         "penaltyTypes": [
@@ -97,22 +50,8 @@
         ],
         "appliesTo": "PerTicket",
         "amount": {
-          "value": 345,
-          "currencyCode": "USD"
-        }
-      },
-      {
-        "passengerTypeCodes": [
-          "ADT",
-          "INF"
-        ],
-        "penaltyTypes": [
-          "Anytime"
-        ],
-        "appliesTo": "PerTicket",
-        "amount": {
-          "value": 345,
-          "currencyCode": "USD"
+          "value": 11705,
+          "currencyCode": "ETB"
         }
       }
     ],
@@ -120,42 +59,47 @@
       {
         "passengerTypeCodes": [
           "ADT",
+          "CHD",
           "INF"
         ],
         "penaltyTypes": [
           "Anytime"
         ],
         "appliesTo": "PerTicket",
-        "amount": null
-      },
-      {
-        "passengerTypeCodes": [
-          "ADT",
-          "INF"
-        ],
-        "penaltyTypes": [
-          "Anytime"
-        ],
-        "appliesTo": "PerTicket",
-        "amount": null
+        "amount": {
+          "value": 31214,
+          "currencyCode": "ETB"
+        }
       }
     ]
   },
   "priceBreakDown": [
     {
       "paxType": "ADT",
-      "baseFare": 210,
-      "taxes": 649.93,
-      "totalFare": 859.93,
-      "paxCount": 2,
+      "baseFare": 49723,
+      "taxes": 54652,
+      "totalFare": 104375,
+      "paxCount": 1,
       "bag": {
-        "airline": "HR",
+        "airline": "ET",
         "allowance": [
           {
             "type": "Checked",
-            "quantity": 0,
-            "weight": null,
-            "text": "BAGGAGE CHARGES DATA NOT AVAILABLE"
+            "quantity": 1,
+            "weight": "23KG",
+            "text": "UPTO50LB/23KG"
+          },
+          {
+            "type": "Checked",
+            "quantity": 1,
+            "weight": "23KG",
+            "text": "UPTO50LB/23KG"
+          },
+          {
+            "type": "Checked",
+            "quantity": 1,
+            "weight": "7KG",
+            "text": "UPTO15LB/7KG AND UPTO45LI/115LCM"
           }
         ]
       },
@@ -163,18 +107,30 @@
     },
     {
       "paxType": "CHD",
-      "baseFare": 210,
-      "taxes": 639.93,
-      "totalFare": 849.93,
+      "baseFare": 37399,
+      "taxes": 54652,
+      "totalFare": 92051,
       "paxCount": 1,
       "bag": {
-        "airline": "HR",
+        "airline": "ET",
         "allowance": [
           {
             "type": "Checked",
-            "quantity": 0,
-            "weight": null,
-            "text": "BAGGAGE CHARGES DATA NOT AVAILABLE"
+            "quantity": 1,
+            "weight": "23KG",
+            "text": "UPTO50LB/23KG"
+          },
+          {
+            "type": "Checked",
+            "quantity": 1,
+            "weight": "23KG",
+            "text": "UPTO50LB/23KG"
+          },
+          {
+            "type": "Checked",
+            "quantity": 1,
+            "weight": "7KG",
+            "text": "UPTO15LB/7KG AND UPTO45LI/115LCM"
           }
         ]
       },
@@ -182,18 +138,30 @@
     },
     {
       "paxType": "INF",
-      "baseFare": 22,
-      "taxes": 78.83,
-      "totalFare": 100.83,
+      "baseFare": 5100,
+      "taxes": 2811,
+      "totalFare": 7911,
       "paxCount": 1,
       "bag": {
-        "airline": "HR",
+        "airline": "ET",
         "allowance": [
           {
             "type": "Checked",
-            "quantity": 0,
-            "weight": null,
-            "text": "BAGGAGE CHARGES DATA NOT AVAILABLE"
+            "quantity": 1,
+            "weight": "23KG",
+            "text": "UPTO50LB/23KG"
+          },
+          {
+            "type": "Checked",
+            "quantity": 1,
+            "weight": "23KG",
+            "text": "UPTO50LB/23KG"
+          },
+          {
+            "type": "Checked",
+            "quantity": 1,
+            "weight": "7KG",
+            "text": "UPTO15LB/7KG AND UPTO45LI/115LCM"
           }
         ]
       },
@@ -202,778 +170,53 @@
   ],
   "allLegsInfo": [
     {
-      "departureDate": "2026-05-01",
+      "departureDate": "2026-06-11",
       "departureFrom": "DXB",
-      "arrivalTo": "JFK",
-      "totalDuration": "PT19H25M",
-      "brandName": "Economy Light",
-      "brandFeatures": {
-        "name": "Economy Light",
-        "tier": 1,
-        "shelfNumbers": [],
-        "code": "ECOLIGHT",
-        "id": "b0",
-        "Identifier": {
-          "value": "1999616"
-        },
-        "BrandAttribute": [
-          {
-            "classification": "Refund",
-            "inclusion": "Not Offered",
-            "groupCode": "BF",
-            "subGroupCode": "RF",
-            "subCode": "056"
-          },
-          {
-            "classification": "Rebooking",
-            "inclusion": "Chargeable",
-            "groupCode": "BF",
-            "subGroupCode": "VC",
-            "subCode": "06I"
-          },
-          {
-            "classification": "CarryOn",
-            "inclusion": "Included",
-            "groupCode": "BG",
-            "subGroupCode": "CY",
-            "subCode": "09Q"
-          },
-          {
-            "classification": "SeatAssignment",
-            "inclusion": "Chargeable",
-            "groupCode": "SA",
-            "subCode": "0B5"
-          },
-          {
-            "classification": "WiFi",
-            "inclusion": "Chargeable",
-            "groupCode": "IE",
-            "subGroupCode": "IT",
-            "subCode": "0CL"
-          },
-          {
-            "classification": "Meals",
-            "inclusion": "Included",
-            "groupCode": "ML",
-            "subCode": "0LO"
-          },
-          {
-            "classification": "CheckedBag",
-            "inclusion": "Chargeable",
-            "groupCode": "BG",
-            "subCode": "0CC"
-          }
-        ],
-        "AdditionalBrandAttribute": [
-          {
-            "groupCode": "TS",
-            "subGroupCode": "PO",
-            "subCode": "03P",
-            "Classification": "Priority CheckIn",
-            "Inclusion": "Not Offered"
-          },
-          {
-            "groupCode": "BF",
-            "subGroupCode": "FR",
-            "subCode": "057",
-            "Classification": "Mileage Accrual",
-            "Inclusion": "Included"
-          },
-          {
-            "groupCode": "LG",
-            "subCode": "0BX",
-            "Classification": "Lounge Access",
-            "Inclusion": "Not Offered"
-          },
-          {
-            "groupCode": "TS",
-            "subGroupCode": "SY",
-            "subCode": "0LW",
-            "Classification": "Priority Security",
-            "Inclusion": "Not Offered"
-          }
-        ]
-      },
+      "arrivalTo": "ADD",
+      "totalDuration": "PT4H25M",
+      "brandName": null,
+      "brandCode": null,
+      "brandTier": null,
+      "brandFeatures": null,
       "segments": [
         {
-          "marketingCarrier": "AZ",
-          "marketingCarrierName": "AZ",
-          "marketingFlightNumber": "857",
-          "operatingCarrier": "AZ",
-          "operatingFlightNumber": "857",
-          "operatingCarrierName": "AZ",
+          "marketingCarrier": "ET",
+          "marketingCarrierName": "ET",
+          "marketingFlightNumber": "603",
+          "operatingCarrier": "ET",
+          "operatingFlightNumber": "603",
+          "operatingCarrierName": "ET",
           "depFrom": "DXB",
           "depAirport": "DXB",
           "depLocation": "DXB",
           "depDateAdjustment": 0,
-          "depTime": "2026-05-01T01:50:00",
-          "arrTo": "FCO",
-          "arrAirport": "FCO",
-          "arrLocation": "FCO",
+          "depTime": "2026-06-11T17:10:00",
+          "arrTo": "ADD",
+          "arrAirport": "ADD",
+          "arrLocation": "ADD",
           "arrDateAdjustment": 0,
-          "arrTime": "2026-05-01T06:40:00",
-          "operatedBy": "AZ",
+          "arrTime": "2026-06-11T20:35:00",
+          "operatedBy": "ET",
           "stopCount": 0,
-          "duration": "PT6H50M",
-          "aircraftTypeName": "32Q",
+          "duration": "PT4H25M",
+          "aircraftTypeName": "77W",
           "departureGate": "1",
-          "arrivalGate": "3",
+          "arrivalGate": "2",
           "hiddenStops": [],
-          "totalMilesFlown": 2692,
-          "availabilitySourceCode": "N/A",
+          "totalMilesFlown": 1552,
+          "availabilitySourceCode": "P",
+          "brandTier": null,
           "segmentCode": {
-            "bookingCode": "T",
+            "bookingCode": "E",
             "cabinCode": "Economy",
-            "seatsAvailable": 3,
-            "fareBasisCode": "TLGXIXLQ",
+            "seatsAvailable": 7,
+            "fareBasisCode": "EPRAE",
             "fareTypeCode": "PublicFare"
           },
-          "amenities": [
-            {
-              "id": "a3",
-              "category": "Aircraft",
-              "text": "A321neo (narrowbody)"
-            },
-            {
-              "id": "a11",
-              "category": "Power",
-              "text": "USB outlet"
-            },
-            {
-              "id": "a25",
-              "category": "Beverage",
-              "text": "Alcohol & beverages provided"
-            },
-            {
-              "id": "a29",
-              "category": "WiFi",
-              "text": "Fast web browsing (fee)"
-            },
-            {
-              "id": "a36",
-              "category": "Seat",
-              "text": "79 cm seat pitch"
-            },
-            {
-              "id": "a37",
-              "category": "Food",
-              "text": "Meal provided"
-            },
-            {
-              "id": "a47",
-              "category": "Layout",
-              "text": "3-3 seat layout"
-            },
-            {
-              "id": "a48",
-              "category": "Entertainment",
-              "text": "Seatback on-demand video"
-            }
-          ],
-          "amenityRefs": [
-            "a3",
-            "a11",
-            "a25",
-            "a29",
-            "a36",
-            "a37",
-            "a47",
-            "a48"
-          ],
-          "universalProductAttributeRefs": [
-            "u1",
-            "u11",
-            "u12",
-            "u14",
-            "u17",
-            "u26",
-            "u32",
-            "u56"
-          ],
-          "universalProductAttributes": [
-            {
-              "id": "u1",
-              "headline": "Watch the movies you love",
-              "description": "Enjoy the best in-flight entertainment on 13.3” screens with 4k resolution.",
-              "iconSmall": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/small/entertainment.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/large/entertainment.png"
-            },
-            {
-              "id": "u11",
-              "headline": "Innovative, sustainable, and comfortable",
-              "description": "The Airbus A321neo is a quieter and more environmentally friendly aircraft: it boasts over 20% lower fuel consumption and CO2 emissions.",
-              "iconSmall": "https://upamedia.atpco.net/icons/c0dbf750-53bf-4fff-a01e-bbd13cd56773/small/aircraft.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/c0dbf750-53bf-4fff-a01e-bbd13cd56773/large/aircraft.png"
-            },
-            {
-              "id": "u12",
-              "headline": "Keep your devices charged",
-              "description": "Recharge your devices via the USB A+C socket.",
-              "iconSmall": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/small/power.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/large/power.png"
-            },
-            {
-              "id": "u14",
-              "headline": "Comfort without sacrifice",
-              "description": "The Economy Class of the Airbus A321 does not skimp on comfort. Once seated, you will be enveloped by the softness of our seats.",
-              "iconSmall": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/large/Seat.png"
-            },
-            {
-              "id": "u17",
-              "headline": "Friendly, stylish service",
-              "description": "ITA Airways staff embody Italianissima - style and attention to detail to ensure an enjoyable experience for all passengers.",
-              "iconSmall": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/small/service-inflight.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/large/service-inflight.png"
-            },
-            {
-              "id": "u26",
-              "headline": "Free refunds and seat selection",
-              "description": "Economy Flex includes a full refund of your ticket for no extra fee, plus free seat selection.",
-              "iconSmall": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/small/Flexible_84x84.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/large/Flexible_84x84.png"
-            },
-            {
-              "id": "u32",
-              "headline": "Connectivity that brings us together",
-              "description": "Even in the air, you can stay in touch with the world. Use the onboard connection service and experience a new way of flying.",
-              "iconSmall": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/small/Wi-Fi.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/large/Wi-Fi.png"
-            },
-            {
-              "id": "u56",
-              "headline": "Choose comfort for your flight",
-              "description": "Choose Economy Comfort for a more comfortable and spacious seat, priority boarding and disembarkation and reserved overhead lockers.",
-              "iconSmall": "https://upamedia.atpco.net/icons/294c2789-e73c-42e4-9cb2-e50e11f558f0/small/Economy-icon.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/294c2789-e73c-42e4-9cb2-e50e11f558f0/large/Economy-icon.png"
-            }
-          ]
-        },
-        {
-          "marketingCarrier": "AZ",
-          "marketingCarrierName": "AZ",
-          "marketingFlightNumber": "602",
-          "operatingCarrier": "AZ",
-          "operatingFlightNumber": "602",
-          "operatingCarrierName": "AZ",
-          "depFrom": "FCO",
-          "depAirport": "FCO",
-          "depLocation": "FCO",
-          "depDateAdjustment": 0,
-          "depTime": "2026-05-01T09:30:00",
-          "arrTo": "JFK",
-          "arrAirport": "JFK",
-          "arrLocation": "JFK",
-          "arrDateAdjustment": 0,
-          "arrTime": "2026-05-01T13:15:00",
-          "operatedBy": "AZ",
-          "stopCount": 0,
-          "duration": "PT9H45M",
-          "aircraftTypeName": "339",
-          "departureGate": "1",
-          "arrivalGate": "1",
-          "hiddenStops": [],
-          "totalMilesFlown": 4274,
-          "availabilitySourceCode": "N/A",
-          "segmentCode": {
-            "bookingCode": "T",
-            "cabinCode": "Economy",
-            "seatsAvailable": 3,
-            "fareBasisCode": "TLGXIXLQ",
-            "fareTypeCode": "PublicFare"
-          },
-          "amenities": [
-            {
-              "id": "a1",
-              "category": "WiFi",
-              "text": "Fast web browsing (fee)"
-            },
-            {
-              "id": "a2",
-              "category": "Aircraft",
-              "text": "A330neo (widebody)"
-            },
-            {
-              "id": "a11",
-              "category": "Power",
-              "text": "USB outlet"
-            },
-            {
-              "id": "a25",
-              "category": "Beverage",
-              "text": "Alcohol & beverages provided"
-            },
-            {
-              "id": "a36",
-              "category": "Seat",
-              "text": "79 cm seat pitch"
-            },
-            {
-              "id": "a37",
-              "category": "Food",
-              "text": "Meal provided"
-            },
-            {
-              "id": "a48",
-              "category": "Entertainment",
-              "text": "Seatback on-demand video"
-            },
-            {
-              "id": "a50",
-              "category": "Layout",
-              "text": "2-4-2 seat layout"
-            }
-          ],
-          "amenityRefs": [
-            "a1",
-            "a2",
-            "a11",
-            "a25",
-            "a36",
-            "a37",
-            "a48",
-            "a50"
-          ],
-          "universalProductAttributeRefs": [
-            "u12",
-            "u15",
-            "u17",
-            "u26",
-            "u32",
-            "u46"
-          ],
-          "universalProductAttributes": [
-            {
-              "id": "u12",
-              "headline": "Keep your devices charged",
-              "description": "Recharge your devices via the USB A+C socket.",
-              "iconSmall": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/small/power.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/large/power.png"
-            },
-            {
-              "id": "u15",
-              "headline": "Watch the movies you love",
-              "description": "While in the air, use your 9” personal screen to choose from a vast library of movies, games, music and TV programs.",
-              "iconSmall": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/small/entertainment.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/large/entertainment.png"
-            },
-            {
-              "id": "u17",
-              "headline": "Friendly, stylish service",
-              "description": "ITA Airways staff embody Italianissima - style and attention to detail to ensure an enjoyable experience for all passengers.",
-              "iconSmall": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/small/service-inflight.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/large/service-inflight.png"
-            },
-            {
-              "id": "u26",
-              "headline": "Free refunds and seat selection",
-              "description": "Economy Flex includes a full refund of your ticket for no extra fee, plus free seat selection.",
-              "iconSmall": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/small/Flexible_84x84.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/large/Flexible_84x84.png"
-            },
-            {
-              "id": "u32",
-              "headline": "Connectivity that brings us together",
-              "description": "Even in the air, you can stay in touch with the world. Use the onboard connection service and experience a new way of flying.",
-              "iconSmall": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/small/Wi-Fi.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/large/Wi-Fi.png"
-            },
-            {
-              "id": "u46",
-              "headline": "Comfort without sacrifice",
-              "description": "The Economy Class of the Airbus A330-900neo does not skimp on comfort. Once seated, you will be enveloped by the softness of our seats.",
-              "iconSmall": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/large/Seat.png"
-            }
-          ]
-        }
-      ]
-    },
-    {
-      "departureDate": "2026-05-30",
-      "departureFrom": "JFK",
-      "arrivalTo": "DXB",
-      "totalDuration": "PT17H45M",
-      "brandName": "Economy Light",
-      "brandFeatures": {
-        "name": "Economy Light",
-        "tier": 1,
-        "shelfNumbers": [],
-        "code": "ECOLIGHT",
-        "id": "b0",
-        "Identifier": {
-          "value": "1999616"
-        },
-        "BrandAttribute": [
-          {
-            "classification": "Refund",
-            "inclusion": "Not Offered",
-            "groupCode": "BF",
-            "subGroupCode": "RF",
-            "subCode": "056"
-          },
-          {
-            "classification": "Rebooking",
-            "inclusion": "Chargeable",
-            "groupCode": "BF",
-            "subGroupCode": "VC",
-            "subCode": "06I"
-          },
-          {
-            "classification": "CarryOn",
-            "inclusion": "Included",
-            "groupCode": "BG",
-            "subGroupCode": "CY",
-            "subCode": "09Q"
-          },
-          {
-            "classification": "SeatAssignment",
-            "inclusion": "Chargeable",
-            "groupCode": "SA",
-            "subCode": "0B5"
-          },
-          {
-            "classification": "WiFi",
-            "inclusion": "Chargeable",
-            "groupCode": "IE",
-            "subGroupCode": "IT",
-            "subCode": "0CL"
-          },
-          {
-            "classification": "Meals",
-            "inclusion": "Included",
-            "groupCode": "ML",
-            "subCode": "0LO"
-          },
-          {
-            "classification": "CheckedBag",
-            "inclusion": "Chargeable",
-            "groupCode": "BG",
-            "subCode": "0CC"
-          }
-        ],
-        "AdditionalBrandAttribute": [
-          {
-            "groupCode": "TS",
-            "subGroupCode": "PO",
-            "subCode": "03P",
-            "Classification": "Priority CheckIn",
-            "Inclusion": "Not Offered"
-          },
-          {
-            "groupCode": "BF",
-            "subGroupCode": "FR",
-            "subCode": "057",
-            "Classification": "Mileage Accrual",
-            "Inclusion": "Included"
-          },
-          {
-            "groupCode": "LG",
-            "subCode": "0BX",
-            "Classification": "Lounge Access",
-            "Inclusion": "Not Offered"
-          },
-          {
-            "groupCode": "TS",
-            "subGroupCode": "SY",
-            "subCode": "0LW",
-            "Classification": "Priority Security",
-            "Inclusion": "Not Offered"
-          }
-        ]
-      },
-      "segments": [
-        {
-          "marketingCarrier": "AZ",
-          "marketingCarrierName": "AZ",
-          "marketingFlightNumber": "603",
-          "operatingCarrier": "AZ",
-          "operatingFlightNumber": "603",
-          "operatingCarrierName": "AZ",
-          "depFrom": "JFK",
-          "depAirport": "JFK",
-          "depLocation": "JFK",
-          "depDateAdjustment": 0,
-          "depTime": "2026-05-30T17:35:00",
-          "arrTo": "FCO",
-          "arrAirport": "FCO",
-          "arrLocation": "FCO",
-          "arrDateAdjustment": 0,
-          "arrTime": "2026-05-31T08:15:00",
-          "operatedBy": "AZ",
-          "stopCount": 0,
-          "duration": "PT8H40M",
-          "aircraftTypeName": "339",
-          "departureGate": "1",
-          "arrivalGate": "3",
-          "hiddenStops": [],
-          "totalMilesFlown": 4274,
-          "availabilitySourceCode": "N/A",
-          "segmentCode": {
-            "bookingCode": "T",
-            "cabinCode": "Economy",
-            "seatsAvailable": 3,
-            "fareBasisCode": "TLGXIXLQ",
-            "fareTypeCode": "PublicFare"
-          },
-          "amenities": [
-            {
-              "id": "a1",
-              "category": "WiFi",
-              "text": "Fast web browsing (fee)"
-            },
-            {
-              "id": "a2",
-              "category": "Aircraft",
-              "text": "A330neo (widebody)"
-            },
-            {
-              "id": "a11",
-              "category": "Power",
-              "text": "USB outlet"
-            },
-            {
-              "id": "a25",
-              "category": "Beverage",
-              "text": "Alcohol & beverages provided"
-            },
-            {
-              "id": "a36",
-              "category": "Seat",
-              "text": "79 cm seat pitch"
-            },
-            {
-              "id": "a37",
-              "category": "Food",
-              "text": "Meal provided"
-            },
-            {
-              "id": "a48",
-              "category": "Entertainment",
-              "text": "Seatback on-demand video"
-            },
-            {
-              "id": "a50",
-              "category": "Layout",
-              "text": "2-4-2 seat layout"
-            }
-          ],
-          "amenityRefs": [
-            "a1",
-            "a2",
-            "a11",
-            "a25",
-            "a36",
-            "a37",
-            "a48",
-            "a50"
-          ],
-          "universalProductAttributeRefs": [
-            "u12",
-            "u15",
-            "u17",
-            "u26",
-            "u32",
-            "u46"
-          ],
-          "universalProductAttributes": [
-            {
-              "id": "u12",
-              "headline": "Keep your devices charged",
-              "description": "Recharge your devices via the USB A+C socket.",
-              "iconSmall": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/small/power.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/large/power.png"
-            },
-            {
-              "id": "u15",
-              "headline": "Watch the movies you love",
-              "description": "While in the air, use your 9” personal screen to choose from a vast library of movies, games, music and TV programs.",
-              "iconSmall": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/small/entertainment.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/large/entertainment.png"
-            },
-            {
-              "id": "u17",
-              "headline": "Friendly, stylish service",
-              "description": "ITA Airways staff embody Italianissima - style and attention to detail to ensure an enjoyable experience for all passengers.",
-              "iconSmall": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/small/service-inflight.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/large/service-inflight.png"
-            },
-            {
-              "id": "u26",
-              "headline": "Free refunds and seat selection",
-              "description": "Economy Flex includes a full refund of your ticket for no extra fee, plus free seat selection.",
-              "iconSmall": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/small/Flexible_84x84.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/large/Flexible_84x84.png"
-            },
-            {
-              "id": "u32",
-              "headline": "Connectivity that brings us together",
-              "description": "Even in the air, you can stay in touch with the world. Use the onboard connection service and experience a new way of flying.",
-              "iconSmall": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/small/Wi-Fi.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/large/Wi-Fi.png"
-            },
-            {
-              "id": "u46",
-              "headline": "Comfort without sacrifice",
-              "description": "The Economy Class of the Airbus A330-900neo does not skimp on comfort. Once seated, you will be enveloped by the softness of our seats.",
-              "iconSmall": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/large/Seat.png"
-            }
-          ]
-        },
-        {
-          "marketingCarrier": "AZ",
-          "marketingCarrierName": "AZ",
-          "marketingFlightNumber": "856",
-          "operatingCarrier": "AZ",
-          "operatingFlightNumber": "856",
-          "operatingCarrierName": "AZ",
-          "depFrom": "FCO",
-          "depAirport": "FCO",
-          "depLocation": "FCO",
-          "depDateAdjustment": 0,
-          "depTime": "2026-05-31T11:05:00",
-          "arrTo": "DXB",
-          "arrAirport": "DXB",
-          "arrLocation": "DXB",
-          "arrDateAdjustment": 0,
-          "arrTime": "2026-05-31T19:20:00",
-          "operatedBy": "AZ",
-          "stopCount": 0,
-          "duration": "PT6H15M",
-          "aircraftTypeName": "32Q",
-          "departureGate": "1",
-          "arrivalGate": "1",
-          "hiddenStops": [],
-          "totalMilesFlown": 2692,
-          "availabilitySourceCode": "N/A",
-          "segmentCode": {
-            "bookingCode": "T",
-            "cabinCode": "Economy",
-            "seatsAvailable": 3,
-            "fareBasisCode": "TLGXIXLQ",
-            "fareTypeCode": "PublicFare"
-          },
-          "amenities": [
-            {
-              "id": "a3",
-              "category": "Aircraft",
-              "text": "A321neo (narrowbody)"
-            },
-            {
-              "id": "a11",
-              "category": "Power",
-              "text": "USB outlet"
-            },
-            {
-              "id": "a25",
-              "category": "Beverage",
-              "text": "Alcohol & beverages provided"
-            },
-            {
-              "id": "a29",
-              "category": "WiFi",
-              "text": "Fast web browsing (fee)"
-            },
-            {
-              "id": "a36",
-              "category": "Seat",
-              "text": "79 cm seat pitch"
-            },
-            {
-              "id": "a37",
-              "category": "Food",
-              "text": "Meal provided"
-            },
-            {
-              "id": "a47",
-              "category": "Layout",
-              "text": "3-3 seat layout"
-            },
-            {
-              "id": "a48",
-              "category": "Entertainment",
-              "text": "Seatback on-demand video"
-            }
-          ],
-          "amenityRefs": [
-            "a3",
-            "a11",
-            "a25",
-            "a29",
-            "a36",
-            "a37",
-            "a47",
-            "a48"
-          ],
-          "universalProductAttributeRefs": [
-            "u1",
-            "u11",
-            "u12",
-            "u14",
-            "u17",
-            "u26",
-            "u32",
-            "u56"
-          ],
-          "universalProductAttributes": [
-            {
-              "id": "u1",
-              "headline": "Watch the movies you love",
-              "description": "Enjoy the best in-flight entertainment on 13.3” screens with 4k resolution.",
-              "iconSmall": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/small/entertainment.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/ef1ba2d9-7891-4a52-bcf3-faf2830ac13d/large/entertainment.png"
-            },
-            {
-              "id": "u11",
-              "headline": "Innovative, sustainable, and comfortable",
-              "description": "The Airbus A321neo is a quieter and more environmentally friendly aircraft: it boasts over 20% lower fuel consumption and CO2 emissions.",
-              "iconSmall": "https://upamedia.atpco.net/icons/c0dbf750-53bf-4fff-a01e-bbd13cd56773/small/aircraft.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/c0dbf750-53bf-4fff-a01e-bbd13cd56773/large/aircraft.png"
-            },
-            {
-              "id": "u12",
-              "headline": "Keep your devices charged",
-              "description": "Recharge your devices via the USB A+C socket.",
-              "iconSmall": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/small/power.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/476bcfae-da5f-4c87-a48c-91bba9aa1c27/large/power.png"
-            },
-            {
-              "id": "u14",
-              "headline": "Comfort without sacrifice",
-              "description": "The Economy Class of the Airbus A321 does not skimp on comfort. Once seated, you will be enveloped by the softness of our seats.",
-              "iconSmall": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/526ed145-e6cf-483a-a384-751a81aa25b6/large/Seat.png"
-            },
-            {
-              "id": "u17",
-              "headline": "Friendly, stylish service",
-              "description": "ITA Airways staff embody Italianissima - style and attention to detail to ensure an enjoyable experience for all passengers.",
-              "iconSmall": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/small/service-inflight.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/2fb64594-b7bb-4692-b2c0-4424df9fa6e9/large/service-inflight.png"
-            },
-            {
-              "id": "u26",
-              "headline": "Free refunds and seat selection",
-              "description": "Economy Flex includes a full refund of your ticket for no extra fee, plus free seat selection.",
-              "iconSmall": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/small/Flexible_84x84.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/93048107-4361-48f5-8099-7bc677bb464a/large/Flexible_84x84.png"
-            },
-            {
-              "id": "u32",
-              "headline": "Connectivity that brings us together",
-              "description": "Even in the air, you can stay in touch with the world. Use the onboard connection service and experience a new way of flying.",
-              "iconSmall": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/small/Wi-Fi.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/49deec72-653f-44e1-b806-e7bc2ba2f069/large/Wi-Fi.png"
-            },
-            {
-              "id": "u56",
-              "headline": "Choose comfort for your flight",
-              "description": "Choose Economy Comfort for a more comfortable and spacious seat, priority boarding and disembarkation and reserved overhead lockers.",
-              "iconSmall": "https://upamedia.atpco.net/icons/294c2789-e73c-42e4-9cb2-e50e11f558f0/small/Economy-icon.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/294c2789-e73c-42e4-9cb2-e50e11f558f0/large/Economy-icon.png"
-            }
-          ]
+          "amenities": [],
+          "amenityRefs": [],
+          "universalProductAttributeRefs": [],
+          "universalProductAttributes": []
         }
       ]
     }

@@ -165,6 +165,9 @@ function mapUnifiedSegmentToLegacy(segment) {
     OperatingCarrier: segment?.operatingCarrier || "",
     OperatingFlightNumber: segment?.operatingFlightNumber || "",
     OperatingCarrierName: segment?.operatingCarrierName || segment?.operatingCarrier || "",
+    AvailabilitySourceCode:
+      segment?.availabilitySourceCode || segment?.AvailabilitySourceCode || "N/A",
+    brandTier: segment?.brandTier ?? null,
     DepFrom: segment?.depFrom || "",
     DepAirPort: segment?.depAirport || "",
     DepLocation: segment?.depLocation || "",
@@ -304,7 +307,8 @@ function mapUnifiedFlightToLegacyCompat(unified) {
         Duration: durationIsoToMinutes(leg?.totalDuration),
         TotalDurationISO: leg?.totalDuration || "",
         BrandName: leg?.brandName || null,
-        BrandCode: leg?.brandFeatures?.code || null,
+        BrandCode: leg?.brandCode || leg?.brandFeatures?.code || null,
+        brandTier: leg?.brandTier ?? leg?.brandFeatures?.tier ?? null,
         BrandFeatures: leg?.brandFeatures || null,
         Segments: segments.map(mapUnifiedSegmentToLegacy),
       };
@@ -345,6 +349,7 @@ export async function searchTravelportFlights(payload, token) {
     try {
       const response = await fetch(url, {
         method: "POST",
+        cache: "no-store",
         headers: {
           "Content-Type": "application/json",
           ...(token && { Authorization: `Bearer ${token}` }),

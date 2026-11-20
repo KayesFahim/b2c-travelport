@@ -231,20 +231,31 @@ export default async function handler(
     const token = await createToken();
     const url = resolveSpecialServicesUrl(version, reservationId);
 
+    const requestHeaders = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+      "Content-Version": version,
+      "Accept-Version": version,
+      Authorization: `Bearer ${token}`,
+    };
     const response = await fetch(url, {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
-        "Content-Version": version,
-        "Accept-Version": version,
-        Authorization: `Bearer ${token}`,
-      },
+      headers: requestHeaders,
       body: JSON.stringify(specialServicePayload),
     });
 
     const responsePayload = await response.json().catch(() => ({}));
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: url,
+        request: { method: "POST", headers: requestHeaders, body: specialServicePayload },
+        response: responsePayload,
+        status: response.status,
+        meta: { api: "special-services", reservationId },
+      });
+    } catch { }
     if (!response.ok) {
       return res.status(502).json({
         message: `Travelport special services failed (${response.status})`,

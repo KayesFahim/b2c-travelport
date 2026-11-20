@@ -129,7 +129,11 @@ function resolveAncillaryInput(body: AncillaryShopBody) {
       ? "offer"
       : modeText === "reservationworkbench" || modeText === "reservation_workbench"
         ? "reservationWorkbench"
-        : "offerList";
+        : modeText === "offerlist" || modeText === "offer_list"
+          ? "offerList"
+          : reservationId && !offerListIdentifier && !offerIdentifier
+            ? "reservationWorkbench"
+            : "offerList";
 
   return {
     offerListIdentifier,
@@ -170,7 +174,10 @@ function resolveDirectModeFromPayload(
 }
 
 function resolveAncillaryShopUrl(version: string): string {
-  const directUrl = process.env.TRAVELPORT_ANCILLARY_SHOP_URL || "";
+  const directUrl =
+    process.env.TRAVELPORT_ANCILLARY_SHOP_URL ||
+    process.env.TRAVELPORT_SHOP_ANCILLARY ||
+    "";
   if (directUrl.trim()) {
     return directUrl.trim();
   }
@@ -179,10 +186,10 @@ function resolveAncillaryShopUrl(version: string): string {
   const normalizedBase = baseUrl.replace(/\/+$/, "");
 
   if (/\/\d+$/.test(normalizedBase)) {
-    return `${normalizedBase}/air/search/ancillaryshop/catalogofferingsancillaries`;
+    return `${normalizedBase}/air/ancillaryshop/catalogofferingsancillaries`;
   }
 
-  return `${normalizedBase}/${version}/air/search/ancillaryshop/catalogofferingsancillaries`;
+  return `${normalizedBase}/${version}/air/ancillaryshop/catalogofferingsancillaries`;
 }
 
 async function createToken(): Promise<string> {
@@ -197,6 +204,8 @@ export default async function handler(
     res.setHeader("Allow", "POST");
     return res.status(405).json({ message: "Method not allowed" });
   }
+
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
   try {
     const body = (req.body || {}) as AncillaryShopBody;
@@ -315,16 +324,17 @@ export default async function handler(
     const version = process.env.TRAVELPORT_VERSION || "11";
     const ancillaryShopUrl = resolveAncillaryShopUrl(version);
 
+    const requestHeaders = {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+      "Accept-Version": version,
+      "Content-Version": version,
+      Authorization: `Bearer ${accessToken}`,
+    };
     const response = await fetch(ancillaryShopUrl, {
       method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-        XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
-        "Accept-Version": version,
-        "Content-Version": version,
-        Authorization: `Bearer ${accessToken}`,
-      },
+      headers: requestHeaders,
       body: JSON.stringify(requestPayload),
     });
 
@@ -332,6 +342,16 @@ export default async function handler(
       string,
       unknown
     >;
+    try {
+      const { logTravelportApi } = await import("@/utils/travelportLogger");
+      logTravelportApi({
+        endpoint: ancillaryShopUrl,
+        request: { method: "POST", headers: requestHeaders, body: requestPayload },
+        response: responsePayload,
+        status: response.status,
+        meta: { api: "ancillary-shop", mode: resolvedMode },
+      });
+    } catch { }
     if (!response.ok) {
       return res.status(502).json({
         message: `Travelport ancillary shop failed (${response.status})`,

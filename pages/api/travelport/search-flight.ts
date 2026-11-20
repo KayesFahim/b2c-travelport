@@ -6,6 +6,7 @@ import { getTravelportAccessToken } from "./_token-cache";
 import { cacheGetJson, cacheIncr, cacheSetJson } from "@/server/redis-cache";
 import { getSessionUser } from "@/server/auth-session";
 import { prisma } from "@/server/prisma";
+import { logTravelportApi } from "@/utils/travelportLogger";
 
 export type LegacySegment = {
   depfrom: string;
@@ -18,6 +19,7 @@ type LegacySearchBody = {
   childcount?: number | string;
   infantcount?: number | string;
   cabinclass?: string | number;
+  currencyCode?: string;
   segments?: LegacySegment[];
   contentSourceList?: unknown;
   contentSource?: unknown;
@@ -369,6 +371,10 @@ function buildSearchCacheKey(body: LegacySearchBody): string {
   const contentSources = Array.isArray(body?.contentSourceList)
     ? body.contentSourceList.map((item) => String(item || "").trim().toUpperCase()).join(",")
     : String(body?.contentSource || "").trim().toUpperCase();
+  const currencyCode =
+    String(body?.currencyCode || process.env.TRAVELPORT_DEFAULT_CURRENCY || "USD")
+      .trim()
+      .toUpperCase() || "USD";
 
   return [
     "travelport",
@@ -377,6 +383,7 @@ function buildSearchCacheKey(body: LegacySearchBody): string {
     String(body?.cabinclass || "").trim().toUpperCase() || "ANY",
     pax,
     contentSources || "ANY",
+    currencyCode,
     segmentSignature || "NA",
   ].join(":");
 }
@@ -606,6 +613,11 @@ function normalizeCabinClass(value: unknown): string {
 }
 
 function resolveContentSourceList(body: LegacySearchBody): string[] {
+  const gdsOnly = parseBooleanFlag(process.env.TRAVELPORT_GDS_ONLY);
+  if (gdsOnly !== false) {
+    return ["GDS"];
+  }
+
   const bodyRaw = Array.isArray(body?.contentSourceList)
     ? body.contentSourceList
     : String(body?.contentSource || "").trim()
@@ -1163,7 +1175,9 @@ function toUnifiedFlightResult(legacy: Record<string, unknown>) {
           marketingCarrierName: String(segment?.MarketingCarrierName ?? ""),
           marketingFlightNumber: String(segment?.MarketingFlightNumber ?? ""),
           operatingCarrier: String(segment?.OperatingCarrier ?? ""),
+          operatingCarrierName: String(segment?.OperatingCarrierName ?? ""),
           operatingFlightNumber: String(segment?.OperatingFlightNumber ?? ""),
+          availabilitySourceCode: String(segment?.AvailabilitySourceCode ?? "N/A"),
           depFrom: String(segment?.DepFrom ?? ""),
           depAirport: String(segment?.DepAirPort ?? ""),
           depLocation: String(segment?.DepLocation ?? ""),
@@ -1281,7 +1295,12 @@ function buildTravelportPayload(body: LegacySearchBody) {
   const childCount = Math.max(0, toNumber(body.childcount, 0));
   const infantCount = Math.max(0, toNumber(body.infantcount, 0));
   const cabinClass = normalizeCabinClass(body.cabinclass);
-  const currencyCode = process.env.TRAVELPORT_DEFAULT_CURRENCY || "USD";
+  const currencyCode =
+    String(body.currencyCode || "")
+      .trim()
+      .toUpperCase() ||
+    process.env.TRAVELPORT_DEFAULT_CURRENCY ||
+    "USD";
   const maxUpsellsToReturn = Math.max(
     0,
     toNumber(process.env.TRAVELPORT_MAX_UPSELLS_TO_RETURN, 20)
@@ -1293,6 +1312,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
     passengerCriteria.push({
       "@type": "PassengerCriteria",
       passengerTypeCode: "ADT",
+      age: 25,
       number: adultCount,
     });
   }
@@ -1300,6 +1320,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
     passengerCriteria.push({
       "@type": "PassengerCriteria",
       passengerTypeCode: "CHD",
+      age: 8,
       number: childCount,
     });
   }
@@ -1307,6 +1328,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
     passengerCriteria.push({
       "@type": "PassengerCriteria",
       passengerTypeCode: "INF",
+      age: 1,
       number: infantCount,
     });
   }
@@ -1343,14 +1365,23 @@ function buildTravelportPayload(body: LegacySearchBody) {
           "@type": "SearchModifiersAir",
           ...(shouldApplyCabinPreference
             ? {
-              CarrierPreference: [
+              CabinPreference: [
                 {
-                  preferenceType: "PreferredWithUpgrade",
+                  "@type": "CabinPreference",
+                  preferenceType: "Permitted",
                   cabins: [cabinClass],
                 },
               ],
             }
             : {}),
+          ConnectionPreferences: [
+            {
+              "@type": "ConnectionPreferencesAir",
+              FlightType: {
+                connectionType: "Any",
+              },
+            },
+          ],
         },
         PricingModifiersAir: {
           "@type": "PricingModifiersAir",
@@ -1372,14 +1403,9 @@ export function toUnifiedSearchResult(
     (data as any)?.CatalogProductOfferingResponse;
 
   const transactionId = String(catalogResponse?.transactionId ?? "");
-  const catalogProductOfferingsIdentifierRaw = String(
+  const catalogProductOfferingsIdentifier = String(
     catalogResponse?.CatalogProductOfferings?.Identifier?.value ?? ""
   ).trim();
-  const catalogProductOfferingsIdentifier = catalogProductOfferingsIdentifierRaw
-    ? /_PC$/i.test(catalogProductOfferingsIdentifierRaw)
-      ? catalogProductOfferingsIdentifierRaw
-      : `${catalogProductOfferingsIdentifierRaw}_PC`
-    : "";
   const catalogOfferings = Array.isArray(
     catalogResponse?.CatalogProductOfferings?.CatalogProductOffering
   )
@@ -1425,11 +1451,20 @@ export function toUnifiedSearchResult(
     index: number;
     catalogOfferingId: string;
   }> = [];
+  const gdsOnly = parseBooleanFlag(process.env.TRAVELPORT_GDS_ONLY) !== false;
   for (const catalog of catalogOfferings) {
     const sequence = toNumber(catalog?.sequence, 1);
     const catalogOfferingId = String(catalog?.id ?? "").trim();
     for (const brandOption of catalog?.ProductBrandOptions ?? []) {
       for (const offering of brandOption?.ProductBrandOffering ?? []) {
+        const offeringSource = String(
+          (offering as any)?.ContentSource ?? (catalog as any)?.ContentSource ?? ""
+        )
+          .trim()
+          .toUpperCase();
+        if (gdsOnly && offeringSource && offeringSource !== "GDS") {
+          continue;
+        }
         productBrandOfferings.push({
           offering,
           sequence,
@@ -1469,7 +1504,13 @@ export function toUnifiedSearchResult(
           firstPassengerFlight.FlightProduct.length > 0
           ? (firstPassengerFlight.FlightProduct[0] as Record<string, unknown>)
           : {};
-      const brandRef = (firstFlightProduct as any)?.Brand?.BrandRef;
+      const brandRef =
+        (firstFlightProduct as any)?.Brand?.BrandRef ??
+        (firstFlightProduct as any)?.Brand?.brandRef ??
+        (offering as any)?.Brand?.BrandRef ??
+        (offering as any)?.Brand?.brandRef ??
+        (product as any)?.Brand?.BrandRef ??
+        (product as any)?.Brand?.brandRef;
       const brandDetails = (brandMap.get(brandRef) ?? null) as
         | Record<string, unknown>
         | null;
@@ -1567,9 +1608,17 @@ export function toUnifiedSearchResult(
             0,
             0
           ),
-          availabilitySourceCode: String(
-            (segment as any)?.AvailabilitySourceCode ?? "N/A"
+          availabilitySourceCode: firstNonEmptyString(
+            (flight as any)?.AvailabilitySourceCode,
+            (flight as any)?.availabilitySourceCode,
+            (segment as any)?.AvailabilitySourceCode,
+            (segment as any)?.availabilitySourceCode,
+            "N/A"
           ),
+          brandTier:
+            brandDetails?.tier !== undefined && brandDetails?.tier !== null
+              ? String(brandDetails.tier)
+              : null,
           segmentCode: {
             bookingCode: String((firstFlightProduct as any)?.classOfService ?? ""),
             cabinCode: String((firstFlightProduct as any)?.cabin ?? "Economy"),
@@ -1621,6 +1670,11 @@ export function toUnifiedSearchResult(
                 parseDurationToMinutes((product as any)?.totalDuration)
               ),
           brandName: brandDetails?.name ? String(brandDetails.name) : null,
+          brandCode: brandDetails?.code ? String(brandDetails.code) : null,
+          brandTier:
+            brandDetails?.tier !== undefined && brandDetails?.tier !== null
+              ? String(brandDetails.tier)
+              : null,
           brandFeatures: brandDetails,
           segments: mappedSegments,
         },
@@ -1768,8 +1822,12 @@ export function toUnifiedSearchResult(
     }
 
     const currentSelection: Array<Record<string, unknown>> = [];
+    const maxCombinedOptions = 500;
 
     const buildCombinations = (index: number) => {
+      if (combinedOptions.length >= maxCombinedOptions) {
+        return;
+      }
       if (index >= requiredSequences.length) {
         const selectedLegs = [...currentSelection];
         const firstLeg = selectedLegs[0] ?? {};
@@ -1961,11 +2019,20 @@ export function toLegacySearchResult(
     index: number;
     catalogOfferingId: string;
   }> = [];
+  const gdsOnly = parseBooleanFlag(process.env.TRAVELPORT_GDS_ONLY) !== false;
   for (const catalog of catalogOfferings) {
     const sequence = toNumber(catalog?.sequence, 1);
     const catalogOfferingId = String(catalog?.id ?? "").trim();
     for (const brandOption of catalog?.ProductBrandOptions ?? []) {
       for (const offering of brandOption?.ProductBrandOffering ?? []) {
+        const offeringSource = String(
+          (offering as any)?.ContentSource ?? (catalog as any)?.ContentSource ?? ""
+        )
+          .trim()
+          .toUpperCase();
+        if (gdsOnly && offeringSource && offeringSource !== "GDS") {
+          continue;
+        }
         productBrandOfferings.push({
           offering,
           sequence,
@@ -2104,6 +2171,22 @@ export function toLegacySearchResult(
         };
       });
 
+      const requestedSegment = (payloadSegments[sequence - 1] ??
+        payloadSegments[0] ??
+        {}) as Partial<LegacySegment>;
+      const firstMappedSegment = mappedSegments[0];
+      const lastMappedSegment = mappedSegments[mappedSegments.length - 1];
+      const resolvedCarrierCode = firstNonEmptyString(
+        carrierCode,
+        firstMappedSegment?.MarketingCarrier,
+        firstMappedSegment?.OperatingCarrier,
+        "N/A"
+      );
+      const resolvedCarrierName = resolveCarrierNameFromSegments(
+        mappedSegments as Array<Record<string, unknown>>,
+        resolvedCarrierCode
+      );
+
       const priceBreakDown =
         bestPrice?.PriceBreakdown?.map((pax: any) => {
           const paxType = pax?.requestedPassengerType;
@@ -2148,22 +2231,6 @@ export function toLegacySearchResult(
             FareComponent: [],
           };
         }) ?? [];
-
-      const requestedSegment = (payloadSegments[sequence - 1] ??
-        payloadSegments[0] ??
-        {}) as Partial<LegacySegment>;
-      const firstMappedSegment = mappedSegments[0];
-      const lastMappedSegment = mappedSegments[mappedSegments.length - 1];
-      const resolvedCarrierCode = firstNonEmptyString(
-        carrierCode,
-        firstMappedSegment?.MarketingCarrier,
-        firstMappedSegment?.OperatingCarrier,
-        "N/A"
-      );
-      const resolvedCarrierName = resolveCarrierNameFromSegments(
-        mappedSegments as Array<Record<string, unknown>>,
-        resolvedCarrierCode
-      );
 
       const allLegsInfo = [
         {
@@ -2465,6 +2532,8 @@ export default async function handler(
     return res.status(405).json({ message: "Method not allowed" });
   }
 
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+
   try {
     const body = (req.body ?? {}) as LegacySearchBody;
     const routeSignature = buildRouteSignature(body);
@@ -2531,33 +2600,6 @@ export default async function handler(
         .json({ message: "segments is required for flight search" });
     }
 
-    const searchCacheKey = buildSearchCacheKey(body);
-    const cacheTtlSeconds = Math.max(
-      30,
-      toNumber(process.env.SEARCH_CACHE_TTL_SECONDS, 300)
-    );
-    const cachedResults = await cacheGetJson<Record<string, unknown>[]>(searchCacheKey);
-    if (Array.isArray(cachedResults) && cachedResults.length > 0) {
-      await appendSearchLog({
-        timestamp: new Date().toISOString(),
-        mode: searchLimitState.mode,
-        userId: searchLimitState.userId ?? null,
-        status: "success",
-        route: routeSignature,
-        cabinClass: String(body?.cabinclass || "ANY").trim().toUpperCase() || "ANY",
-        segments: Array.isArray(body?.segments) ? body.segments.length : 0,
-        ipHash: searchLimitState.ipHash,
-        browserFingerprint: searchLimitState.browserFingerprint,
-        visitorId: searchLimitState.visitorId || null,
-        count: searchLimitState.count,
-        limit: searchLimitState.limit,
-        remaining: searchLimitState.remaining,
-        bookingCount: searchLimitState.bookingCount,
-        message: "Served from cache",
-      });
-      return res.status(200).json(cachedResults);
-    }
-
     const accessToken = await createToken();
     const flightsUrl = getRequiredEnv("TRAVELPORT_FLIGHTS_URL");
     const accessGroup = getRequiredEnv("TRAVELPORT_ACCESS_GROUP");
@@ -2569,26 +2611,42 @@ export default async function handler(
     let liveSearchFailed = false;
     let liveSearchErrorMessage = "";
     let unifiedResults: Record<string, unknown>[] = [];
-    let fallbackSource: string | null = null;
 
     try {
+      const requestHeaders = {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
+        "Accept-Version": version,
+        "Content-Version": version,
+        taxBreakDown: "true",
+        Authorization: `Bearer ${accessToken}`,
+      };
       const response = await fetch(flightsUrl, {
         method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-          XAUTH_TRAVELPORT_ACCESSGROUP: accessGroup,
-          "Accept-Version": version,
-          "Content-Version": version,
-          taxBreakDown: "true",
-          Authorization: `Bearer ${accessToken}`,
-        },
+        headers: requestHeaders,
         body: JSON.stringify(request),
       });
 
       responsePayload = await response.json().catch(() => ({}));
       if (response.ok) {
         unifiedResults = toUnifiedSearchResult(payloadSegments, responsePayload);
+        if (unifiedResults.length === 0) {
+          const catalogErrs = (
+            (responsePayload as any)?.CatalogProductOfferingsResponse?.Result?.Error ??
+            (responsePayload as any)?.Result?.Error
+          ) as Array<Record<string, unknown>> | undefined;
+          if (Array.isArray(catalogErrs) && catalogErrs.length > 0) {
+            liveSearchErrorMessage = catalogErrs
+              .map((err) => String(err?.Message || err?.message || err?.code || ""))
+              .filter(Boolean)
+              .join("; ");
+            console.warn(
+              `[search-flight] Travelport returned 0 offers with Result.Error:`,
+              liveSearchErrorMessage
+            );
+          }
+        }
         console.log(
           `[search-flight] Live Travelport status ${response.status}: parsed ${unifiedResults.length} offers`
         );
@@ -2597,12 +2655,36 @@ export default async function handler(
         liveSearchErrorMessage =
           (responsePayload?.message as string) ||
           (responsePayload?.error_description as string) ||
+          (Array.isArray((responsePayload as any)?.CatalogProductOfferingsResponse?.Result?.Error)
+            ? (responsePayload as any).CatalogProductOfferingsResponse.Result.Error
+              .map((err: any) => String(err?.Message || err?.message || ""))
+              .filter(Boolean)
+              .join("; ")
+            : "") ||
           `Travelport flight search failed (${response.status})`;
         console.warn(
           `[search-flight] Live Travelport failed (${response.status}):`,
           liveSearchErrorMessage
         );
       }
+
+      logTravelportApi({
+        endpoint: flightsUrl,
+        request: {
+          method: "POST",
+          headers: requestHeaders,
+          body: request,
+        },
+        response: responsePayload,
+        status: response.status,
+        meta: {
+          api: "search-flight",
+          route: routeSignature,
+          parsedOffers: unifiedResults.length,
+          liveSearchFailed,
+          liveSearchErrorMessage: liveSearchErrorMessage || undefined,
+        },
+      });
     } catch (liveSearchError) {
       liveSearchFailed = true;
       liveSearchErrorMessage =
@@ -2610,17 +2692,20 @@ export default async function handler(
           ? liveSearchError.message
           : "Travelport flight search failed";
       console.error("[search-flight] Live Travelport error:", liveSearchErrorMessage);
-    }
-
-    if (!Array.isArray(unifiedResults) || unifiedResults.length === 0) {
-      const fallback = await loadSampleUnifiedFallback(payloadSegments);
-      if (fallback && fallback.results.length > 0) {
-        unifiedResults = fallback.results as Record<string, unknown>[];
-        fallbackSource = fallback.source;
-        console.warn(
-          `[search-flight] Returned sample fallback data from ${fallback.source}`
-        );
-      }
+      logTravelportApi({
+        endpoint: flightsUrl,
+        request: {
+          method: "POST",
+          body: request,
+        },
+        response: { error: liveSearchErrorMessage },
+        status: 0,
+        meta: {
+          api: "search-flight",
+          route: routeSignature,
+          liveSearchFailed: true,
+        },
+      });
     }
 
     if (payloadSegments.length > 1) {
@@ -2657,7 +2742,7 @@ export default async function handler(
           message: "Travelport flight search failed",
           details:
             liveSearchErrorMessage ||
-            "Live API failed and no non-empty sample fallback is available.",
+            "Unable to complete live flight search with Travelport.",
         });
       }
 
@@ -2684,7 +2769,6 @@ export default async function handler(
 
     if (
       shouldSaveSearchResponse(body) &&
-      !fallbackSource &&
       Array.isArray(unifiedResults) &&
       unifiedResults.length > 0
     ) {
@@ -2710,8 +2794,6 @@ export default async function handler(
       });
     }
 
-    await cacheSetJson(searchCacheKey, unifiedResults, cacheTtlSeconds);
-
     await appendSearchLog({
       timestamp: new Date().toISOString(),
       mode: searchLimitState.mode,
@@ -2727,7 +2809,7 @@ export default async function handler(
       limit: searchLimitState.limit,
       remaining: searchLimitState.remaining,
       bookingCount: searchLimitState.bookingCount,
-      message: fallbackSource ? `Fallback data used from ${fallbackSource}` : "Live search success",
+      message: "Live search success",
     });
 
     return res.status(200).json(unifiedResults);

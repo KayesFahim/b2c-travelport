@@ -1727,18 +1727,22 @@ const MultiCity = ({
                             type="submit"
                             sx={{
                               width: "100%",
-                              background: "var(--primary-color)",
-                              color: "var(--primary-text-color)",
-                              textTransform: "capitalize",
-                              borderRadius: "8px",
-                              fontWeight: 600,
-                              ":hover": {
-                                background: "var(--primary-color)",
-                                color: "var(--primary-text-color)",
+                              minHeight: "48px",
+                              background:
+                                "linear-gradient(120deg, #0b4a82 0%, #0082c4 100%)",
+                              color: "#ffffff",
+                              textTransform: "none",
+                              borderRadius: "12px",
+                              fontWeight: 800,
+                              fontSize: "0.95rem",
+                              boxShadow: "0 10px 22px rgba(0, 130, 196, 0.28)",
+                              "&:hover:not(:disabled)": {
+                                background:
+                                  "linear-gradient(120deg, #083a66 0%, #006da6 100%)",
                               },
                             }}
                           >
-                            Search
+                            Search Flights
                           </Button>
                         )}
                       </Box>

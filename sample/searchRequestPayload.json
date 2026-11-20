@@ -2,7 +2,7 @@
   "@type": "CatalogProductOfferingsQueryRequest",
   "CatalogProductOfferingsRequest": {
     "@type": "CatalogProductOfferingsRequestAir",
-    "maxNumberOfUpsellsToReturn": 4,
+    "maxNumberOfUpsellsToReturn": 20,
     "offersPerPage": 20,
     "contentSourceList": [
       "GDS"
@@ -11,38 +11,19 @@
       {
         "@type": "PassengerCriteria",
         "passengerTypeCode": "ADT",
-        "number": 2
-      },
-      {
-        "@type": "PassengerCriteria",
-        "passengerTypeCode": "CHD",
-        "number": 1
-      },
-      {
-        "@type": "PassengerCriteria",
-        "passengerTypeCode": "INF",
+        "age": 25,
         "number": 1
       }
     ],
     "SearchCriteriaFlight": [
       {
         "@type": "SearchCriteriaFlight",
-        "departureDate": "2026-05-01",
+        "departureDate": "2026-06-11",
         "From": {
           "value": "DXB"
         },
         "To": {
-          "value": "JFK"
-        }
-      },
-      {
-        "@type": "SearchCriteriaFlight",
-        "departureDate": "2026-05-30",
-        "From": {
-          "value": "JFK"
-        },
-        "To": {
-          "value": "DXB"
+          "value": "ADD"
         }
       }
     ],
@@ -55,12 +36,21 @@
     },
     "SearchModifiersAir": {
       "@type": "SearchModifiersAir",
-      "CarrierPreference": [
+      "CabinPreference": [
         {
-          "preferenceType": "PreferredWithUpgrade",
+          "@type": "CabinPreference",
+          "preferenceType": "Permitted",
           "cabins": [
             "Economy"
           ]
+        }
+      ],
+      "ConnectionPreferences": [
+        {
+          "@type": "ConnectionPreferencesAir",
+          "FlightType": {
+            "connectionType": "Any"
+          }
         }
       ]
     },

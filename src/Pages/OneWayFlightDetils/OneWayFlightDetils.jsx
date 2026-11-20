@@ -5,7 +5,7 @@ import arrivalRocket from "../../asstes/img/HomeImage/flightIcons/duration.svg";
 import moment from "moment-timezone";
 import { calculateTransitTime } from "../../Pages/common/funcation";
 import { convertMinutesToHoursAndMinutes } from "../../Pages/common/funcation";
-const isMobile = window.innerWidth <= 768;
+const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const OneWayFlightDetils = ({ data }) => {
   const getCabinClass = (cabinCode) => {

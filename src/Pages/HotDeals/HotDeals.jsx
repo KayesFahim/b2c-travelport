@@ -1,727 +1,613 @@
-import { Box, Container, Typography } from "@mui/material";
 import React, { useMemo, useRef, useState } from "react";
+import {
+  Box,
+  Button,
+  Chip,
+  Container,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  IconButton,
+  Typography,
+} from "@mui/material";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import LocalOfferRoundedIcon from "@mui/icons-material/LocalOfferRounded";
-import SouthEastRoundedIcon from "@mui/icons-material/SouthEastRounded";
-import Slider from "react-slick";
+import ContentCopyRoundedIcon from "@mui/icons-material/ContentCopyRounded";
+import ArrowOutwardRoundedIcon from "@mui/icons-material/ArrowOutwardRounded";
+import { addDays, format } from "date-fns";
+import { useNavigate } from "react-router-dom";
+import { toast } from "react-toastify";
 import { TOP_DESTINATION_CITY_IMAGES } from "../../data/topDestinationCities";
+import dealFallback1 from "../../asstes/img/hotDeals/img1.webp";
+import dealFallback2 from "../../asstes/img/hotDeals/img2.jpeg";
+import dealFallback3 from "../../asstes/img/hotDeals/img4.webp";
+import { saveRecentSearch } from "../../utils/recentSearches";
 
-const chepestImage = TOP_DESTINATION_CITY_IMAGES.Bangkok;
-const dubaiImage = TOP_DESTINATION_CITY_IMAGES.Dubai;
-const groupImage = TOP_DESTINATION_CITY_IMAGES["Kuala Lumpur"];
-const hotelImage = TOP_DESTINATION_CITY_IMAGES.Singapore;
-const malaysiaImage = TOP_DESTINATION_CITY_IMAGES["Kuala Lumpur"];
-const bangkokImage = TOP_DESTINATION_CITY_IMAGES.Bangkok;
-const singaporeImage = TOP_DESTINATION_CITY_IMAGES.Singapore;
-const istanbulImage = TOP_DESTINATION_CITY_IMAGES.Istanbul;
-const beachImage = TOP_DESTINATION_CITY_IMAGES.Bangkok;
-const cityImage = TOP_DESTINATION_CITY_IMAGES.Istanbul;
+const LOCAL_DEAL_FALLBACKS = [dealFallback1, dealFallback2, dealFallback3];
+
+const HOT_DEALS_DATA = [
+  {
+    id: "deal-dubai-saver",
+    category: "Flight",
+    tag: "GDS Exclusive",
+    promoCode: "FLYDXB12",
+    title: "Save Up to 12% on Dubai Round Trips",
+    description:
+      "Reduced base fares with complimentary 30kg checked baggage on selected Gulf carriers.",
+    validity: "Valid on departures within the next 60 days",
+    fromCode: "DAC",
+    toCode: "DXB",
+    fromName: "Dhaka, Bangladesh",
+    toName: "Dubai, UAE",
+    tripType: "roundway",
+    image:
+      TOP_DESTINATION_CITY_IMAGES?.DXB ||
+      "https://images.unsplash.com/photo-1512453979798-5ea266f8880c?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "deal-domestic-cox",
+    category: "Domestic",
+    tag: "Weekend Escape",
+    promoCode: "COXFLY10",
+    title: "Cox's Bazar Quick-Turn Domestic Deals",
+    description:
+      "Morning and evening non-stop departures with instant e-ticket generation.",
+    validity: "Instant confirmation via Travelport workbench",
+    fromCode: "DAC",
+    toCode: "CXB",
+    fromName: "Dhaka, Bangladesh",
+    toName: "Cox's Bazar, Bangladesh",
+    tripType: "oneway",
+    image:
+      "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "deal-london-flex",
+    category: "International",
+    tag: "Branded Flex",
+    promoCode: "LONFLEX8",
+    title: "London & Europe Multi-City Flex Fares",
+    description:
+      "Compare Economy Basic vs Economy Flex seat rules and lower change fees.",
+    validity: "Combinable outbound and inbound fare brands",
+    fromCode: "DAC",
+    toCode: "LHR",
+    fromName: "Dhaka, Bangladesh",
+    toName: "London, UK",
+    tripType: "roundway",
+    image:
+      TOP_DESTINATION_CITY_IMAGES?.LHR ||
+      "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "deal-singapore-city",
+    category: "Tour",
+    tag: "Stopover Pick",
+    promoCode: "SINPORT5",
+    title: "Singapore City Stopover & Return Specials",
+    description:
+      "Smooth Changi transfers with real-time seat selection prior to PNR issuance.",
+    validity: "Applies on single-carrier itineraries",
+    fromCode: "DAC",
+    toCode: "SIN",
+    fromName: "Dhaka, Bangladesh",
+    toName: "Singapore",
+    tripType: "roundway",
+    image:
+      TOP_DESTINATION_CITY_IMAGES?.SIN ||
+      "https://images.unsplash.com/photo-1525625293386-3f8f99389edd?auto=format&fit=crop&w=900&q=80",
+  },
+  {
+    id: "deal-kul-klia",
+    category: "Hotel",
+    tag: "Bundle Friendly",
+    promoCode: "KULSTAY9",
+    title: "Kuala Lumpur Flight + Gateway Special",
+    description:
+      "Consistent daily frequencies ideal for quick business and leisure breaks.",
+    validity: "Includes complimentary seat eligibility preview",
+    fromCode: "DAC",
+    toCode: "KUL",
+    fromName: "Dhaka, Bangladesh",
+    toName: "Kuala Lumpur, Malaysia",
+    tripType: "roundway",
+    image:
+      TOP_DESTINATION_CITY_IMAGES?.KUL ||
+      "https://images.unsplash.com/photo-1596422846543-75c6fc197f07?auto=format&fit=crop&w=900&q=80",
+  },
+];
+
+const CATEGORIES = ["All", "Flight", "Domestic", "International", "Hotel", "Tour"];
+
+const resolveAssetSrc = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "object" && typeof value.src === "string") return value.src;
+  return "";
+};
 
 const HotDeals = () => {
-  const dealCollections = useMemo(
-    () => ({
-      all: [
-        {
-          category: "Flight",
-          title: "Dubai city break saver",
-          route: "Dhaka to Dubai",
-          description:
-            "Short-haul premium inventory with flexible weekday departures and stronger bag allowance.",
-          price: "BDT 45,900",
-          tag: "Flash airfare",
-          meta: "Travel window: Mar to May",
-          image: dubaiImage,
-        },
-        {
-          category: "Group Fare",
-          title: "Kuala Lumpur corporate block",
-          route: "12 seats together",
-          description:
-            "Locked group inventory for team travel, student movement, and conference bookings.",
-          price: "BDT 28,400",
-          tag: "Best for groups",
-          meta: "Held for 72 hours",
-          image: malaysiaImage,
-        },
-        {
-          category: "Hotel",
-          title: "Singapore skyline weekend",
-          route: "4-star stay + breakfast",
-          description:
-            "Downtown properties with airport access and faster check-in for short city itineraries.",
-          price: "BDT 16,800",
-          tag: "Stay package",
-          meta: "Free date change",
-          image: hotelImage,
-        },
-        {
-          category: "Tour",
-          title: "Phuket beach recharge",
-          route: "3 nights curated leisure",
-          description:
-            "Popular island package with airport transfer, resort stay, and add-on excursion slots.",
-          price: "BDT 34,200",
-          tag: "Leisure pick",
-          meta: "Couple friendly",
-          image: beachImage,
-        },
-      ],
-      flight: [
-        {
-          category: "Flight",
-          title: "Cheapest flight deals",
-          route: "Dhaka to Bangkok",
-          description:
-            "High-frequency departures with fast turnaround times for shoppers and quick escapes.",
-          price: "BDT 27,800",
-          tag: "High demand",
-          meta: "Updated every day",
-          image: chepestImage,
-        },
-        {
-          category: "Flight",
-          title: "Dubai after-hours fare",
-          route: "Dhaka to Dubai",
-          description:
-            "Late-night departures built for better onward connections and smoother transit windows.",
-          price: "BDT 45,900",
-          tag: "Evening departures",
-          meta: "Flexible baggage options",
-          image: dubaiImage,
-        },
-        {
-          category: "Flight",
-          title: "Singapore premium economy watch",
-          route: "Dhaka to Singapore",
-          description:
-            "Best current fare band for travelers comparing cabin comfort against business-heavy routes.",
-          price: "BDT 51,500",
-          tag: "Cabin upgrade value",
-          meta: "Strong lounge access",
-          image: singaporeImage,
-        },
-        {
-          category: "Flight",
-          title: "Istanbul long-haul connector",
-          route: "Dhaka to Istanbul",
-          description:
-            "Useful gateway pricing for Europe-bound passengers who want a single-stop itinerary.",
-          price: "BDT 63,200",
-          tag: "Europe access",
-          meta: "One-ticket connection",
-          image: istanbulImage,
-        },
-      ],
-      groupFare: [
-        {
-          category: "Group Fare",
-          title: "Student movement special",
-          route: "10 to 20 passengers",
-          description:
-            "Locked blocks for education travel with faster name submission and simpler fare control.",
-          price: "BDT 29,900",
-          tag: "Campus travel",
-          meta: "Seat hold available",
-          image: groupImage,
-        },
-        {
-          category: "Group Fare",
-          title: "Corporate summit bundle",
-          route: "Singapore and Kuala Lumpur",
-          description:
-            "Built for team movement with aligned schedules and cleaner arrival windows for events.",
-          price: "BDT 31,500",
-          tag: "Business group",
-          meta: "Shared itinerary support",
-          image: malaysiaImage,
-        },
-        {
-          category: "Group Fare",
-          title: "Family celebration block",
-          route: "Dhaka to Dubai",
-          description:
-            "Better value for multi-family departures traveling together during busy holiday demand.",
-          price: "BDT 43,800",
-          tag: "Holiday crowd",
-          meta: "Priority seat pairing",
-          image: dubaiImage,
-        },
-        {
-          category: "Group Fare",
-          title: "Pilgrim support fare",
-          route: "Managed fare window",
-          description:
-            "Useful for faith travel and community movements that need predictable inventory and baggage.",
-          price: "BDT 39,600",
-          tag: "Community booking",
-          meta: "Assisted ticketing",
-          image: cityImage,
-        },
-      ],
-      hotel: [
-        {
-          category: "Hotel",
-          title: "Marina-view city stay",
-          route: "Dubai 4-star collection",
-          description:
-            "Well-rated central hotels with breakfast, airport transfer options, and short-stay flexibility.",
-          price: "BDT 16,800",
-          tag: "Popular stay",
-          meta: "Pay later option",
-          image: hotelImage,
-        },
-        {
-          category: "Hotel",
-          title: "Singapore business stay",
-          route: "CBD and airport corridor",
-          description:
-            "Properties selected for clean transport links and reliable early check-in potential.",
-          price: "BDT 21,300",
-          tag: "Business ready",
-          meta: "Breakfast included",
-          image: singaporeImage,
-        },
-        {
-          category: "Hotel",
-          title: "Bangkok shopping district rooms",
-          route: "Central lifestyle hotels",
-          description:
-            "Mid-range favorites near retail and nightlife with competitive nightly price movement.",
-          price: "BDT 11,900",
-          tag: "Best seller",
-          meta: "Weekend dates open",
-          image: bangkokImage,
-        },
-        {
-          category: "Hotel",
-          title: "Istanbul old city heritage stay",
-          route: "Boutique and comfort mix",
-          description:
-            "Ideal for culture-first itineraries with quick access to historic sites and tram routes.",
-          price: "BDT 14,700",
-          tag: "Historic district",
-          meta: "Flexible cancellation",
-          image: istanbulImage,
-        },
-      ],
-      tour: [
-        {
-          category: "Tour",
-          title: "Phuket easy beach package",
-          route: "3 nights and airport transfer",
-          description:
-            "A clean leisure bundle for couples and families who want a fast bookable beach plan.",
-          price: "BDT 34,200",
-          tag: "Beach escape",
-          meta: "Transfers included",
-          image: beachImage,
-        },
-        {
-          category: "Tour",
-          title: "Dubai stopover explorer",
-          route: "City, desert, marina",
-          description:
-            "Balanced short itinerary with headline attractions and time left for shopping or rest.",
-          price: "BDT 49,500",
-          tag: "City combo",
-          meta: "Best for 4 days",
-          image: dubaiImage,
-        },
-        {
-          category: "Tour",
-          title: "Bangkok and Pattaya combo",
-          route: "Urban pace + seaside downtime",
-          description:
-            "The classic Thailand pairing with strong value for first-time outbound travelers.",
-          price: "BDT 38,600",
-          tag: "Fast seller",
-          meta: "Visa-friendly routing",
-          image: bangkokImage,
-        },
-        {
-          category: "Tour",
-          title: "Singapore family city pass",
-          route: "Theme parks and skyline",
-          description:
-            "A dependable family package anchored on transport convenience and attraction access.",
-          price: "BDT 56,400",
-          tag: "Family package",
-          meta: "School break fit",
-          image: singaporeImage,
-        },
-      ],
-    }),
-    []
-  );
+  const navigate = useNavigate();
+  const trackRef = useRef(null);
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [failedImages, setFailedImages] = useState({});
+  const [activeDealModal, setActiveDealModal] = useState(null);
 
-  const filters = [
-    {
-      value: "all",
-      label: "All",
-      summary: "A quick read on the strongest live picks across flights, stays, tours, and group inventory.",
-    },
-    {
-      value: "flight",
-      label: "Flight",
-      summary: "Shortlisted airfares with better timing, healthier availability, and real booking momentum.",
-    },
-    {
-      value: "groupFare",
-      label: "Group Fare",
-      summary: "Held inventory for teams, students, and family movements that need aligned schedules.",
-    },
-    {
-      value: "hotel",
-      label: "Hotel",
-      summary: "Stay offers centered on airport access, city convenience, and flexible check-in value.",
-    },
-    {
-      value: "tour",
-      label: "Tour",
-      summary: "Packaged leisure options for travelers who want a cleaner path from search to booking.",
-    },
-  ];
+  const visibleDeals = useMemo(() => {
+    if (selectedCategory === "All") return HOT_DEALS_DATA;
+    return HOT_DEALS_DATA.filter((item) => item.category === selectedCategory);
+  }, [selectedCategory]);
 
-  const [value, setValue] = useState("all");
-  const sliderRef = useRef(null);
+  const scrollTrack = (direction) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const distance = Math.max(280, Math.round(el.clientWidth * 0.72)) * direction;
+    el.scrollBy({
+      left: distance,
+      behavior:
+        typeof window !== "undefined" &&
+        window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches
+          ? "auto"
+          : "smooth",
+    });
+  };
 
-  const activeFilter = filters.find((item) => item.value === value) || filters[0];
-  const activeDeals = dealCollections[value];
+  const launchDealSearch = (deal) => {
+    const depObj = addDays(new Date(), 14);
+    const retObj = addDays(new Date(), 21);
+    const depIso = format(depObj, "yyyy-MM-dd");
+    const retIso = format(retObj, "yyyy-MM-dd");
+    const isRoundTrip = deal.tripType === "roundway";
 
-  const settings = {
-    dots: false,
-    infinite: activeDeals.length > 3,
-    speed: 500,
-    slidesToShow: 3,
-    slidesToScroll: 1,
-    arrows: false,
-    responsive: [
-      {
-        breakpoint: 1200,
-        settings: {
-          slidesToShow: 2,
-        },
+    const segments = isRoundTrip
+      ? [
+          {
+            depfrom: deal.fromCode,
+            arrto: deal.toCode,
+            depdate: depIso,
+            depFromText: `${deal.fromName} (${deal.fromCode})`,
+            arrToText: `${deal.toName} (${deal.toCode})`,
+          },
+          {
+            depfrom: deal.toCode,
+            arrto: deal.fromCode,
+            depdate: retIso,
+            depFromText: `${deal.toName} (${deal.toCode})`,
+            arrToText: `${deal.fromName} (${deal.fromCode})`,
+          },
+        ]
+      : [
+          {
+            depfrom: deal.fromCode,
+            arrto: deal.toCode,
+            depdate: depIso,
+            depFromText: `${deal.fromName} (${deal.fromCode})`,
+            arrToText: `${deal.toName} (${deal.toCode})`,
+          },
+        ];
+
+    saveRecentSearch({
+      tripType: isRoundTrip ? "roundway" : "oneway",
+      fromCode: deal.fromCode,
+      toCode: deal.toCode,
+      fromLabel: `${deal.fromName} (${deal.fromCode})`,
+      toLabel: `${deal.toName} (${deal.toCode})`,
+      fromAddress: deal.fromName,
+      toAddress: deal.toName,
+      departureDate: depIso,
+      ...(isRoundTrip ? { returnDate: retIso } : {}),
+      adultCount: 1,
+      childCount: 0,
+      infantCount: 0,
+      cabinClass: "1",
+      segments,
+    });
+
+    navigate("/offers", {
+      state: {
+        faddress: deal.fromName,
+        toAddress: deal.toName,
+        fromSearchText: `${deal.fromName} (${deal.fromCode})`,
+        toSearchText: `${deal.toName} (${deal.toCode})`,
+        departureDate: format(depObj, "dd MMM yy"),
+        arrivalDate: format(retObj, "dd MMM yy"),
+        adultCount: 1,
+        childCount: 0,
+        infant: 0,
+        tripType: isRoundTrip ? "roundway" : "oneway",
+        fromSendData: deal.fromCode,
+        toSendData: deal.toCode,
+        className: "1",
+        result: 1,
+        valueBox: isRoundTrip ? "roundway" : "oneway",
+        searchData: { segments },
       },
-      {
-        breakpoint: 700,
-        settings: {
-          slidesToShow: 1,
-        },
-      },
-    ],
+    });
+  };
+
+  const handleCopyPromo = async (code) => {
+    try {
+      await navigator.clipboard?.writeText(code);
+      toast.success(`Promo code ${code} copied`);
+    } catch {
+      toast.info(`Use promo code: ${code}`);
+    }
   };
 
   return (
-    <Box sx={{ py: { xs: 3, md: 6 } }}>
-      <Container>
+    <Box
+      component="section"
+      aria-labelledby="hot-deals-heading"
+      sx={{ py: { xs: 4, md: 5.5 } }}
+    >
+      <Container maxWidth="xl">
         <Box
-          sx={{
-            position: "relative",
-            overflow: "hidden",
-            borderRadius: { xs: "28px", md: "36px" },
-            px: { xs: 2, md: 4 },
-            py: { xs: 3, md: 4 },
-            background:
-              "linear-gradient(135deg, #009ad6 0%, #007eaf 58%, #00618b 100%)",
-            boxShadow: "0 28px 70px rgba(0, 122, 170, 0.24)",
-          }}
+          role="region"
+          aria-roledescription="carousel"
+          aria-label="Trending flight offers and promo deals"
+          className="flyjatt-cq"
         >
-          <Box>
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 2,
+              mb: 2.5,
+            }}
+          >
+            <Box sx={{ minWidth: 0 }}>
+              <Chip
+                icon={<LocalOfferRoundedIcon sx={{ fontSize: 15 }} />}
+                label="Verified Fare Picks"
+                size="small"
+                sx={{
+                  bgcolor: "#e0f2fe",
+                  color: "#0369a1",
+                  fontWeight: 700,
+                  mb: 1,
+                  "& .MuiChip-icon": { color: "#0369a1" },
+                }}
+              />
+              <Typography
+                id="hot-deals-heading"
+                component="h2"
+                className="flyjatt-section-title"
+              >
+                Hot Deals &amp; Promo Corridors
+              </Typography>
+            </Box>
+
             <Box
               sx={{
                 display: "flex",
-                flexDirection: { xs: "column", lg: "row" },
-                justifyContent: "space-between",
-                gap: 3,
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: 1,
               }}
             >
-              <Box
-                sx={{
-                  maxWidth: "620px",
-                }}
-              >
-                <Typography
-                  sx={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 1,
-                    px: 1.75,
-                    py: 0.75,
-                    borderRadius: "999px",
-                    bgcolor: "rgba(255, 255, 255, 0.9)",
-                    color: "var(--primary-color)",
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    letterSpacing: "0.08em",
-                    textTransform: "uppercase",
-                    mb: 2,
-                  }}
-                >
-                  <LocalOfferRoundedIcon sx={{ fontSize: "16px" }} />
-                  Hot deals
-                </Typography>
-                <Box>
-                  <Typography
-                    sx={{
-                      fontSize: { xs: "14px", md: "16px" },
-                      lineHeight: 1.7,
-                      color: "rgba(255, 255, 255, 0.78)",
-                      maxWidth: "560px",
+              {CATEGORIES.map((category) => {
+                const active = selectedCategory === category;
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() => setSelectedCategory(category)}
+                    className="flyjatt-touch-btn"
+                    style={{
+                      minHeight: "40px",
+                      padding: "0 14px",
+                      borderRadius: "999px",
+                      border: active
+                        ? "1px solid #0b4a82"
+                        : "1px solid rgba(15, 39, 69, 0.14)",
+                      background: active
+                        ? "linear-gradient(120deg, #0b4a82 0%, #0082c4 100%)"
+                        : "#ffffff",
+                      color: active ? "#ffffff" : "#1e293b",
+                      fontWeight: 700,
+                      fontSize: "0.84rem",
+                      cursor: "pointer",
                     }}
                   >
-                    {activeFilter.summary}
-                  </Typography>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexWrap: "wrap",
-                      gap: 1,
-                      mt: 2.5,
-                    }}
-                  >
-                    {[
-                      `${activeDeals.length} live offers`,
-                      "Daily fare scan",
-                      "Flexible options",
-                    ].map((item) => (
-                      <Box
-                        key={item}
-                        sx={{
-                          px: 1.5,
-                          py: 0.9,
-                          borderRadius: "999px",
-                          bgcolor: "rgba(255, 255, 255, 0.1)",
-                          color: "white",
-                          fontSize: "13px",
-                          fontWeight: 600,
-                        }}
-                      >
-                        {item}
-                      </Box>
-                    ))}
-                  </Box>
-                </Box>
-              </Box>
+                    {category}
+                  </button>
+                );
+              })}
 
-              <Box
-                sx={{
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 2,
-                  alignItems: { xs: "stretch", lg: "flex-end" },
-                }}
-              >
-                <Box
+              <Box sx={{ display: "inline-flex", gap: 0.75, ml: 0.5 }}>
+                <IconButton
+                  type="button"
+                  aria-label="Scroll deals backward"
+                  onClick={() => scrollTrack(-1)}
+                  className="flyjatt-touch-btn"
                   sx={{
-                    display: "flex",
-                    flexWrap: "wrap",
-                    justifyContent: { xs: "flex-start", lg: "flex-end" },
-                    gap: 1,
+                    minWidth: 44,
+                    minHeight: 44,
+                    border: "1px solid rgba(15, 39, 69, 0.14)",
+                    bgcolor: "#ffffff",
+                    color: "#0b2447",
                   }}
                 >
-                  {filters.map((filter) => {
-                    const isActive = filter.value === value;
-
-                    return (
-                      <Box
-                        key={filter.value}
-                        component="button"
-                        type="button"
-                        onClick={() => setValue(filter.value)}
-                        sx={{
-                          border: 0,
-                          px: 2,
-                          py: 1.15,
-                          borderRadius: "999px",
-                          cursor: "pointer",
-                          fontSize: "13px",
-                          fontWeight: 700,
-                          transition: "all 0.2s ease",
-                          bgcolor: isActive
-                            ? "var(--primary-color)"
-                            : "rgba(255, 255, 255, 0.1)",
-                          color: "white",
-                          boxShadow: isActive
-                            ? "0 16px 30px rgba(0, 122, 170, 0.3)"
-                            : "none",
-                          "&:hover": {
-                            bgcolor: isActive
-                              ? "var(--primary-button)"
-                              : "rgba(255, 255, 255, 0.18)",
-                          },
-                        }}
-                      >
-                        {filter.label}
-                      </Box>
-                    );
-                  })}
-                </Box>
-
-                <Box
+                  <ArrowBackRoundedIcon fontSize="small" />
+                </IconButton>
+                <IconButton
+                  type="button"
+                  aria-label="Scroll deals forward"
+                  onClick={() => scrollTrack(1)}
+                  className="flyjatt-touch-btn"
                   sx={{
-                    display: "flex",
-                    gap: 1,
-                    justifyContent: { xs: "flex-start", lg: "flex-end" },
+                    minWidth: 44,
+                    minHeight: 44,
+                    border: "1px solid rgba(15, 39, 69, 0.14)",
+                    bgcolor: "#ffffff",
+                    color: "#0b2447",
                   }}
                 >
-                  {[
-                    {
-                      label: "Previous deals",
-                      icon: <ArrowBackRoundedIcon />,
-                      onClick: () => sliderRef.current?.slickPrev(),
-                    },
-                    {
-                      label: "Next deals",
-                      icon: <ArrowForwardRoundedIcon />,
-                      onClick: () => sliderRef.current?.slickNext(),
-                    },
-                  ].map((control) => (
-                    <Box
-                      key={control.label}
-                      component="button"
-                      type="button"
-                      aria-label={control.label}
-                      onClick={control.onClick}
-                      sx={{
-                        width: 48,
-                        height: 48,
-                        borderRadius: "16px",
-                        border: "1px solid rgba(255, 255, 255, 0.18)",
-                        bgcolor: "rgba(255, 255, 255, 0.08)",
-                        color: "white",
-                        display: "grid",
-                        placeItems: "center",
-                        cursor: "pointer",
-                        transition: "all 0.2s ease",
-                        "&:hover": {
-                          bgcolor: "var(--primary-color)",
-                          border: "1px solid var(--primary-color)",
-                        },
-                      }}
-                    >
-                      {control.icon}
-                    </Box>
-                  ))}
-                </Box>
+                  <ArrowForwardRoundedIcon fontSize="small" />
+                </IconButton>
               </Box>
             </Box>
           </Box>
 
           <Box
-            sx={{
-              mt: 4,
-              "& .slick-track": {
-                display: "flex",
-              },
-              "& .slick-slide": {
-                height: "inherit",
-              },
-              "& .slick-slide > div": {
-                height: "100%",
-                paddingRight: { xs: 0, md: "18px" },
-              },
-              "& .slick-list": {
-                overflow: "hidden",
-              },
-            }}
+            ref={trackRef}
+            className="flyjatt-snap-track flyjatt-deals-track"
+            sx={{ pb: 1 }}
           >
-            <Slider ref={sliderRef} {...settings}>
-              {activeDeals.map((deal) => (
-                <Box key={`${deal.category}-${deal.title}`} sx={{ height: "100%" }}>
+            {visibleDeals.map((deal, idx) => {
+              const fallbackSrc = resolveAssetSrc(
+                LOCAL_DEAL_FALLBACKS[idx % LOCAL_DEAL_FALLBACKS.length]
+              );
+              const imgSrc = failedImages[deal.id]
+                ? fallbackSrc
+                : resolveAssetSrc(deal.image) || fallbackSrc;
+
+              return (
+                <Box
+                  key={deal.id}
+                  role="group"
+                  aria-roledescription="slide"
+                  aria-label={`${idx + 1} of ${visibleDeals.length}: ${deal.title}`}
+                  className="flyjatt-snap-slide flyjatt-deals-grid"
+                  sx={{
+                    borderRadius: "20px",
+                    overflow: "hidden",
+                    bgcolor: "#ffffff",
+                    border: "1px solid rgba(15, 39, 69, 0.09)",
+                    boxShadow: "0 14px 32px rgba(15, 39, 69, 0.07)",
+                  }}
+                >
                   <Box
                     sx={{
-                      height: "100%",
-                      minHeight: 430,
-                      display: "flex",
-                      flexDirection: "column",
-                      borderRadius: "26px",
+                      position: "relative",
+                      aspectRatio: "16 / 10",
+                      bgcolor: "#0b2447",
                       overflow: "hidden",
-                      bgcolor: "rgba(255, 255, 255, 0.96)",
-                      boxShadow: "0 24px 50px rgba(6, 16, 28, 0.14)",
                     }}
                   >
+                    <img
+                      src={imgSrc}
+                      alt={deal.title}
+                      width={480}
+                      height={300}
+                      loading="lazy"
+                      onError={() =>
+                        setFailedImages((prev) => ({ ...prev, [deal.id]: true }))
+                      }
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
+                      }}
+                    />
                     <Box
                       sx={{
-                        position: "relative",
-                        height: 220,
+                        position: "absolute",
+                        insetBlockStart: 12,
+                        insetInline: 12,
+                        display: "flex",
+                        justifyContent: "space-between",
+                        gap: 1,
                       }}
                     >
-                      <Box
-                        component="img"
-                        src={deal.image}
-                        alt={deal.title}
+                      <Chip
+                        size="small"
+                        label={deal.tag}
                         sx={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "cover",
+                          bgcolor: "rgba(255,255,255,0.94)",
+                          color: "#0b2447",
+                          fontWeight: 700,
                         }}
                       />
-                      <Box
+                      <Chip
+                        size="small"
+                        label={`Code: ${deal.promoCode}`}
                         sx={{
-                          position: "absolute",
-                          inset: 0,
-                          background:
-                            "linear-gradient(180deg, rgba(11, 26, 44, 0.1) 0%, rgba(11, 26, 44, 0.72) 100%)",
-                          p: 2.25,
-                          display: "flex",
-                          flexDirection: "column",
-                          justifyContent: "space-between",
+                          bgcolor: "rgba(6,28,57,0.84)",
+                          color: "#ffffff",
+                          fontWeight: 800,
                         }}
-                      >
-                        <Box
-                          sx={{
-                            alignSelf: "flex-start",
-                            px: 1.4,
-                            py: 0.7,
-                            borderRadius: "999px",
-                            bgcolor: "rgba(255, 255, 255, 0.14)",
-                            backdropFilter: "blur(10px)",
-                            color: "white",
-                            fontSize: "12px",
-                            fontWeight: 700,
-                          }}
-                        >
-                          {deal.category}
-                        </Box>
-                        <Box>
-                          <Typography
-                            sx={{
-                              fontSize: "12px",
-                              letterSpacing: "0.08em",
-                              textTransform: "uppercase",
-                              color: "rgba(255, 255, 255, 0.72)",
-                              mb: 0.75,
-                            }}
-                          >
-                            {deal.route}
-                          </Typography>
-                          <Typography
-                            sx={{
-                              fontSize: "24px",
-                              lineHeight: 1.15,
-                              fontWeight: 800,
-                              color: "white",
-                            }}
-                          >
-                            {deal.title}
-                          </Typography>
-                        </Box>
-                      </Box>
-                    </Box>
-
-                    <Box
-                      sx={{
-                        p: 2.5,
-                        display: "flex",
-                        flexDirection: "column",
-                        gap: 1.5,
-                        flex: 1,
-                      }}
-                    >
-                      <Typography
-                        sx={{
-                          fontSize: "14px",
-                          lineHeight: 1.7,
-                          color: "var(--text-color)",
-                        }}
-                      >
-                        {deal.description}
-                      </Typography>
-
-                      <Box
-                        sx={{
-                          display: "flex",
-                          flexWrap: "wrap",
-                          gap: 1,
-                          mt: "auto",
-                        }}
-                      >
-                        {[deal.tag, deal.meta].map((item) => (
-                          <Box
-                            key={item}
-                            sx={{
-                              px: 1.2,
-                              py: 0.75,
-                              borderRadius: "999px",
-                              bgcolor: "rgba(0, 154, 214, 0.12)",
-                              color: "var(--primary-color)",
-                              fontSize: "12px",
-                              fontWeight: 700,
-                            }}
-                          >
-                            {item}
-                          </Box>
-                        ))}
-                      </Box>
-
-                      <Box
-                        sx={{
-                          pt: 2,
-                          borderTop: "1px solid rgba(0, 154, 214, 0.2)",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          gap: 2,
-                        }}
-                      >
-                        <Box>
-                          <Typography
-                            sx={{
-                              fontSize: "11px",
-                              letterSpacing: "0.08em",
-                              textTransform: "uppercase",
-                              color: "var(--text-color)",
-                              mb: 0.4,
-                            }}
-                          >
-                            Starting from
-                          </Typography>
-                          <Typography
-                            sx={{
-                              fontSize: "24px",
-                              fontWeight: 800,
-                              color: "var(--primary-button)",
-                            }}
-                          >
-                            {deal.price}
-                          </Typography>
-                        </Box>
-
-                        <Box
-                          component="button"
-                          type="button"
-                          sx={{
-                            border: 0,
-                            px: 1.4,
-                            py: 1,
-                            borderRadius: "14px",
-                            bgcolor: "var(--primary-color)",
-                            color: "white",
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: 0.5,
-                            cursor: "pointer",
-                            fontSize: "13px",
-                            fontWeight: 700,
-                            transition: "all 0.2s ease",
-                            "&:hover": {
-                              bgcolor: "var(--primary-button)",
-                            },
-                          }}
-                        >
-                          See deal
-                          <SouthEastRoundedIcon sx={{ fontSize: "18px" }} />
-                        </Box>
-                      </Box>
+                      />
                     </Box>
                   </Box>
+
+                  <Box sx={{ p: 2.2, minWidth: 0 }}>
+                    <Typography
+                      sx={{
+                        fontSize: "0.75rem",
+                        fontWeight: 800,
+                        color: "#0077b6",
+                        letterSpacing: "0.04em",
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {deal.fromCode} -&gt; {deal.toCode} •{" "}
+                      {deal.tripType === "roundway" ? "Round Trip" : "One Way"}
+                    </Typography>
+                    <Typography
+                      component="h3"
+                      sx={{
+                        mt: 0.6,
+                        fontWeight: 800,
+                        fontSize: "1.06rem",
+                        color: "#0b2447",
+                        lineHeight: 1.3,
+                      }}
+                    >
+                      {deal.title}
+                    </Typography>
+                    <Typography
+                      sx={{
+                        mt: 0.9,
+                        color: "#475569",
+                        fontSize: "0.87rem",
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      {deal.description}
+                    </Typography>
+                  </Box>
+
+                  <Box
+                    sx={{
+                      px: 2.2,
+                      pb: 2.2,
+                      pt: 1.2,
+                      borderTop: "1px solid rgba(15, 39, 69, 0.07)",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1,
+                    }}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setActiveDealModal(deal)}
+                      className="flyjatt-touch-btn flyjatt-focus-ring"
+                      style={{
+                        minHeight: "44px",
+                        padding: "0 12px",
+                        borderRadius: "10px",
+                        border: "1px solid rgba(15, 39, 69, 0.16)",
+                        backgroundColor: "#ffffff",
+                        color: "#0b2447",
+                        fontWeight: 700,
+                        fontSize: "0.82rem",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Deal Details
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => launchDealSearch(deal)}
+                      className="flyjatt-touch-btn"
+                      style={{
+                        minHeight: "44px",
+                        padding: "0 16px",
+                        borderRadius: "10px",
+                        border: "none",
+                        background:
+                          "linear-gradient(120deg, #0b4a82 0%, #0082c4 100%)",
+                        color: "#ffffff",
+                        fontWeight: 700,
+                        fontSize: "0.84rem",
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      See Deal
+                      <ArrowOutwardRoundedIcon sx={{ fontSize: 16 }} />
+                    </button>
+                  </Box>
                 </Box>
-              ))}
-            </Slider>
+              );
+            })}
           </Box>
         </Box>
       </Container>
+
+      <Dialog
+        open={Boolean(activeDealModal)}
+        onClose={() => setActiveDealModal(null)}
+        maxWidth="xs"
+        fullWidth
+      >
+        {activeDealModal ? (
+          <>
+            <DialogTitle sx={{ fontWeight: 800, color: "#0b2447" }}>
+              {activeDealModal.title}
+            </DialogTitle>
+            <DialogContent dividers>
+              <Typography sx={{ color: "#334155", fontSize: "0.94rem", mb: 2 }}>
+                {activeDealModal.description}
+              </Typography>
+              <Box
+                sx={{
+                  p: 1.5,
+                  borderRadius: "12px",
+                  bgcolor: "#f0f8ff",
+                  border: "1px dashed #0082c4",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 1,
+                }}
+              >
+                <Box>
+                  <Typography sx={{ fontSize: "0.72rem", color: "#0369a1", fontWeight: 700 }}>
+                    PROMO CODE
+                  </Typography>
+                  <Typography sx={{ fontSize: "1.05rem", fontWeight: 800, color: "#0b2447" }}>
+                    {activeDealModal.promoCode}
+                  </Typography>
+                </Box>
+                <Button
+                  size="small"
+                  startIcon={<ContentCopyRoundedIcon />}
+                  onClick={() => handleCopyPromo(activeDealModal.promoCode)}
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                >
+                  Copy
+                </Button>
+              </Box>
+              <Typography sx={{ mt: 1.5, fontSize: "0.82rem", color: "#64748b" }}>
+                {activeDealModal.validity}
+              </Typography>
+            </DialogContent>
+            <DialogActions sx={{ px: 2.5, py: 1.5 }}>
+              <Button onClick={() => setActiveDealModal(null)} sx={{ textTransform: "none" }}>
+                Close
+              </Button>
+              <Button
+                variant="contained"
+                onClick={() => {
+                  const chosen = activeDealModal;
+                  setActiveDealModal(null);
+                  launchDealSearch(chosen);
+                }}
+                sx={{
+                  textTransform: "none",
+                  fontWeight: 700,
+                  bgcolor: "#0b4a82",
+                  "&:hover": { bgcolor: "#083a66" },
+                }}
+              >
+                Search Corridor Fares
+              </Button>
+            </DialogActions>
+          </>
+        ) : null}
+      </Dialog>
     </Box>
   );
 };

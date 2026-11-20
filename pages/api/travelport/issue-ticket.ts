@@ -318,16 +318,25 @@ function resolveIssueTicketRuntimeContext(payload: Record<string, unknown>) {
     const reservation = resolveReservationObject(payload);
     const offers = Array.isArray(reservation?.Offer) ? (reservation.Offer as Record<string, unknown>[]) : [];
     const firstOffer = offers[0] || {};
-    const firstTraveler = Array.isArray(reservation?.Traveler)
-        ? ((reservation.Traveler as Record<string, unknown>[])[0] || {})
-        : {};
+    const travelers = Array.isArray(reservation?.Traveler)
+        ? (reservation.Traveler as Record<string, unknown>[])
+        : reservation?.Traveler && typeof reservation.Traveler === "object"
+            ? [reservation.Traveler as Record<string, unknown>]
+            : [];
+    const firstTraveler = travelers[0] || {};
+    const travelerRefs = travelers
+        .map((t, idx) => ({
+            passengerTypeCode: toText(t?.passengerTypeCode) || "ADT",
+            id: toText(t?.id) || `travelerRefId_${idx + 1}`,
+        }))
+        .filter((item) => Boolean(item.id));
 
     const offerId = toText(firstOffer?.id) || "offer_1";
     const offerIdentifier =
         toText((firstOffer?.Identifier as Record<string, unknown> | undefined)?.value) ||
         toText((firstOffer?.Identifier as Record<string, unknown> | undefined)?.Value);
-    const travelerRef = toText(firstTraveler?.id) || "travelerRefId_1";
-    const travelerType = toText(firstTraveler?.passengerTypeCode) || "ADT";
+    const travelerRef = travelerRefs[0]?.id || "travelerRefId_1";
+    const travelerType = travelerRefs[0]?.passengerTypeCode || "ADT";
 
     const price =
         firstOffer?.Price && typeof firstOffer.Price === "object"
@@ -358,6 +367,7 @@ function resolveIssueTicketRuntimeContext(payload: Record<string, unknown>) {
         offerIdentifier,
         travelerRef,
         travelerType,
+        travelerRefs,
         currencyCode,
         totalValue,
     };
@@ -398,12 +408,14 @@ function buildDefaultApplyPaymentPayload(
                     : {}),
             },
         ],
-        TravelerIdentifierRef: [
-            {
-                passengerTypeCode: ctx.travelerType,
-                id: ctx.travelerRef,
-            },
-        ],
+        TravelerIdentifierRef: ctx.travelerRefs.length
+            ? ctx.travelerRefs
+            : [
+                {
+                    passengerTypeCode: ctx.travelerType,
+                    id: ctx.travelerRef,
+                },
+            ],
     } as Record<string, unknown>;
 }
 
@@ -582,7 +594,6 @@ function buildEnrichedTraveler(traveler: Record<string, unknown>): Record<string
             Prefix: prefix,
             Given: given,
             Surname: surname,
-            Suffix: paxTypeCode,
         },
     };
 
