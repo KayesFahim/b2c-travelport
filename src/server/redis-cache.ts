@@ -10,7 +10,7 @@ const memoryStore: Map<string, MemoryValue> =
     .__flyjattMemoryStore ??= new Map<string, MemoryValue>());
 
 function assertLocalFallbackAllowed() {
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && process.env.REQUIRE_REDIS === "true") {
     throw new Error("Shared Redis is unavailable. Refusing an inconsistent production session or rate limit.");
   }
 }

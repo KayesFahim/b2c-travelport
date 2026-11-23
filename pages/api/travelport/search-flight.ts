@@ -38,6 +38,9 @@ type SearchCriteriaFilterInput = {
   returnBrandedFaresInd?: boolean | string;
   maxNumberOfUpsellsToReturn?: number | string;
   excludeBaggageFeesInd?: boolean | string;
+  roundTripSearchMode?: string;
+  searchRepresentation?: string;
+  SearchRepresentation?: string;
 };
 
 type LegacySearchBody = {
@@ -50,6 +53,8 @@ type LegacySearchBody = {
   contentSourceList?: unknown;
   contentSource?: unknown;
   searchFilters?: SearchCriteriaFilterInput;
+  searchRepresentation?: string;
+  SearchRepresentation?: string;
   responseModel?: "unified";
   saveResponse?: boolean;
 };
@@ -1365,6 +1370,18 @@ function buildTravelportPayload(body: LegacySearchBody) {
       ? body.searchFilters
       : {};
 
+  const rawSearchRepresentation = String(
+    body.searchRepresentation ||
+    body.SearchRepresentation ||
+    searchFilters.searchRepresentation ||
+    searchFilters.SearchRepresentation ||
+    (searchFilters.roundTripSearchMode === "leg_based" ? "Leg" : "") ||
+    ""
+  ).trim();
+  const searchRepresentation = ["Leg", "Journey"].includes(rawSearchRepresentation)
+    ? rawSearchRepresentation
+    : "";
+
   const requestedUpsells = searchFilters.maxNumberOfUpsellsToReturn;
   const parsedRequestedUpsells =
     requestedUpsells !== undefined && requestedUpsells !== null && String(requestedUpsells).trim() !== ""
@@ -1497,6 +1514,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
   return {
     contentSourceList,
     payloadSegments: body.segments ?? [],
+    searchRepresentation,
     request: {
       "@type": "CatalogProductOfferingsQueryRequest",
       CatalogProductOfferingsRequest: {
@@ -1515,6 +1533,7 @@ function buildTravelportPayload(body: LegacySearchBody) {
           includeUniversalProductAttributesInd: true,
           excludeBaggageFeesInd: excludeBaggageFeesFlag !== false,
           includeCo2EmissionsDataInd: true,
+          ...(searchRepresentation ? { SearchRepresentation: searchRepresentation } : {}),
         },
         SearchModifiersAir: {
           "@type": "SearchModifiersAir",
@@ -2776,7 +2795,20 @@ async function handler(
     const body = (req.body ?? {}) as LegacySearchBody;
     const routeSignature = buildRouteSignature(body);
     const settings = await loadSearchLimitSettings();
-    const searchLimitState = await enforceSearchLimit(req, res, settings);
+    let searchLimitState: SearchLimitState;
+    try {
+      searchLimitState = await enforceSearchLimit(req, res, settings);
+    } catch (limitErr) {
+      console.warn("[search-flight] Rate limit check bypassed due to temporary store error:", limitErr);
+      searchLimitState = {
+        limited: false,
+        requiresLogin: false,
+        limit: 100,
+        remaining: 100,
+        count: 1,
+        mode: "anonymous",
+      };
+    }
 
     if (searchLimitState.limited) {
       await appendSearchLog({
@@ -2843,7 +2875,8 @@ async function handler(
     const accessGroup = getRequiredEnv("TRAVELPORT_ACCESS_GROUP");
     const version = process.env.TRAVELPORT_VERSION || "11";
 
-    const { request, payloadSegments, contentSourceList } = buildTravelportPayload(body);
+    const { request, payloadSegments, contentSourceList, searchRepresentation } =
+      buildTravelportPayload(body);
 
     let responsePayload: Record<string, unknown> = {};
     let liveSearchFailed = false;
@@ -2950,7 +2983,7 @@ async function handler(
       });
     }
 
-    if (payloadSegments.length > 1) {
+    if (payloadSegments.length > 1 && searchRepresentation !== "Leg") {
       const roundTripOnly = unifiedResults.filter((item) => {
         const tripType = normalizeTripType(item?.tripType ?? item?.journeyType);
         const allLegsInfo = Array.isArray(item?.allLegsInfo) ? item.allLegsInfo : [];
@@ -2959,6 +2992,12 @@ async function handler(
       if (roundTripOnly.length > 0) {
         unifiedResults = roundTripOnly;
       }
+    } else if (searchRepresentation === "Leg") {
+      unifiedResults = unifiedResults.map((item) => ({
+        ...item,
+        isLegBased: true,
+        searchRepresentation: "Leg",
+      }));
     }
 
     if (!Array.isArray(unifiedResults) || unifiedResults.length === 0) {

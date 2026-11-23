@@ -10,6 +10,19 @@ export const CONNECTION_TYPE_OPTIONS = [
   { value: "DoubleConnection", label: "Max 2 Stops", hint: "Double connection" },
 ];
 
+export const ROUND_TRIP_SEARCH_MODES = [
+  {
+    value: "combinable",
+    label: "Combined Fare (Journey)",
+    hint: "Both legs combined into joint fare options",
+  },
+  {
+    value: "leg_based",
+    label: "Leg-Based (Next Leg)",
+    hint: "Choose outbound first, then pick compatible return flights",
+  },
+];
+
 export const CARRIER_PREFERENCE_OPTIONS = [
   { value: "Permitted", label: "Only Selected", hint: "Restrict to checked airlines" },
   { value: "Preferred", label: "Prefer Selected", hint: "Prioritize checked airlines" },
@@ -102,6 +115,7 @@ export function createDefaultTravelportSearchFilters(overrides = {}) {
     returnBrandedFaresInd: true,
     maxNumberOfUpsellsToReturn: "",
     excludeBaggageFeesInd: true,
+    roundTripSearchMode: "combinable",
     ...overrides,
   });
 }
@@ -206,14 +220,32 @@ export function normalizeTravelportSearchFilters(input = {}) {
     returnBrandedFaresInd: source.returnBrandedFaresInd !== false,
     maxNumberOfUpsellsToReturn: String(source.maxNumberOfUpsellsToReturn ?? "").trim(),
     excludeBaggageFeesInd: source.excludeBaggageFeesInd !== false,
+    roundTripSearchMode:
+      String(
+        source.roundTripSearchMode ||
+        source.roundtripSearchMode ||
+        source.searchRepresentation ||
+        ""
+      ).toLowerCase() === "leg" ||
+      String(
+        source.roundTripSearchMode ||
+        source.roundtripSearchMode ||
+        ""
+      ).toLowerCase() === "leg_based"
+        ? "leg_based"
+        : "combinable",
   };
 }
 
 export function buildTravelportSearchRequestModifiers(filtersInput) {
   const filters = normalizeTravelportSearchFilters(filtersInput);
+  const searchRepresentation = filters.roundTripSearchMode === "leg_based" ? "Leg" : "";
   return {
     contentSourceList: filters.contentSources,
+    ...(searchRepresentation ? { searchRepresentation } : {}),
     searchFilters: {
+      roundTripSearchMode: filters.roundTripSearchMode,
+      ...(searchRepresentation ? { searchRepresentation } : {}),
       carrierPreferenceType: filters.carrierPreferenceType,
       carriers: filters.carriers,
       connectionType: filters.connectionType,
@@ -269,6 +301,7 @@ export function countActiveTravelportFilters(filtersInput) {
   if (!f.returnBrandedFaresInd) count += 1;
   if (f.maxNumberOfUpsellsToReturn !== "") count += 1;
   if (!f.excludeBaggageFeesInd) count += 1;
+  if (f.roundTripSearchMode === "leg_based") count += 1;
   return count;
 }
 

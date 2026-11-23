@@ -382,3 +382,37 @@ export async function searchTravelportFlights(payload, token) {
 
   throw lastError;
 }
+
+export async function fetchTravelportNextLeg(payload, token = "") {
+  const headers = {
+    "Content-Type": "application/json",
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const response = await fetchWithTimeout(
+    "/api/travelport/buildnext",
+    {
+      method: "POST",
+      headers,
+      body: JSON.stringify(payload),
+    },
+    35000
+  );
+
+  if (!response.ok) {
+    const errorData = await getResponseErrorPayload(response);
+    const err = new Error(errorData.message);
+    err.status = response.status;
+    err.payload = errorData.payload;
+    throw err;
+  }
+
+  const data = await readApiResponse(response);
+  const rawOffers = Array.isArray(data?.offers) ? data.offers : Array.isArray(data) ? data : [];
+  return {
+    ...data,
+    offers: normalizeSearchResponseForApp(rawOffers),
+  };
+}
