@@ -669,7 +669,7 @@ const PackageBuilder = () => {
       );
     }
     if (activeStayFilter.openOnly) {
-      const openList = list.filter((p) => p.availability === "Open");
+      const openList = list.filter((p) => p.available);
       if (openList.length > 0) list = openList;
     }
     if (activeStayFilter.poolOnly) {
@@ -682,8 +682,9 @@ const PackageBuilder = () => {
       list.sort((a, b) => Number(b.starRating || 0) - Number(a.starRating || 0));
     } else {
       list.sort((a, b) => {
-        const pa = a.lowestNightlyPrice ?? Number.MAX_SAFE_INTEGER;
-        const pb = b.lowestNightlyPrice ?? Number.MAX_SAFE_INTEGER;
+        if (a.available !== b.available) return a.available ? -1 : 1;
+        const pa = a.minNightlyPrice ?? Number.MAX_SAFE_INTEGER;
+        const pb = b.minNightlyPrice ?? Number.MAX_SAFE_INTEGER;
         return pa - pb;
       });
     }
@@ -1395,8 +1396,8 @@ const PackageBuilder = () => {
                             <Stack direction="row" spacing={0.6} flexWrap="wrap" useFlexGap sx={{ mt: 0.9 }}>
                               <Chip
                                 size="small"
-                                label={property.availability === "Open" ? "Available" : property.availability}
-                                color={property.availability === "Open" ? "success" : "default"}
+                                label={property.available ? "Available" : "Check Dates"}
+                                color={property.available ? "success" : "default"}
                                 variant="outlined"
                                 sx={{ fontSize: "11px", fontWeight: 700, height: 22 }}
                               />
@@ -1413,17 +1414,17 @@ const PackageBuilder = () => {
                           </Grid>
 
                           <Grid item xs={12} sm={3} sx={{ textAlign: { xs: "left", sm: "right" } }}>
-                            {property.lowestNightlyPrice !== null ? (
+                            {property.minNightlyPrice !== null && property.minNightlyPrice !== undefined ? (
                               <>
                                 <Typography sx={{ fontSize: "19px", fontWeight: 800, color: "#0b4a82" }}>
-                                  {property.currencyCode} {Math.round(property.lowestNightlyPrice).toLocaleString()}
+                                  {property.currencyCode} {Math.round(property.minNightlyPrice).toLocaleString()}
                                   <Typography component="span" sx={{ fontSize: "12px", fontWeight: 600, color: "#64748b" }}>
                                     {" "}/ night
                                   </Typography>
                                 </Typography>
                                 <Typography sx={{ fontSize: "12px", color: "#526B86", mb: 1 }}>
                                   Est. {property.currencyCode}{" "}
-                                  {Math.round(property.lowestNightlyPrice * stayNights).toLocaleString()} ({stayNights}n)
+                                  {Math.round(property.minTotalPrice ?? property.minNightlyPrice * stayNights).toLocaleString()} ({stayNights}n)
                                 </Typography>
                               </>
                             ) : (

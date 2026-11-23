@@ -644,6 +644,14 @@ const HotelBooking = () => {
                     {displayCurrency} {displayTaxes.toLocaleString()}
                   </span>
                 </Box>
+                {Number(roomOffer?.localFeesTotal) > 0 && (
+                  <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "13px", mt: 0.5, color: "#b45309", fontWeight: 700 }}>
+                    <span>Payable at Property</span>
+                    <span>
+                      {displayCurrency} {Number(roomOffer.localFeesTotal).toLocaleString()}
+                    </span>
+                  </Box>
+                )}
                 <Box
                   sx={{
                     display: "flex",

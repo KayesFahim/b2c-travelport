@@ -48,10 +48,14 @@ export interface NormalizedHotelProperty {
   distanceUnit: string;
   distanceKm: number | null;
   phone: string;
+  email?: string;
   imageUrl: string;
   images: NormalizedHotelImage[];
   amenities: string[];
   amenityFlags: HotelAmenityFlags;
+  guestRoomInfo?: Array<{ label: string; count: number }>;
+  businessServices?: string[];
+  accessibilityFeatures?: string[];
   currencyCode: string;
   minTotalPrice: number | null;
   minNightlyPrice: number | null;
@@ -106,6 +110,10 @@ export interface NormalizedHotelRoomOffer {
   taxes: number;
   totalPrice: number;
   nightlyPrice: number;
+  nightlyTotalPrice: number;
+  localFeesTotal: number;
+  localFeesDetail: Array<{ description: string; amount: number; currencyCode: string; frequency: string }>;
+  taxBreakdown: Array<{ description: string; amount: number; currencyCode: string }>;
   nightlyRates: NormalizedHotelNightlyRate[];
   commissionable: boolean;
   aggregator: string;
@@ -496,6 +504,30 @@ function normalizePropertyEntry(entry: any, idx: number, nights: number): Normal
     typeof firstPhone === "string"
       ? firstPhone.trim()
       : toStr(firstPhone?.phoneNumber || firstPhone?.value || "");
+  const email = toStr(detail?.Email?.value || detail?.Email || detail?.email || "");
+
+  const guestRoomInfo: Array<{ label: string; count: number }> = Array.isArray(detail?.GuestRoomInfo)
+    ? detail.GuestRoomInfo
+        .map((g: any) => ({
+          label: toStr(g?.description || g?.code),
+          count: toNum(g?.number) ?? 0,
+        }))
+        .filter((g: { label: string; count: number }) => Boolean(g.label) && g.count > 0)
+    : [];
+  const businessServices: string[] = Array.isArray(detail?.BusinessService)
+    ? Array.from(
+        new Set(
+          detail.BusinessService.map((b: any) => toStr(b?.description || b?.value || b)).filter(Boolean)
+        )
+      )
+    : [];
+  const accessibilityFeatures: string[] = Array.isArray(detail?.AccessibilityFeature)
+    ? Array.from(
+        new Set(
+          detail.AccessibilityFeature.map((a: any) => toStr(a?.description || a?.value || a)).filter(Boolean)
+        )
+      )
+    : [];
 
   const availabilityText = toStr(entry?.availability).toLowerCase();
   const available =
@@ -520,7 +552,7 @@ function normalizePropertyEntry(entry: any, idx: number, nights: number): Normal
     });
   }
 
-  const descCorpus = rawDescriptions.map((d) => `${d.title} ${d.text}`).join(" ");
+  const descCorpus = `${rawDescriptions.map((d) => `${d.title} ${d.text}`).join(" ")} ${businessServices.join(" ")} ${accessibilityFeatures.join(" ")}`;
   const amenityFlags = buildAmenityFlags(amenities, descCorpus);
 
   return {
@@ -539,10 +571,14 @@ function normalizePropertyEntry(entry: any, idx: number, nights: number): Normal
     distanceUnit,
     distanceKm,
     phone,
+    email,
     imageUrl,
     images,
     amenities,
     amenityFlags,
+    guestRoomInfo,
+    businessServices,
+    accessibilityFeatures,
     currencyCode,
     minTotalPrice,
     minNightlyPrice,
@@ -677,10 +713,18 @@ export function normalizeHotelAvailabilityResponse(
     const currencyCode = toStr(price?.CurrencyCode?.value || price?.CurrencyCode || "USD");
     const totalPrice = toNum(price?.TotalPrice ?? price?.Total ?? price?.Amount) ?? 0;
     const basePrice = toNum(price?.Base) ?? totalPrice;
-    const taxes = toNum(price?.TotalTaxes) ?? Math.max(0, Math.round((totalPrice - basePrice) * 100) / 100);
+    const taxes =
+      toNum(price?.TotalTaxes) ??
+      Math.max(0, Math.round((totalPrice - basePrice) * 100) / 100);
 
-    const rawNightly: any[] = Array.isArray(price?.PriceBreakdown?.[0]?.NightlyRate)
-      ? price.PriceBreakdown[0].NightlyRate
+    const breakdowns: any[] = Array.isArray(price?.PriceBreakdown) ? price.PriceBreakdown : [];
+    const perNightBreakdown =
+      breakdowns.find((b) => /per night/i.test(toStr(b?.roomPricingType))) || breakdowns[0] || {};
+    const perStayBreakdown =
+      breakdowns.find((b) => /per stay/i.test(toStr(b?.roomPricingType))) || breakdowns[1] || {};
+
+    const rawNightly: any[] = Array.isArray(perNightBreakdown?.NightlyRate)
+      ? perNightBreakdown.NightlyRate
       : [];
     const nightlyRates: NormalizedHotelNightlyRate[] = rawNightly.map((nr) => {
       const amt = nr?.Amount || {};
@@ -696,11 +740,41 @@ export function normalizeHotelAvailabilityResponse(
       };
     });
 
-    const firstNightlyAmount = nightlyRates[0]?.base ?? null;
-    const nightlyPrice =
-      firstNightlyAmount !== null && firstNightlyAmount > 0
-        ? Math.round(firstNightlyAmount * 100) / 100
-        : Math.round((totalPrice / Math.max(1, nights)) * 100) / 100;
+    const avgNightlyBase =
+      toNum(perNightBreakdown?.AverageNightlyRate?.[0]?.value) ??
+      nightlyRates[0]?.base ??
+      Math.round((basePrice / Math.max(1, nights)) * 100) / 100;
+    const nightlyPrice = Math.round(avgNightlyBase * 100) / 100;
+    const nightlyTotalPrice = Math.round((totalPrice / Math.max(1, nights)) * 100) / 100;
+
+    // Tax breakdown & additional fees payable locally (e.g. Tourism Dirham / Service charge)
+    const stayTaxesRaw: any[] = Array.isArray(perStayBreakdown?.Amount?.Taxes?.Tax)
+      ? perStayBreakdown.Amount.Taxes.Tax
+      : Array.isArray(nightlyRates[0] ? rawNightly[0]?.Amount?.Taxes?.Tax : [])
+        ? rawNightly[0].Amount.Taxes.Tax
+        : [];
+    const taxBreakdown = stayTaxesRaw
+      .map((t) => ({
+        description: toStr(t?.purpose || t?.description || "Tax"),
+        amount: toNum(t?.value) ?? 0,
+        currencyCode: toStr(t?.currencyCode || currencyCode),
+      }))
+      .filter((t) => t.amount > 0);
+
+    const stayFeesNode = perStayBreakdown?.Amount?.Fees || rawNightly[0]?.Amount?.Fees || {};
+    const localFeesTotal = toNum(stayFeesNode?.TotalAdditionalFeesPayableLocally) ?? 0;
+    const localFeesRaw: any[] = Array.isArray(stayFeesNode?.Fee) ? stayFeesNode.Fee : [];
+    const localFeesDetail = localFeesRaw
+      .map((f) => ({
+        description: toStr(f?.description || f?.purpose || "Property Fee"),
+        amount:
+          toNum(f?.FeeAmountOrPercent?.Amount?.value ?? f?.Amount?.value) ?? 0,
+        currencyCode: toStr(
+          f?.FeeAmountOrPercent?.Amount?.code || f?.Amount?.code || currencyCode
+        ),
+        frequency: toStr(f?.feeFrequency || "PerStay"),
+      }))
+      .filter((f) => f.amount > 0);
 
     const roomType = product?.RoomType || product?.RoomStay?.RoomType || {};
     const roomCharacteristics = roomType?.RoomCharacteristics || {};
@@ -710,96 +784,185 @@ export function normalizeHotelAvailabilityResponse(
         ? roomCharacteristics.bedConfiguration
         : [];
     const bedText = bedConfigs
-      .map((b: any) =>
-        [b?.quantity ? `${b.quantity}x` : "", toStr(b?.bedType)].filter(Boolean).join(" ")
-      )
+      .map((b: any) => {
+        const qty = b?.quantity ? `${b.quantity}x` : "";
+        const type = toStr(b?.bedType).replace(/\(s\)/gi, "");
+        const size = toStr(b?.size);
+        return [qty, type, size ? `(${size})` : ""].filter(Boolean).join(" ");
+      })
       .filter(Boolean)
       .join(", ");
 
     const ratePlan = product?.RatePlan || product?.RoomStay?.RatePlan || {};
     const propertyKey = product?.PropertyKey || offering?.PropertyKey || {};
 
-    const roomFullDesc = toStr(
-      roomType?.Description?.value || ratePlan?.Description?.value || ""
-    );
-    const lowerCorpus = `${roomFullDesc} ${toStr(ratePlan?.ratePlanName)} ${toStr(terms?.RatePaymentInfo)}`.toLowerCase();
-
-    const cancelPenalties = Array.isArray(terms?.CancelPenalty) ? terms.CancelPenalty : [];
-    const firstPenalty = cancelPenalties[0] || {};
-    const nonRefundableFlag =
-      Boolean(firstPenalty?.NonRefundableInd) ||
-      firstPenalty?.refundableInd === false ||
-      /\bnon-refundable|non refundable|no refund|advance purchase\b/.test(lowerCorpus);
-    const refundable = !nonRefundableFlag;
-    const deadline = toStr(
-      firstPenalty?.Deadline?.SpecificDate?.date ||
-        firstPenalty?.Deadline?.Time ||
+    const termsDescArr: string[] = Array.isArray(terms?.Description)
+      ? terms.Description.map((d: unknown) => toStr(d)).filter(Boolean)
+      : [];
+    const rawRoomDesc = toStr(
+      roomType?.Description?.value ||
+        ratePlan?.Description?.value ||
+        termsDescArr.slice(1).join(" ") ||
         ""
-    );
-    const freeCancellation = refundable && (!firstPenalty?.Penalty?.Amount || Number(firstPenalty?.Penalty?.Amount) === 0 || Boolean(deadline));
-    const cancellationSummary = toStr(
-      firstPenalty?.Description?.value ||
-        (refundable
-          ? deadline
-            ? `Free cancellation before ${deadline}`
-            : "Refundable per property policy"
-          : "Non-refundable rate")
+    )
+      .replace(/\bDou\s+Ble\b/gi, "Double")
+      .replace(/\bDoub\s+Le\b/gi, "Double")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    const ratePlanName = toStr(
+      perStayBreakdown?.Description ||
+        ratePlan?.ratePlanName ||
+        ratePlan?.name ||
+        termsDescArr[0] ||
+        "Best Available Rate"
     );
 
-    const breakfastIncluded =
-      Boolean(product?.MealsIncluded?.breakfastInd || terms?.MealsIncluded?.breakfastInd) ||
-      /\bbreakfast|bed and breakfast|b&b|full board|half board|all inclusive\b/.test(lowerCorpus);
-    const mealPlan = toStr(
-      product?.MealsIncluded?.allInclusiveInd || /\ball inclusive\b/.test(lowerCorpus)
-        ? "All Inclusive"
-        : breakfastIncluded
-          ? "Breakfast Included"
-          : "Room Only"
+    const lowerCorpus = `${rawRoomDesc} ${ratePlanName} ${termsDescArr.join(" ")} ${toStr(terms?.RatePaymentInfo)}`.toLowerCase();
+
+    // Travelport Stays v11 uses CancelPenalty[].Refundable ("Yes" | "No"), Description (string), Deadline.SpecificDate.end & Time, HotelPenalty.Percent
+    const cancelPenalties: any[] = Array.isArray(terms?.CancelPenalty)
+      ? terms.CancelPenalty
+      : [];
+    const refundablePenalty = cancelPenalties.find(
+      (p) => toStr(p?.Refundable).toLowerCase() === "yes" || p?.refundableInd === true
     );
+    const nonRefundablePenalty = cancelPenalties.find(
+      (p) =>
+        toStr(p?.Refundable).toLowerCase() === "no" ||
+        Boolean(p?.NonRefundableInd) ||
+        p?.refundableInd === false
+    );
+    const firstPenalty = refundablePenalty || cancelPenalties[0] || {};
 
     const ratePaymentInfo = toStr(terms?.RatePaymentInfo || "");
-    const prepayRequired =
-      /prepay|deposit/i.test(ratePaymentInfo) ||
-      /\bprepay|pre-pay|prepaid|deposit required|advance purchase\b/.test(lowerCorpus);
     const guarantee = Array.isArray(terms?.Guarantee)
       ? terms.Guarantee[0] || {}
       : terms?.Guarantee || {};
+    const guaranteeType = toStr(guarantee?.guaranteeType || "");
+
+    const prepayRequired =
+      /prepay|deposit/i.test(ratePaymentInfo) ||
+      /prepay|deposit/i.test(guaranteeType) ||
+      /\bprepay|pre-pay|prepaid|deposit required|advance purchase\b/.test(lowerCorpus);
+
     const creditCardRequired =
       prepayRequired ||
       /guarantee|credit|card/i.test(ratePaymentInfo) ||
-      Boolean(guarantee?.guaranteeType || terms?.Guarantee);
+      /guarantee|credit|card/i.test(guaranteeType) ||
+      Boolean(guaranteeType);
+
+    const isExplicitlyRefundable = Boolean(refundablePenalty);
+    const isExplicitlyNonRefundable =
+      (!isExplicitlyRefundable && Boolean(nonRefundablePenalty)) ||
+      (!isExplicitlyRefundable && prepayRequired) ||
+      /\bnon-refundable|non refundable|no refund|advance purchase\b/.test(lowerCorpus);
+
+    const refundable = isExplicitlyRefundable || !isExplicitlyNonRefundable;
+    const deadlineDate = toStr(
+      firstPenalty?.Deadline?.SpecificDate?.end ||
+        firstPenalty?.Deadline?.SpecificDate?.date ||
+        ""
+    );
+    const deadlineTime = toStr(firstPenalty?.Deadline?.Time || "").slice(0, 5);
+    const deadline = [deadlineDate, deadlineTime].filter(Boolean).join(" ");
+
+    const penaltyPercent = toNum(firstPenalty?.HotelPenalty?.Percent);
+    const penaltyAmount = toNum(
+      firstPenalty?.HotelPenalty?.Amount?.value ?? firstPenalty?.Penalty?.Amount
+    );
+    const firstPenaltyDesc =
+      typeof firstPenalty?.Description === "string"
+        ? firstPenalty.Description.trim()
+        : toStr(firstPenalty?.Description?.value);
+
+    const freeCancellation =
+      isExplicitlyRefundable &&
+      (penaltyPercent === 0 ||
+        penaltyAmount === 0 ||
+        /free/i.test(firstPenaltyDesc) ||
+        Boolean(deadlineDate));
+
+    const cancellationSummary = isExplicitlyNonRefundable
+      ? "Non-refundable"
+      : freeCancellation && deadline
+        ? `Free cancellation until ${deadline}`
+        : firstPenaltyDesc
+          ? firstPenaltyDesc.length > 95
+            ? `${firstPenaltyDesc.slice(0, 92)}...`
+            : firstPenaltyDesc
+          : refundable
+            ? "Refundable per property policy"
+            : "Non-refundable";
+
+    // MealsIncluded in Travelport Stays v11 lives on TermsAndConditions.MealsIncluded
+    const meals = terms?.MealsIncluded || product?.MealsIncluded || {};
+    const hasAllInclusive =
+      Boolean(meals?.allInclusiveInd) || /\ball inclusive\b/.test(lowerCorpus);
+    const hasBreakfastFlag =
+      Boolean(meals?.breakfastInd) ||
+      /\bbreakfast|brkfast|bed\+brkfast|bed and breakfast|\bb&b\b|halfboard|half board|fullboard|full board\b/.test(
+        lowerCorpus
+      );
+    const hasLunchFlag = Boolean(meals?.lunchInd);
+    const hasDinnerFlag = Boolean(meals?.dinnerInd);
+    const isFullBoard =
+      (hasBreakfastFlag && hasLunchFlag && hasDinnerFlag) ||
+      /\bfull\s*board\b/.test(lowerCorpus);
+    const isHalfBoard =
+      (hasBreakfastFlag && (hasLunchFlag || hasDinnerFlag)) ||
+      /\bhalf\s*board|\bhb\/halfboard\b/.test(lowerCorpus);
+
+    const breakfastIncluded =
+      hasAllInclusive || isFullBoard || isHalfBoard || hasBreakfastFlag;
+    const mealPlan = hasAllInclusive
+      ? "All Inclusive"
+      : isFullBoard
+        ? "Full Board"
+        : isHalfBoard
+          ? "Half Board (Incl. Breakfast)"
+          : breakfastIncluded
+            ? "Breakfast Included"
+            : "Room Only";
 
     const wifiIncluded =
       String(roomCharacteristics?.wifiIncluded || "").toLowerCase() === "yes" ||
       /\bwi-fi|wifi|internet\b/.test(lowerCorpus);
 
+    // Strip noisy GDS meal prefixes like "Null-Hb/Halfboard " or "Saver Bb-Bb/Bed+Brkfast " from room title
+    const cleanedRoomTitle = rawRoomDesc
+      .replace(/^(null|saver|flex|std|bar)\s*[-–]\s*[^\s]+\s+/i, "")
+      .replace(/^(null|saver)\s+[a-z]{2}-[a-z]{2}\/[^\s]+\s+/i, "")
+      .trim();
+
     const roomTitle = toStr(
       roomType?.name ||
-        (roomFullDesc
-          ? roomFullDesc
-              .split(",")
-              .slice(0, 2)
-              .map((s) => s.trim())
-              .filter(Boolean)
-              .join(" — ")
-          : "") ||
+        cleanedRoomTitle ||
+        rawRoomDesc ||
         roomType?.roomCategory ||
         "Standard Room"
     );
 
+    const commissionApp = toStr(perStayBreakdown?.Commission?.application || "");
+    const commissionable =
+      Boolean(ratePlan?.commissionableInd) ||
+      (Boolean(commissionApp) && !/non-paying|no/i.test(commissionApp));
+
     offers.push({
       offerId: `${offeringIdentifierValue}-${idx}`,
       catalogOfferingsIdentifier:
-        catalogOfferingsIdentifier || offeringIdentifierValue.split(":")[0] || offeringIdentifierValue,
+        catalogOfferingsIdentifier ||
+        offeringIdentifierValue.split(":")[0] ||
+        offeringIdentifierValue,
       catalogOfferingIdentifier: offeringIdentifierValue,
       productIdentifier: productRef,
       authority: offeringAuthority,
       propertyCode: toStr(propertyKey?.propertyCode),
       chainCode: toStr(propertyKey?.chainCode),
       roomName: roomTitle,
-      roomDescription: roomFullDesc,
+      roomDescription: rawRoomDesc,
       rateCode: toStr(ratePlan?.rateCode || product?.bookingCode),
-      ratePlanName: toStr(ratePlan?.ratePlanName || ratePlan?.name || "Best Available Rate"),
+      ratePlanName,
       mealPlan,
       breakfastIncluded,
       bedType: bedText,
@@ -814,14 +977,18 @@ export function normalizeHotelAvailabilityResponse(
       guaranteeRequired: creditCardRequired,
       creditCardRequired,
       prepayRequired,
-      paymentType: toStr(ratePaymentInfo || guarantee?.guaranteeType || "GuaranteeRequired"),
+      paymentType: toStr(ratePaymentInfo || guaranteeType || "GuaranteeRequired"),
       currencyCode,
       basePrice,
       taxes,
       totalPrice,
       nightlyPrice,
+      nightlyTotalPrice,
+      localFeesTotal,
+      localFeesDetail,
+      taxBreakdown,
       nightlyRates,
-      commissionable: Boolean(ratePlan?.commissionableInd),
+      commissionable,
       aggregator: offeringAuthority,
     });
   });

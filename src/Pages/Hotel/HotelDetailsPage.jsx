@@ -517,8 +517,27 @@ const HotelDetailsPage = () => {
                   <PhoneRoundedIcon sx={{ fontSize: 17, color: "#007bb0" }} />
                   <Typography sx={{ fontSize: "13.5px", color: "#475569", fontWeight: 600 }}>
                     {propertyDetail.phone}
+                    {propertyDetail.email ? ` • ${propertyDetail.email}` : ""}
                   </Typography>
                 </Box>
+              )}
+
+              {Array.isArray(propertyDetail?.guestRoomInfo) && propertyDetail.guestRoomInfo.length > 0 && (
+                <Stack direction="row" spacing={0.7} flexWrap="wrap" useFlexGap sx={{ mt: 1.2 }}>
+                  {propertyDetail.guestRoomInfo.slice(0, 5).map((info) => (
+                    <Chip
+                      key={info.label}
+                      size="small"
+                      label={`${info.count} ${info.label}`}
+                      sx={{
+                        fontSize: "11.5px",
+                        fontWeight: 700,
+                        bgcolor: "#eef6fd",
+                        color: "#0b4a82",
+                      }}
+                    />
+                  ))}
+                </Stack>
               )}
 
               {detailsError && (
@@ -734,10 +753,17 @@ const HotelDetailsPage = () => {
                         <Typography sx={{ fontWeight: 800, fontSize: "16.5px", color: "#0f2942" }}>
                           {offer.roomName}
                         </Typography>
+                        {offer.ratePlanName && (
+                          <Chip
+                            size="small"
+                            label={offer.ratePlanName}
+                            sx={{ fontSize: "11px", fontWeight: 700, height: 22, bgcolor: "#e0f2fe", color: "#0369a1" }}
+                          />
+                        )}
                         {offer.rateCode && (
                           <Chip
                             size="small"
-                            label={`Rate: ${offer.rateCode}`}
+                            label={`Code: ${offer.rateCode}`}
                             sx={{ fontSize: "11px", fontWeight: 700, height: 22 }}
                           />
                         )}
@@ -772,10 +798,17 @@ const HotelDetailsPage = () => {
                           size="small"
                           icon={<VerifiedUserRoundedIcon sx={{ fontSize: "14px !important" }} />}
                           label={offer.cancellationSummary}
-                          color={offer.refundable ? "success" : "default"}
+                          color={offer.freeCancellation ? "success" : offer.refundable ? "info" : "warning"}
                           variant="outlined"
                           sx={{ fontWeight: 700 }}
                         />
+                        {offer.smokingAllowed && offer.smokingAllowed !== "Unknown" && (
+                          <Chip
+                            size="small"
+                            label={offer.smokingAllowed === "No" ? "Non-Smoking" : "Smoking Allowed"}
+                            sx={{ fontWeight: 600, bgcolor: "#f8fafc", border: "1px solid #dbe7f3" }}
+                          />
+                        )}
                         {offer.wifiIncluded && (
                           <Chip
                             size="small"
@@ -812,7 +845,8 @@ const HotelDetailsPage = () => {
                         }}
                       >
                         <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>
-                          {offer.currencyCode} {Number(offer.nightlyPrice || 0).toLocaleString()} / night
+                          {offer.currencyCode}{" "}
+                          {Number(offer.nightlyTotalPrice || offer.nightlyPrice || 0).toLocaleString()} / night (incl. tax)
                         </Typography>
                         <Typography sx={{ fontSize: "23px", fontWeight: 800, color: "#0b4a82", lineHeight: 1.1 }}>
                           {offer.currencyCode} {Number(offer.totalPrice || 0).toLocaleString()}
@@ -821,6 +855,11 @@ const HotelDetailsPage = () => {
                           Base {offer.currencyCode} {Number(offer.basePrice || 0).toLocaleString()} + Taxes{" "}
                           {offer.currencyCode} {Number(offer.taxes || 0).toLocaleString()}
                         </Typography>
+                        {Number(offer.localFeesTotal) > 0 && (
+                          <Typography sx={{ fontSize: "11.5px", color: "#b45309", fontWeight: 700 }}>
+                            + {offer.currencyCode} {Number(offer.localFeesTotal).toLocaleString()} local fee payable at hotel
+                          </Typography>
+                        )}
 
                         <Stack direction="row" spacing={1} sx={{ mt: 1.2, width: "100%" }} justifyContent="flex-end">
                           <Button
