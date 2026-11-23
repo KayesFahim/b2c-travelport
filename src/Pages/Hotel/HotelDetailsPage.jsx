@@ -94,11 +94,7 @@ const HotelDetailsPage = () => {
         stored.searchCriteria?.children ||
         0
     );
-    const currency =
-      searchParams.get("currency") ||
-      state.searchCriteria?.currency ||
-      stored.searchCriteria?.currency ||
-      "USD";
+    const currency = "USD";
 
     return {
       initialProperty: property,
@@ -845,19 +841,18 @@ const HotelDetailsPage = () => {
                         }}
                       >
                         <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#64748b" }}>
-                          {offer.currencyCode}{" "}
-                          {Number(offer.nightlyTotalPrice || offer.nightlyPrice || 0).toLocaleString()} / night (incl. tax)
+                          USD ${Number(offer.nightlyTotalPrice || offer.nightlyPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / night (incl. tax)
                         </Typography>
                         <Typography sx={{ fontSize: "23px", fontWeight: 800, color: "#0b4a82", lineHeight: 1.1 }}>
-                          {offer.currencyCode} {Number(offer.totalPrice || 0).toLocaleString()}
+                          USD ${Number(offer.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Typography>
                         <Typography sx={{ fontSize: "12px", color: "#475569" }}>
-                          Base {offer.currencyCode} {Number(offer.basePrice || 0).toLocaleString()} + Taxes{" "}
-                          {offer.currencyCode} {Number(offer.taxes || 0).toLocaleString()}
+                          Base USD ${Number(offer.basePrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Taxes{" "}
+                          USD ${Number(offer.taxes || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </Typography>
                         {Number(offer.localFeesTotal) > 0 && (
                           <Typography sx={{ fontSize: "11.5px", color: "#b45309", fontWeight: 700 }}>
-                            + {offer.currencyCode} {Number(offer.localFeesTotal).toLocaleString()} local fee payable at hotel
+                            + USD ${Number(offer.localFeesTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} local fee payable at hotel
                           </Typography>
                         )}
 
@@ -940,10 +935,10 @@ const HotelDetailsPage = () => {
                             </Grid>
                             <Grid item xs={12} md={6}>
                               <Typography sx={{ fontSize: "12.5px", color: "#1e293b", mb: 0.6 }}>
-                                <strong>Verified Price:</strong> {rulesState.rules?.currencyCode}{" "}
-                                {Number(rulesState.rules?.totalPrice || 0).toLocaleString()} (Base{" "}
-                                {Number(rulesState.rules?.basePrice || 0).toLocaleString()} + Tax{" "}
-                                {Number(rulesState.rules?.taxes || 0).toLocaleString()})
+                                <strong>Verified Price:</strong> USD ${" "}
+                                {Number(rulesState.rules?.totalPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} (Base USD ${" "}
+                                {Number(rulesState.rules?.basePrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} + Tax USD ${" "}
+                                {Number(rulesState.rules?.taxes || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })})
                               </Typography>
                               {rulesState.rules?.maxOccupancy && (
                                 <Typography sx={{ fontSize: "12.5px", color: "#1e293b", mb: 0.6 }}>

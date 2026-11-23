@@ -31,6 +31,8 @@ import NavBar from "../../Shared/NavBar/NavBar";
 import FlightDetailsContent from "../ShowDetails/FlightDetailsContent";
 import PdfPageDesign from "../AllPDF/BookingAllPdf/PdfPageDesign";
 import RightSidebarInfo from "./RightSidebarInfo";
+import HotelStaysPlanner from "../Package/HotelStaysPlanner";
+import { addDaysToIsoDate, calculateNights, formatIsoDateOffset } from "../../utils/travelportHotel";
 
 const FONT = '"Manrope", sans-serif';
 
@@ -2651,6 +2653,84 @@ const BookingConfirmation = () => {
           </Typography>
           <FlightDetailsContent data={flightInfoSource} />
         </Box>
+
+        {/* ── Post-Flight Booking Hotel Prompt (Auto-Matched or Multi-City Split Stay) ── */}
+        {!isAlreadyCancelled && Array.isArray(allLegs) && allLegs.length > 0 && (() => {
+          const firstLeg = allLegs[0] || {};
+          const secondLeg = allLegs[1] || null;
+          const firstSegs = Array.isArray(firstLeg.Segments) ? firstLeg.Segments : [];
+          const arrivalSeg = firstSegs[firstSegs.length - 1] || firstSegs[0] || {};
+          const returnSeg = secondLeg && Array.isArray(secondLeg.Segments) ? secondLeg.Segments[0] || {} : null;
+          const fromCode = String(firstLeg.DepFrom || firstSegs[0]?.DepFrom || "DAC").trim().toUpperCase().slice(0, 3);
+          const toCode = String(firstLeg.ArrTo || arrivalSeg.ArrTo || "DXB").trim().toUpperCase().slice(0, 3);
+          const rawCheckIn = String(arrivalSeg.ArrTime || firstLeg.DepDate || "").slice(0, 10);
+          const safeCheckIn = /^\d{4}-\d{2}-\d{2}$/.test(rawCheckIn) ? rawCheckIn : formatIsoDateOffset(7);
+          const rawCheckOut = returnSeg ? String(returnSeg.DepTime || secondLeg.DepDate || "").slice(0, 10) : "";
+          const safeCheckOut = /^\d{4}-\d{2}-\d{2}$/.test(rawCheckOut) && rawCheckOut > safeCheckIn
+            ? rawCheckOut
+            : addDaysToIsoDate(safeCheckIn, 3);
+          const adultPax = Math.max(1, passengersWithDbFallback.filter((p) => normalizePaxTypeCode(p?.paxType || p?.type) === "ADT").length || 1);
+          const childPax = passengersWithDbFallback.filter((p) => normalizePaxTypeCode(p?.paxType || p?.type) === "CHD").length;
+
+          return (
+            <Box
+              sx={{
+                border: "1px solid #bfe0f5",
+                borderRadius: "16px",
+                background: "linear-gradient(180deg, #ffffff 0%, #f4faff 100%)",
+                p: { xs: 2, md: 2.5 },
+                mb: 2.5,
+              }}
+            >
+              <Typography sx={{ fontSize: 16, fontWeight: 800, color: "#0b4a82", fontFamily: FONT, mb: 0.4 }}>
+                Need a Hotel for Your {toCode} Trip?
+              </Typography>
+              <Typography sx={{ fontSize: 13, color: "#475569", fontFamily: FONT, mb: 1.8 }}>
+                Your flight is booked! Organize your hotel stays below — auto-matched to your arrival city &amp; dates, or split across multiple cities (all prices in USD).
+              </Typography>
+              <HotelStaysPlanner
+                arrivalAirportCode={toCode}
+                departureDate={safeCheckIn}
+                returnDate={safeCheckOut}
+                submitLabel="Find Live Hotels for This Stay Plan (USD)"
+                onApplyStays={(stays) => {
+                  const pkgPayload = {
+                    flightCriteria: {
+                      fromCode,
+                      fromLabel: `${fromCode} (${fromCode})`,
+                      toCode,
+                      toLabel: `${toCode} (${toCode})`,
+                      departureDate: safeCheckIn,
+                      returnDate: safeCheckOut,
+                      tripNights: calculateNights(safeCheckIn, safeCheckOut),
+                      adults: adultPax,
+                      children: childPax,
+                      infants: 0,
+                      cabinClass: "Economy",
+                      currency: "USD",
+                    },
+                    hotelStays: stays,
+                    startStep: "hotels",
+                    bookedFlightSummary: {
+                      isAlreadyBooked: true,
+                      pnr: locator,
+                      CarrierName: firstSegs[0]?.MarketingCarrierName || firstSegs[0]?.MarketingCarrier || "Booked Flight",
+                      Carrier: firstSegs[0]?.MarketingCarrier || "",
+                      NetFare: Number(totals?.total || 0),
+                      CurrencyCode: flightInfoSource?.CurrencyCode || "USD",
+                    },
+                  };
+                  try {
+                    window.sessionStorage.setItem("flyjatt:last_package_search", JSON.stringify(pkgPayload));
+                  } catch {
+                    // ignore
+                  }
+                  navigate("/package", { state: pkgPayload });
+                }}
+              />
+            </Box>
+          );
+        })()}
 
         {/* ── Policies & Amenities ── */}
         <Box

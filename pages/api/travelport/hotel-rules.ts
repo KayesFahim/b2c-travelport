@@ -2,7 +2,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { withApiHandler } from "@/server/api-handler";
 import {
   callTravelportHotelApi,
-  normalizeHotelRulesResponse,
+  normalizeHotelRulesResponseUsd,
 } from "@/server/travelport-hotel";
 
 type HotelRulesBody = {
@@ -67,7 +67,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const rules = normalizeHotelRulesResponse(result.data, catalogOfferingIdentifier);
+    const rules = await normalizeHotelRulesResponseUsd(result.data, catalogOfferingIdentifier);
 
     return res.status(200).json({
       success: true,

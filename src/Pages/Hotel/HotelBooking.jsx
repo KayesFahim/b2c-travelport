@@ -93,8 +93,7 @@ const HotelBooking = () => {
 
   const { property, roomOffer, searchCriteria, nights, fromPackage } = bookingContext;
 
-  const displayCurrency =
-    rateRules?.currencyCode || roomOffer?.currencyCode || searchCriteria?.currency || "USD";
+  const displayCurrency = "USD";
   const displayBase =
     rateRules?.basePrice !== undefined && rateRules?.basePrice !== null
       ? Number(rateRules.basePrice)
@@ -545,7 +544,7 @@ const HotelBooking = () => {
                       Confirming Stay...
                     </>
                   ) : (
-                    `Confirm Reservation • ${displayCurrency} ${displayTotal.toLocaleString()}`
+                    `Confirm Reservation • USD $${displayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                   )}
                 </Button>
               </Box>
@@ -635,20 +634,20 @@ const HotelBooking = () => {
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
                   <span>Room Base</span>
                   <span>
-                    {displayCurrency} {displayBase.toLocaleString()}
+                    USD ${displayBase.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "14px", mt: 0.5 }}>
                   <span>Taxes &amp; Fees</span>
                   <span>
-                    {displayCurrency} {displayTaxes.toLocaleString()}
+                    USD ${displayTaxes.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </Box>
                 {Number(roomOffer?.localFeesTotal) > 0 && (
                   <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "13px", mt: 0.5, color: "#b45309", fontWeight: 700 }}>
                     <span>Payable at Property</span>
                     <span>
-                      {displayCurrency} {Number(roomOffer.localFeesTotal).toLocaleString()}
+                      USD ${Number(roomOffer.localFeesTotal).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </Box>
                 )}
@@ -664,7 +663,7 @@ const HotelBooking = () => {
                 >
                   <span>Total</span>
                   <span>
-                    {displayCurrency} {displayTotal.toLocaleString()}
+                    USD ${displayTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </Box>
               </Box>

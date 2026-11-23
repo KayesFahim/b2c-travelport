@@ -112,7 +112,7 @@ const HotelSearchResult = () => {
       rooms: Number(state.rooms || searchParams.get("rooms") || stored.rooms || 1),
       adults: Number(state.adults || searchParams.get("adults") || stored.adults || 2),
       children: Number(state.children || searchParams.get("children") || stored.children || 0),
-      currency: state.currency || searchParams.get("currency") || stored.currency || "USD",
+      currency: "USD",
       radiusKm: Number(state.radiusKm || stored.radiusKm || 15),
       minStarRating: Number(state.minStarRating || stored.minStarRating || 0),
       hotelName: state.hotelName || stored.hotelName || "",
@@ -503,7 +503,7 @@ const HotelSearchResult = () => {
                 {/* Price per Night Slider */}
                 <Box sx={{ mb: 2 }}>
                   <Typography sx={{ fontSize: "0.78rem", fontWeight: 800, color: "#0b4a82", mb: 0.5 }}>
-                    Nightly Rate Range ({properties[0]?.currencyCode || activeSearch.currency})
+                    Nightly Rate Range (USD $)
                   </Typography>
                   <Slider
                     value={priceRange}
@@ -517,8 +517,8 @@ const HotelSearchResult = () => {
                     size="small"
                   />
                   <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "12px", fontWeight: 700, color: "#475569" }}>
-                    <span>{priceRange[0]}</span>
-                    <span>{priceRange[1]}</span>
+                    <span>${priceRange[0]}</span>
+                    <span>${priceRange[1]}</span>
                   </Box>
                 </Box>
 
@@ -1006,12 +1006,12 @@ const HotelSearchResult = () => {
                         </Typography>
                         <Typography sx={{ fontSize: "22px", fontWeight: 800, color: "#0b4a82" }}>
                           {property.minTotalPrice !== null
-                            ? `${property.currencyCode} ${property.minTotalPrice.toLocaleString()}`
+                            ? `USD $${property.minTotalPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                             : "View Live Rates"}
                         </Typography>
                         {property.minNightlyPrice !== null && (
                           <Typography sx={{ fontSize: "12px", color: "#475569", fontWeight: 600 }}>
-                            {property.currencyCode} {property.minNightlyPrice.toLocaleString()} / night
+                            USD ${property.minNightlyPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} / night
                           </Typography>
                         )}
                         <Button

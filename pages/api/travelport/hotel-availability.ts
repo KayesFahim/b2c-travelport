@@ -3,7 +3,7 @@ import { withApiHandler } from "@/server/api-handler";
 import {
   callTravelportHotelApi,
   computeStayNights,
-  normalizeHotelAvailabilityResponse,
+  normalizeHotelAvailabilityResponseUsd,
 } from "@/server/travelport-hotel";
 
 type HotelAvailabilityBody = {
@@ -41,11 +41,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const rooms = Math.max(1, Math.min(9, Number(body.rooms) || 1));
   const adults = Math.max(1, Math.min(9, Number(body.adults) || 1));
   const children = Math.max(0, Math.min(6, Number(body.children) || 0));
-  const currency =
-    String(body.currency || process.env.TRAVELPORT_DEFAULT_CURRENCY || "USD")
-      .trim()
-      .toUpperCase()
-      .slice(0, 3) || "USD";
+  const currency = "USD";
   const nights = computeStayNights(checkIn, checkOut);
 
   const guestCounts: Array<Record<string, unknown>> = [
@@ -130,7 +126,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const normalized = normalizeHotelAvailabilityResponse(result.data, nights);
+    const normalized = await normalizeHotelAvailabilityResponseUsd(result.data, nights);
 
     return res.status(200).json({
       success: true,

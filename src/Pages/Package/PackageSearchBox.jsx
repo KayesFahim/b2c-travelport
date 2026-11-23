@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useMemo, useRef, useState } from "react";
+import React, { useId, useMemo, useRef, useState } from "react";
 import {
   Box,
   Button,
@@ -11,23 +11,17 @@ import {
 } from "@mui/material";
 import FlightTakeoffRoundedIcon from "@mui/icons-material/FlightTakeoffRounded";
 import HotelRoundedIcon from "@mui/icons-material/HotelRounded";
-import AddCircleOutlineRoundedIcon from "@mui/icons-material/AddCircleOutlineRounded";
-import DeleteOutlineRoundedIcon from "@mui/icons-material/DeleteOutlineRounded";
-import CallSplitRoundedIcon from "@mui/icons-material/CallSplitRounded";
-import RestartAltRoundedIcon from "@mui/icons-material/RestartAltRounded";
 import SearchRoundedIcon from "@mui/icons-material/SearchRounded";
 import SwapHorizRoundedIcon from "@mui/icons-material/SwapHorizRounded";
 import { useNavigate } from "react-router-dom";
 import {
-  HOTEL_CURRENCY_OPTIONS,
-  POPULAR_STAY_DESTINATIONS,
   addDaysToIsoDate,
   calculateNights,
   extractDestinationCityCode,
   formatIsoDateOffset,
-  getDestinationLabelByCode,
   resolveStayDestinationFromAirport,
 } from "../../utils/travelportHotel";
+import { makeStayLeg } from "./HotelStaysPlanner";
 
 const POPULAR_FLIGHT_AIRPORTS = [
   { code: "DAC", label: "Dhaka (DAC)" },
@@ -65,18 +59,6 @@ function extractAirportCode(value, fallback = "DXB") {
   return raw.length === 3 ? raw : fallback;
 }
 
-function makeStayLeg(id, cityCode, checkIn, checkOut, rooms = 1) {
-  const label = getDestinationLabelByCode(cityCode) || `${cityCode} (${cityCode})`;
-  return {
-    id,
-    destination: label,
-    cityCode,
-    checkIn,
-    checkOut,
-    rooms: Math.max(1, Number(rooms) || 1),
-  };
-}
-
 const PackageSearchBox = ({
   initialValues = null,
   onSearchSubmit,
@@ -90,7 +72,7 @@ const PackageSearchBox = ({
   const defaultDeparture =
     initialValues?.flightCriteria?.departureDate || formatIsoDateOffset(7);
   const defaultReturn =
-    initialValues?.flightCriteria?.returnDate || formatIsoDateOffset(22); // 15-day trip by default
+    initialValues?.flightCriteria?.returnDate || formatIsoDateOffset(22); // 15-day trip default
 
   const [fromInput, setFromInput] = useState(
     initialValues?.flightCriteria?.fromLabel || "Dhaka (DAC)"
@@ -112,98 +94,12 @@ const PackageSearchBox = ({
   const [cabinClass, setCabinClass] = useState(
     initialValues?.flightCriteria?.cabinClass || "Economy"
   );
-  const [currency, setCurrency] = useState(
-    initialValues?.flightCriteria?.currency || "USD"
-  );
-
-  const [staysCustomized, setStaysCustomized] = useState(
-    Boolean(
-      Array.isArray(initialValues?.hotelStays) &&
-        initialValues.hotelStays.length > 0
-    )
-  );
-
-  const [hotelStays, setHotelStays] = useState(() => {
-    if (
-      Array.isArray(initialValues?.hotelStays) &&
-      initialValues.hotelStays.length > 0
-    ) {
-      return initialValues.hotelStays.map((stay, index) => ({
-        id: stay.id || `stay-${index + 1}`,
-        destination:
-          stay.destination ||
-          getDestinationLabelByCode(stay.cityCode || "DXB"),
-        cityCode:
-          stay.cityCode || extractDestinationCityCode(stay.destination) || "DXB",
-        checkIn: stay.checkIn || defaultDeparture,
-        checkOut: stay.checkOut || defaultReturn,
-        rooms: Math.max(1, Number(stay.rooms) || 1),
-      }));
-    }
-    const resolved = resolveStayDestinationFromAirport(
-      extractAirportCode(
-        initialValues?.flightCriteria?.toLabel || "Dubai (DXB)",
-        "DXB"
-      )
-    );
-    return [
-      makeStayLeg("stay-1", resolved.primary, defaultDeparture, defaultReturn, 1),
-    ];
-  });
-
   const [formError, setFormError] = useState("");
-
-  const arrivalCode = useMemo(
-    () => extractAirportCode(toInput, "DXB"),
-    [toInput]
-  );
-  const arrivalInfo = useMemo(
-    () => resolveStayDestinationFromAirport(arrivalCode),
-    [arrivalCode]
-  );
 
   const totalTripNights = useMemo(
     () => calculateNights(departureDate, returnDate),
     [departureDate, returnDate]
   );
-
-  // Auto-sync Stay 1 with flight arrival city and dates until customer customizes stays
-  useEffect(() => {
-    if (staysCustomized) return;
-    setHotelStays([
-      makeStayLeg(
-        "stay-1",
-        arrivalInfo.primary,
-        departureDate,
-        returnDate,
-        hotelStays[0]?.rooms || 1
-      ),
-    ]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [arrivalInfo.primary, departureDate, returnDate, staysCustomized]);
-
-  const stayCoverage = useMemo(() => {
-    let totalStayNights = 0;
-    let hasInvalidDates = false;
-    let hasOutsideFlightRange = false;
-
-    hotelStays.forEach((stay) => {
-      if (!stay.checkIn || !stay.checkOut || stay.checkOut <= stay.checkIn) {
-        hasInvalidDates = true;
-      } else {
-        totalStayNights += calculateNights(stay.checkIn, stay.checkOut);
-        if (stay.checkIn < departureDate || stay.checkOut > returnDate) {
-          hasOutsideFlightRange = true;
-        }
-      }
-    });
-
-    return {
-      totalStayNights,
-      hasInvalidDates,
-      hasOutsideFlightRange,
-    };
-  }, [departureDate, hotelStays, returnDate]);
 
   const handleDepartureChange = (nextDep) => {
     setDepartureDate(nextDep);
@@ -216,123 +112,6 @@ const PackageSearchBox = ({
   const handleSwapAirports = () => {
     setFromInput(toInput);
     setToInput(fromInput);
-  };
-
-  const handleResetAutoStay = () => {
-    setStaysCustomized(false);
-    setHotelStays([
-      makeStayLeg("stay-1", arrivalInfo.primary, departureDate, returnDate, 1),
-    ]);
-    setFormError("");
-  };
-
-  // Smart Split-Stay preset: e.g., 15-day Dubai trip -> 7 nights Dubai (DXB) + 7 nights Abu Dhabi (AUH)
-  const handleQuickSplitStay = () => {
-    const companionCode =
-      (arrivalInfo.companions || []).find((c) => c !== arrivalInfo.primary) ||
-      (arrivalInfo.primary === "DXB" ? "AUH" : "DXB");
-    const firstLegNights = Math.max(1, Math.floor(totalTripNights / 2));
-    const remainingNights = Math.max(1, totalTripNights - firstLegNights);
-    const secondLegNights =
-      totalTripNights >= 14 && totalTripNights % 2 === 1
-        ? firstLegNights
-        : remainingNights;
-
-    const stay1End = addDaysToIsoDate(departureDate, firstLegNights);
-    const stay2End = addDaysToIsoDate(stay1End, secondLegNights);
-
-    setStaysCustomized(true);
-    setHotelStays([
-      makeStayLeg("stay-1", arrivalInfo.primary, departureDate, stay1End, 1),
-      makeStayLeg(
-        "stay-2",
-        companionCode,
-        stay1End,
-        stay2End <= returnDate ? stay2End : returnDate,
-        1
-      ),
-    ]);
-    setFormError("");
-  };
-
-  const handleAddStay = () => {
-    if (hotelStays.length >= 5) return;
-    setStaysCustomized(true);
-    const lastStay = hotelStays[hotelStays.length - 1];
-    const usedCodes = new Set(hotelStays.map((s) => s.cityCode));
-    const nextCode =
-      (arrivalInfo.companions || []).find((c) => !usedCodes.has(c)) ||
-      POPULAR_STAY_DESTINATIONS.find((d) => !usedCodes.has(d.code))?.code ||
-      arrivalInfo.primary;
-
-    let nextStart = lastStay?.checkOut || departureDate;
-    let nextEnd = returnDate;
-
-    // If last stay already reached returnDate, split last stay in half to make room
-    if (nextStart >= returnDate) {
-      const lastNights = calculateNights(lastStay.checkIn, lastStay.checkOut);
-      if (lastNights >= 2) {
-        const splitNights = Math.floor(lastNights / 2);
-        const splitDate = addDaysToIsoDate(lastStay.checkIn, splitNights);
-        const updated = hotelStays.map((s, idx) =>
-          idx === hotelStays.length - 1 ? { ...s, checkOut: splitDate } : s
-        );
-        setHotelStays([
-          ...updated,
-          makeStayLeg(
-            `stay-${Date.now()}`,
-            nextCode,
-            splitDate,
-            returnDate,
-            lastStay.rooms || 1
-          ),
-        ]);
-        return;
-      }
-      nextStart = departureDate;
-      nextEnd = addDaysToIsoDate(departureDate, 2);
-    }
-
-    if (nextEnd <= nextStart) {
-      nextEnd = addDaysToIsoDate(nextStart, 2);
-    }
-
-    setHotelStays((prev) => [
-      ...prev,
-      makeStayLeg(
-        `stay-${Date.now()}`,
-        nextCode,
-        nextStart,
-        nextEnd,
-        lastStay?.rooms || 1
-      ),
-    ]);
-  };
-
-  const handleUpdateStay = (stayId, patch) => {
-    setStaysCustomized(true);
-    setFormError("");
-    setHotelStays((prev) =>
-      prev.map((stay) => {
-        if (stay.id !== stayId) return stay;
-        const next = { ...stay, ...patch };
-        if (patch.destination !== undefined) {
-          next.cityCode =
-            extractDestinationCityCode(patch.destination) ||
-            extractAirportCode(patch.destination, stay.cityCode);
-        }
-        if (patch.checkIn && next.checkOut <= patch.checkIn) {
-          next.checkOut = addDaysToIsoDate(patch.checkIn, 1);
-        }
-        return next;
-      })
-    );
-  };
-
-  const handleRemoveStay = (stayId) => {
-    if (hotelStays.length <= 1) return;
-    setStaysCustomized(true);
-    setHotelStays((prev) => prev.filter((stay) => stay.id !== stayId));
   };
 
   const handleSubmit = (event) => {
@@ -354,25 +133,11 @@ const PackageSearchBox = ({
       setFormError("Return flight date must be after departure date.");
       return;
     }
-    if (stayCoverage.hasInvalidDates) {
-      setFormError("Every hotel stay must have a check-out date after check-in.");
-      return;
-    }
 
-    const normalizedStays = hotelStays.map((stay, idx) => {
-      const code =
-        extractDestinationCityCode(stay.destination) ||
-        extractAirportCode(stay.destination, arrivalInfo.primary);
-      return {
-        id: stay.id || `stay-${idx + 1}`,
-        destination: stay.destination.trim() || getDestinationLabelByCode(code),
-        cityCode: code,
-        checkIn: stay.checkIn,
-        checkOut: stay.checkOut,
-        nights: calculateNights(stay.checkIn, stay.checkOut),
-        rooms: Math.max(1, Number(stay.rooms) || 1),
-      };
-    });
+    const arrivalInfo = resolveStayDestinationFromAirport(toCode);
+    const defaultAutoStay = [
+      makeStayLeg("stay-1", arrivalInfo.primary, departureDate, returnDate, 1),
+    ];
 
     const payload = {
       flightCriteria: {
@@ -387,9 +152,10 @@ const PackageSearchBox = ({
         children,
         infants,
         cabinClass,
-        currency,
+        currency: "USD",
       },
-      hotelStays: normalizedStays,
+      hotelStays: defaultAutoStay,
+      startStep: "flight",
       submittedAt: new Date().toISOString(),
     };
 
@@ -411,17 +177,6 @@ const PackageSearchBox = ({
 
     navigate("/package", { state: payload });
   };
-
-  const companionPreviewCode =
-    (arrivalInfo.companions || []).find((c) => c !== arrivalInfo.primary) ||
-    "AUH";
-  const companionPreviewName =
-    POPULAR_STAY_DESTINATIONS.find((d) => d.code === companionPreviewCode)
-      ?.city || companionPreviewCode;
-  const primaryCityName =
-    POPULAR_STAY_DESTINATIONS.find((d) => d.code === arrivalInfo.primary)
-      ?.city || arrivalInfo.primary;
-  const splitHalfNights = Math.max(1, Math.floor(totalTripNights / 2));
 
   return (
     <search aria-label="Package: Flight + Hotel Search">
@@ -465,7 +220,7 @@ const PackageSearchBox = ({
                   fontSize: { xs: "18px", md: "20px" },
                 }}
               >
-                Package: Flight + Hotel Organizer
+                Package: Flight + Hotel
               </Typography>
             </Box>
             <Typography
@@ -476,25 +231,25 @@ const PackageSearchBox = ({
                 mt: 0.25,
               }}
             >
-              Hotels auto-match your arrival city &amp; flight dates — or split
-              your trip across multiple cities (e.g., 7 nights Dubai + 7 nights
-              Abu Dhabi).
+              Step 1: Search &amp; select your flight — then we&apos;ll auto-match hotels for your arrival city &amp; dates (with multi-city split-stay options).
             </Typography>
           </Box>
 
           <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
             <Chip
               size="small"
-              label={`${totalTripNights}-Night Round Trip`}
+              icon={<FlightTakeoffRoundedIcon sx={{ fontSize: "14px !important" }} />}
+              label={`1. Flight (${totalTripNights} nights)`}
               sx={{
-                bgcolor: "rgba(0,154,214,0.12)",
+                bgcolor: "rgba(0,154,214,0.14)",
                 color: "var(--airport-color)",
                 fontWeight: 700,
               }}
             />
             <Chip
               size="small"
-              label={`${hotelStays.length} Hotel Stay${hotelStays.length > 1 ? "s" : ""} • ${stayCoverage.totalStayNights}n`}
+              icon={<HotelRoundedIcon sx={{ fontSize: "14px !important" }} />}
+              label="2. Auto-Matched Hotels Next"
               sx={{
                 bgcolor: "rgba(20,184,166,0.14)",
                 color: "#0f736c",
@@ -524,8 +279,8 @@ const PackageSearchBox = ({
           </Box>
         )}
 
-        {/* Section 1: Round-Trip Flight */}
-        <fieldset className="flyjatt-filter-fieldset" style={{ marginBottom: "1rem" }}>
+        {/* Step 1: Round-Trip Flight Details Only */}
+        <fieldset className="flyjatt-filter-fieldset">
           <legend>1. Round-Trip Flight Details</legend>
           <Box
             sx={{
@@ -533,7 +288,7 @@ const PackageSearchBox = ({
               gridTemplateColumns: {
                 xs: "1fr",
                 sm: "repeat(2, 1fr)",
-                lg: "1.2fr auto 1.2fr 1fr 1fr 1.2fr",
+                lg: "1.2fr auto 1.2fr 1fr 1fr 1.15fr",
               },
               gap: 1,
               alignItems: "end",
@@ -634,7 +389,7 @@ const PackageSearchBox = ({
               <label htmlFor={`${baseId}-cabin`} className="flyjatt-stay-label">
                 Cabin &amp; Currency
               </label>
-              <Box sx={{ display: "grid", gridTemplateColumns: "1.35fr 0.85fr", gap: 0.6 }}>
+              <Box sx={{ display: "grid", gridTemplateColumns: "1.4fr 0.75fr", gap: 0.6 }}>
                 <select
                   id={`${baseId}-cabin`}
                   className="flyjatt-native-select"
@@ -647,18 +402,14 @@ const PackageSearchBox = ({
                     </option>
                   ))}
                 </select>
-                <select
+                <input
                   aria-label="Package currency"
-                  className="flyjatt-native-select"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                >
-                  {HOTEL_CURRENCY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.value}
-                    </option>
-                  ))}
-                </select>
+                  type="text"
+                  readOnly
+                  className="flyjatt-native-input"
+                  value="USD"
+                  style={{ backgroundColor: "#f1f5f9", fontWeight: 700, textAlign: "center" }}
+                />
               </Box>
             </Box>
           </Box>
@@ -743,261 +494,6 @@ const PackageSearchBox = ({
           </Stack>
         </fieldset>
 
-        {/* Section 2: Auto-Synced & Split-Stay Hotel Plan */}
-        <fieldset className="flyjatt-filter-fieldset">
-          <legend>2. Hotel Stays Plan (Auto-Matched or Multi-City Split Stay)</legend>
-
-          <Box
-            sx={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 1,
-              mb: 1.2,
-              mt: 0.3,
-            }}
-          >
-            <Typography sx={{ fontSize: "12.5px", color: "#334155", fontWeight: 600 }}>
-              {staysCustomized
-                ? `Custom stay schedule: ${stayCoverage.totalStayNights} of ${totalTripNights} trip night(s) planned across ${hotelStays.length} hotel stay(s).`
-                : `Auto-synced to ${arrivalInfo.label} (${departureDate} → ${returnDate}, ${totalTripNights} nights). Edit freely or split into multiple cities!`}
-            </Typography>
-
-            <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
-              {totalTripNights >= 4 && (
-                <Button
-                  type="button"
-                  size="small"
-                  variant="outlined"
-                  startIcon={<CallSplitRoundedIcon fontSize="small" />}
-                  onClick={handleQuickSplitStay}
-                  sx={{
-                    textTransform: "none",
-                    fontWeight: 700,
-                    fontSize: "12px",
-                    borderRadius: "999px",
-                    borderColor: "#007bb0",
-                    color: "#0b4a82",
-                    bgcolor: "#f0f9ff",
-                  }}
-                >
-                  Split Stay: {splitHalfNights}n {primaryCityName} +{" "}
-                  {totalTripNights >= 14 && totalTripNights % 2 === 1
-                    ? splitHalfNights
-                    : totalTripNights - splitHalfNights}
-                  n {companionPreviewName}
-                </Button>
-              )}
-
-              <Button
-                type="button"
-                size="small"
-                variant="outlined"
-                startIcon={<AddCircleOutlineRoundedIcon fontSize="small" />}
-                disabled={hotelStays.length >= 5}
-                onClick={handleAddStay}
-                sx={{
-                  textTransform: "none",
-                  fontWeight: 700,
-                  fontSize: "12px",
-                  borderRadius: "999px",
-                }}
-              >
-                + Add City / Hotel Stay
-              </Button>
-
-              {staysCustomized && (
-                <Button
-                  type="button"
-                  size="small"
-                  variant="text"
-                  startIcon={<RestartAltRoundedIcon fontSize="small" />}
-                  onClick={handleResetAutoStay}
-                  sx={{ textTransform: "none", fontWeight: 700, fontSize: "12px" }}
-                >
-                  Reset to Full Stay
-                </Button>
-              )}
-            </Stack>
-          </Box>
-
-          <datalist id={`${baseId}-stay-cities`}>
-            {POPULAR_STAY_DESTINATIONS.map((dest) => (
-              <option key={dest.code} value={dest.label}>
-                {dest.city}, {dest.country}
-              </option>
-            ))}
-          </datalist>
-
-          <Stack spacing={1}>
-            {hotelStays.map((stay, idx) => {
-              const stayNights = calculateNights(stay.checkIn, stay.checkOut);
-              return (
-                <Box
-                  key={stay.id}
-                  sx={{
-                    p: 1.2,
-                    borderRadius: "12px",
-                    bgcolor: "#ffffff",
-                    border: "1px solid #d7e6f5",
-                    display: "grid",
-                    gridTemplateColumns: {
-                      xs: "1fr",
-                      sm: "repeat(2, 1fr)",
-                      lg: "auto 1.4fr 1fr 1fr 0.7fr auto auto",
-                    },
-                    gap: 1,
-                    alignItems: "end",
-                  }}
-                >
-                  <Chip
-                    size="small"
-                    icon={<HotelRoundedIcon sx={{ fontSize: "15px !important" }} />}
-                    label={`Stay ${idx + 1}`}
-                    sx={{
-                      fontWeight: 800,
-                      bgcolor: "#e0f2fe",
-                      color: "#0b4a82",
-                      height: 32,
-                      mb: { lg: 0.7 },
-                    }}
-                  />
-
-                  <Box className="flyjatt-stay-field">
-                    <label
-                      htmlFor={`${baseId}-stay-city-${stay.id}`}
-                      className="flyjatt-stay-label"
-                    >
-                      Hotel City / Code
-                    </label>
-                    <input
-                      id={`${baseId}-stay-city-${stay.id}`}
-                      type="text"
-                      list={`${baseId}-stay-cities`}
-                      className="flyjatt-native-input"
-                      placeholder="e.g. Dubai (DXB), Abu Dhabi (AUH)"
-                      value={stay.destination}
-                      onChange={(e) =>
-                        handleUpdateStay(stay.id, {
-                          destination: e.target.value,
-                        })
-                      }
-                      required
-                    />
-                  </Box>
-
-                  <Box className="flyjatt-stay-field">
-                    <label
-                      htmlFor={`${baseId}-stay-in-${stay.id}`}
-                      className="flyjatt-stay-label"
-                    >
-                      Check-in
-                    </label>
-                    <input
-                      id={`${baseId}-stay-in-${stay.id}`}
-                      type="date"
-                      min={todayIso}
-                      className="flyjatt-native-input"
-                      value={stay.checkIn}
-                      onChange={(e) =>
-                        handleUpdateStay(stay.id, { checkIn: e.target.value })
-                      }
-                      required
-                    />
-                  </Box>
-
-                  <Box className="flyjatt-stay-field">
-                    <label
-                      htmlFor={`${baseId}-stay-out-${stay.id}`}
-                      className="flyjatt-stay-label"
-                    >
-                      Check-out
-                    </label>
-                    <input
-                      id={`${baseId}-stay-out-${stay.id}`}
-                      type="date"
-                      min={stay.checkIn || todayIso}
-                      className="flyjatt-native-input"
-                      value={stay.checkOut}
-                      onChange={(e) =>
-                        handleUpdateStay(stay.id, { checkOut: e.target.value })
-                      }
-                      required
-                    />
-                  </Box>
-
-                  <Box className="flyjatt-stay-field">
-                    <label
-                      htmlFor={`${baseId}-stay-rooms-${stay.id}`}
-                      className="flyjatt-stay-label"
-                    >
-                      Rooms
-                    </label>
-                    <select
-                      id={`${baseId}-stay-rooms-${stay.id}`}
-                      className="flyjatt-native-select"
-                      value={stay.rooms}
-                      onChange={(e) =>
-                        handleUpdateStay(stay.id, {
-                          rooms: Number(e.target.value),
-                        })
-                      }
-                    >
-                      {[1, 2, 3, 4, 5].map((n) => (
-                        <option key={n} value={n}>
-                          {n} Room{n > 1 ? "s" : ""}
-                        </option>
-                      ))}
-                    </select>
-                  </Box>
-
-                  <Chip
-                    size="small"
-                    label={`${stayNights} night${stayNights > 1 ? "s" : ""}`}
-                    sx={{
-                      fontWeight: 700,
-                      bgcolor: "#f1f5f9",
-                      color: "#0f2942",
-                      height: 32,
-                      mb: { lg: 0.7 },
-                    }}
-                  />
-
-                  {hotelStays.length > 1 ? (
-                    <Tooltip title="Remove this stay">
-                      <IconButton
-                        type="button"
-                        aria-label={`Remove Stay ${idx + 1}`}
-                        color="error"
-                        onClick={() => handleRemoveStay(stay.id)}
-                        sx={{ mb: { lg: 0.4 } }}
-                      >
-                        <DeleteOutlineRoundedIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  ) : (
-                    <Box sx={{ width: 32, display: { xs: "none", lg: "block" } }} />
-                  )}
-                </Box>
-              );
-            })}
-          </Stack>
-
-          {stayCoverage.hasOutsideFlightRange && (
-            <Typography
-              sx={{
-                mt: 1,
-                fontSize: "12px",
-                color: "#b45309",
-                fontWeight: 600,
-              }}
-            >
-              Note: One or more hotel stay dates extend outside your flight dates ({departureDate} – {returnDate}). You can still search if intentional.
-            </Typography>
-          )}
-        </fieldset>
-
         <Divider sx={{ my: 1.5 }} />
 
         {/* Submit Row */}
@@ -1011,7 +507,7 @@ const PackageSearchBox = ({
           }}
         >
           <Typography sx={{ fontSize: "12.5px", color: "#526B86", fontWeight: 600 }}>
-            Searches live Travelport Air + Stays v11 simultaneously for your flight and every hotel stay leg.
+            Select your flight first — next we&apos;ll open your Hotel Stays Plan auto-matched to your arrival city &amp; dates (all hotel prices in USD).
           </Typography>
           <Button
             type="submit"
@@ -1031,8 +527,7 @@ const PackageSearchBox = ({
               },
             }}
           >
-            Search Flight + {hotelStays.length} Hotel Stay
-            {hotelStays.length > 1 ? "s" : ""}
+            Search Package Flights
           </Button>
         </Box>
       </Box>

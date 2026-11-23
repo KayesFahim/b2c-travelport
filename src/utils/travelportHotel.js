@@ -49,12 +49,6 @@ export const AIRPORT_TO_STAY_CITY_MAP = {
 
 export const HOTEL_CURRENCY_OPTIONS = [
   { value: "USD", label: "USD ($)" },
-  { value: "EUR", label: "EUR (€)" },
-  { value: "GBP", label: "GBP (£)" },
-  { value: "AED", label: "AED" },
-  { value: "BDT", label: "BDT (৳)" },
-  { value: "MYR", label: "MYR" },
-  { value: "SGD", label: "SGD" },
 ];
 
 export function resolveStayDestinationFromAirport(airportCode) {

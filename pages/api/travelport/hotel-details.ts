@@ -3,7 +3,7 @@ import { withApiHandler } from "@/server/api-handler";
 import {
   callTravelportHotelApi,
   computeStayNights,
-  normalizeHotelDetailsResponse,
+  normalizeHotelDetailsResponseUsd,
 } from "@/server/travelport-hotel";
 
 type HotelDetailsBody = {
@@ -63,7 +63,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const property = normalizeHotelDetailsResponse(result.data, nights);
+    const property = await normalizeHotelDetailsResponseUsd(result.data, nights);
 
     return res.status(200).json({
       success: true,

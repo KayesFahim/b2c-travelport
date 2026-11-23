@@ -3,7 +3,7 @@ import { withApiHandler } from "@/server/api-handler";
 import {
   callTravelportHotelApi,
   computeStayNights,
-  normalizeHotelSearchResponse,
+  normalizeHotelSearchResponseUsd,
 } from "@/server/travelport-hotel";
 
 type HotelSearchBody = {
@@ -72,11 +72,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const adults = Math.max(1, Math.min(9, Number(body.adults) || 1));
   const children = Math.max(0, Math.min(6, Number(body.children) || 0));
   const radiusValue = Math.max(1, Math.min(100, Number(body.radiusKm) || 25));
-  const currency =
-    String(body.currency || process.env.TRAVELPORT_DEFAULT_CURRENCY || "USD")
-      .trim()
-      .toUpperCase()
-      .slice(0, 3) || "USD";
+  const currency = "USD";
   const hotelName = String(body.hotelName || "").trim();
   const chainCodes = Array.isArray(body.chainCodes)
     ? body.chainCodes
@@ -157,7 +153,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       CheckOutDate: checkOut,
       RoomStayCandidate: roomStayCandidates,
       SearchBy: searchBy,
-      RequestedCurrency: currency,
+      requestedCurrency: "USD",
       ...(hotelName ? { HotelName: hotelName } : {}),
       ...(chainCodes.length > 0 ? { ChainCodes: chainCodes } : {}),
       ...(minStarRating >= 1 && minStarRating <= 5
@@ -211,7 +207,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const normalized = normalizeHotelSearchResponse(result.data, nights);
+    const normalized = await normalizeHotelSearchResponseUsd(result.data, nights);
 
     return res.status(200).json({
       success: true,

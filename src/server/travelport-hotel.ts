@@ -2,6 +2,12 @@ import { randomUUID } from "crypto";
 import { getTravelportAccessToken } from "@/server/travelport-token";
 import { fetchUpstream } from "@/server/upstream-fetch";
 import { logTravelportApi } from "@/utils/travelportLogger";
+import {
+  convertToUsd,
+  extractTravelportUsdRates,
+  getUsdExchangeRates,
+  roundUsd,
+} from "@/server/currency-usd";
 
 export interface HotelGuestCount {
   adults: number;
@@ -1095,4 +1101,132 @@ export function normalizeHotelRulesResponse(
     acceptedCards,
     textBlocks,
   };
+}
+
+function convertPropertyToUsd(
+  prop: NormalizedHotelProperty,
+  rates: Record<string, number>
+): NormalizedHotelProperty {
+  const src = prop.currencyCode || "USD";
+  return {
+    ...prop,
+    currencyCode: "USD",
+    minNightlyPrice: convertToUsd(prop.minNightlyPrice, src, rates),
+    minTotalPrice: convertToUsd(prop.minTotalPrice, src, rates),
+    maxNightlyPrice: convertToUsd(prop.maxNightlyPrice, src, rates),
+    maxTotalPrice: convertToUsd(prop.maxTotalPrice, src, rates),
+  };
+}
+
+function convertRoomOfferToUsd(
+  offer: NormalizedHotelRoomOffer,
+  rates: Record<string, number>,
+  nights: number
+): NormalizedHotelRoomOffer {
+  const src = offer.currencyCode || "USD";
+  const totalUsd = convertToUsd(offer.totalPrice, src, rates) ?? 0;
+  const baseUsdRaw = convertToUsd(offer.basePrice, src, rates) ?? totalUsd;
+  const baseUsd = baseUsdRaw > totalUsd ? totalUsd : baseUsdRaw;
+  const taxesUsd = roundUsd(Math.max(0, totalUsd - baseUsd));
+  const nightlyBaseUsd =
+    convertToUsd(offer.nightlyPrice, src, rates) ??
+    roundUsd(baseUsd / Math.max(1, nights));
+  const nightlyTotalUsd = roundUsd(totalUsd / Math.max(1, nights));
+  const localFeesTotalUsd = convertToUsd(offer.localFeesTotal, src, rates) ?? 0;
+
+  return {
+    ...offer,
+    currencyCode: "USD",
+    basePrice: baseUsd,
+    taxes: taxesUsd,
+    totalPrice: totalUsd,
+    nightlyPrice: nightlyBaseUsd,
+    nightlyTotalPrice: nightlyTotalUsd,
+    localFeesTotal: localFeesTotalUsd,
+    localFeesDetail: (offer.localFeesDetail || []).map((f) => ({
+      ...f,
+      amount: convertToUsd(f.amount, f.currencyCode || src, rates) ?? 0,
+      currencyCode: "USD",
+    })),
+    taxBreakdown: (offer.taxBreakdown || []).map((t) => ({
+      ...t,
+      amount: convertToUsd(t.amount, t.currencyCode || src, rates) ?? 0,
+      currencyCode: "USD",
+    })),
+    nightlyRates: (offer.nightlyRates || []).map((nr) => {
+      const nrTotal = convertToUsd(nr.total, src, rates) ?? 0;
+      const nrBase = Math.min(nrTotal, convertToUsd(nr.base, src, rates) ?? nrTotal);
+      return {
+        ...nr,
+        base: nrBase,
+        taxes: roundUsd(Math.max(0, nrTotal - nrBase)),
+        total: nrTotal,
+      };
+    }),
+  };
+}
+
+function convertRulesToUsd(
+  rules: NormalizedHotelRules,
+  rates: Record<string, number>
+): NormalizedHotelRules {
+  const src = rules.currencyCode || "USD";
+  const totalUsd = convertToUsd(rules.totalPrice, src, rates) ?? 0;
+  const baseUsdRaw = convertToUsd(rules.basePrice, src, rates) ?? totalUsd;
+  const baseUsd = baseUsdRaw > totalUsd ? totalUsd : baseUsdRaw;
+  const taxesUsd = roundUsd(Math.max(0, totalUsd - baseUsd));
+  return {
+    ...rules,
+    currencyCode: "USD",
+    basePrice: baseUsd,
+    taxes: taxesUsd,
+    totalPrice: totalUsd,
+  };
+}
+
+export async function normalizeHotelSearchResponseUsd(
+  raw: Record<string, unknown>,
+  nights = 1
+) {
+  const baseRates = await getUsdExchangeRates();
+  const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
+  const normalized = normalizeHotelSearchResponse(raw, nights);
+  return {
+    ...normalized,
+    properties: normalized.properties.map((p) => convertPropertyToUsd(p, rates)),
+  };
+}
+
+export async function normalizeHotelDetailsResponseUsd(
+  raw: Record<string, unknown>,
+  nights = 1
+): Promise<NormalizedHotelProperty | null> {
+  const prop = normalizeHotelDetailsResponse(raw, nights);
+  if (!prop) return null;
+  const baseRates = await getUsdExchangeRates();
+  const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
+  return convertPropertyToUsd(prop, rates);
+}
+
+export async function normalizeHotelAvailabilityResponseUsd(
+  raw: Record<string, unknown>,
+  nights = 1
+) {
+  const baseRates = await getUsdExchangeRates();
+  const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
+  const normalized = normalizeHotelAvailabilityResponse(raw, nights);
+  return {
+    ...normalized,
+    offers: normalized.offers.map((o) => convertRoomOfferToUsd(o, rates, nights)),
+  };
+}
+
+export async function normalizeHotelRulesResponseUsd(
+  raw: Record<string, unknown>,
+  fallbackOfferIdentifier = ""
+): Promise<NormalizedHotelRules> {
+  const baseRates = await getUsdExchangeRates();
+  const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
+  const rules = normalizeHotelRulesResponse(raw, fallbackOfferIdentifier);
+  return convertRulesToUsd(rules, rates);
 }

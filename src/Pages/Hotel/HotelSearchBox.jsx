@@ -35,7 +35,7 @@ const HotelSearchBox = ({
   const [rooms, setRooms] = useState(Number(initialValues.rooms) || 1);
   const [adults, setAdults] = useState(Number(initialValues.adults) || 2);
   const [children, setChildren] = useState(Number(initialValues.children) || 0);
-  const [currency, setCurrency] = useState(initialValues.currency || "USD");
+  const currency = "USD";
   const [radiusKm, setRadiusKm] = useState(Number(initialValues.radiusKm) || 25);
   const [minStarRating, setMinStarRating] = useState(
     String(initialValues.minStarRating || "")
@@ -531,19 +531,15 @@ const HotelSearchBox = ({
                 <label htmlFor={`${baseId}-currency`} className="flyjatt-stay-label">
                   Currency
                 </label>
-                <select
+                <input
                   id={`${baseId}-currency`}
                   name="currency"
-                  className="flyjatt-native-select"
-                  value={currency}
-                  onChange={(e) => setCurrency(e.target.value)}
-                >
-                  {HOTEL_CURRENCY_OPTIONS.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
+                  type="text"
+                  readOnly
+                  className="flyjatt-native-input"
+                  value="USD ($)"
+                  style={{ backgroundColor: "#f1f5f9", fontWeight: 700 }}
+                />
               </Box>
             </Box>
           </fieldset>
