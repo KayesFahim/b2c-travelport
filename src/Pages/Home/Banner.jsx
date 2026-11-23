@@ -2,6 +2,7 @@ import { Box, Container, Typography } from "@mui/material";
 import React, { useEffect, useState } from "react";
 import FlightSearchBox from "../HomeSearchBox/FlightSearchBox";
 import HotelSearchBox from "../Hotel/HotelSearchBox";
+import PackageSearchBox from "../Package/PackageSearchBox";
 import Tab from "@mui/material/Tab";
 import TabContext from "@mui/lab/TabContext";
 import TabList from "@mui/lab/TabList";
@@ -409,6 +410,28 @@ const Banner = ({ data, onTabChange }) => {
                         },
                       }}
                     />
+                    <Tab
+                      label="Package: Flight + Hotel"
+                      value="package"
+                      sx={{
+                        textTransform: "none",
+                        color: "rgba(255,255,255,0.9)",
+                        opacity: 1,
+                        minHeight: 0,
+                        minWidth: { xs: "150px", md: "185px" },
+                        py: 0.75,
+                        px: 2,
+                        fontSize: "14px",
+                        fontWeight: 700,
+                        borderRadius: "999px",
+                        transition: "all 0.25s ease",
+                        "&.MuiTab-root.Mui-selected": {
+                          backgroundColor: "var(--primary-button)",
+                          color: "var(--white)",
+                          boxShadow: "0 6px 14px rgba(0,154,214,0.35)",
+                        },
+                      }}
+                    />
                   </TabList>
                 </Box>
 
@@ -624,6 +647,9 @@ const Banner = ({ data, onTabChange }) => {
             </TabPanel>
             <TabPanel value="stay" sx={{ padding: "0px" }}>
               <HotelSearchBox />
+            </TabPanel>
+            <TabPanel value="package" sx={{ padding: "0px" }}>
+              <PackageSearchBox />
             </TabPanel>
           </Box>
         </Container>

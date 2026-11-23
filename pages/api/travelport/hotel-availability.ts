@@ -112,6 +112,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       path: "/availability/catalogofferingshospitality",
       payload: requestPayload,
       apiName: "hotel-availability",
+      retryOnTransientError: true,
       meta: { propertyCode, chainCode, checkIn, checkOut },
     });
 

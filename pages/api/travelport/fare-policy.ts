@@ -883,10 +883,12 @@ function buildFareRulesFromOfferUrl(params: {
   baseUrl: string;
   fareRuleType: string;
   offerIdentifier: string;
+  offerListIdentifier?: string;
   productIdentifier?: string;
 }) {
   return buildQueryUrl(params.baseUrl, [
     ["fareRuleType", params.fareRuleType],
+    ["offerListIdentifier", params.offerListIdentifier],
     ["offerIdentifier", params.offerIdentifier],
     ["productIDs", params.productIdentifier],
   ]);
@@ -934,6 +936,12 @@ function buildOfferIdentifierCandidates(values: unknown[]): string[] {
     const withoutNumericSuffix = normalized.replace(/_\d+$/, "");
     if (withoutNumericSuffix && withoutNumericSuffix !== normalized) {
       candidates.push(withoutNumericSuffix);
+    }
+
+    // For leg-combined IDs like "o1_o2", also include the primary leg offering ID "o1"
+    if (/^o\d+_o\d+/i.test(withoutNumericSuffix)) {
+      const firstPart = withoutNumericSuffix.split("_")[0];
+      if (firstPart) candidates.push(firstPart);
     }
   }
 
@@ -1040,6 +1048,8 @@ async function resolveFareRulesWithFallback(
   const primaryProductIdentifier = productIdentifiers[0] || "";
   const attemptCandidates: FareRuleAttempt[] = [];
 
+  const primaryOfferListIdentifier = offerListIdentifiers[0] || "";
+
   for (const currentFareRuleType of attemptTypes) {
     for (const currentOfferIdentifier of offerIdentifiers) {
       if (primaryProductIdentifier) {
@@ -1051,6 +1061,7 @@ async function resolveFareRulesWithFallback(
           url: buildFareRulesFromOfferUrl({
             baseUrl: fareRuleEndpoints.fromOffer,
             fareRuleType: currentFareRuleType,
+            offerListIdentifier: primaryOfferListIdentifier,
             offerIdentifier: currentOfferIdentifier,
             productIdentifier: primaryProductIdentifier,
           }),
@@ -1065,6 +1076,7 @@ async function resolveFareRulesWithFallback(
         url: buildFareRulesFromOfferUrl({
           baseUrl: fareRuleEndpoints.fromOffer,
           fareRuleType: currentFareRuleType,
+          offerListIdentifier: primaryOfferListIdentifier,
           offerIdentifier: currentOfferIdentifier,
         }),
       });
@@ -1093,14 +1105,21 @@ async function resolveFareRulesWithFallback(
     }
   }
 
-  const attempts = attemptCandidates.filter(
-    (attempt, index, list) =>
-      list.findIndex((item) => item.url === attempt.url) === index
-  );
+  const attempts = attemptCandidates
+    .filter(
+      (attempt, index, list) =>
+        list.findIndex((item) => item.url === attempt.url) === index
+    )
+    .slice(0, 8);
   let lastErrorDetails = "";
+  const deadOfferKeys = new Set<string>();
 
   for (let index = 0; index < attempts.length; index += 1) {
     const attempt = attempts[index];
+    const offerKey = `${attempt.strategy}::${attempt.offerIdentifier}`;
+    if (deadOfferKeys.has(offerKey)) {
+      continue;
+    }
     let response: Response;
     let payload: Record<string, unknown>;
     try {
@@ -1123,12 +1142,18 @@ async function resolveFareRulesWithFallback(
     if (!response.ok) {
       const details = getErrorDetails(payload, response.status);
       lastErrorDetails = `${details} [${attempt.strategy}, type=${attempt.fareRuleType}]`;
+      if (/OFFER NOT FOUND|NOT FOUND/i.test(details)) {
+        deadOfferKeys.add(offerKey);
+      }
       continue;
     }
 
     const embeddedErrors = extractTravelportFareRuleErrors(payload);
     if (embeddedErrors.length > 0) {
       lastErrorDetails = embeddedErrors.join(" | ");
+      if (/OFFER NOT FOUND|NOT FOUND/i.test(lastErrorDetails)) {
+        deadOfferKeys.add(offerKey);
+      }
       continue;
     }
 

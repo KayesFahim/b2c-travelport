@@ -8,14 +8,20 @@ import {
   Container,
   Divider,
   Grid,
+  Stack,
   Typography,
 } from "@mui/material";
+import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import CheckCircleRoundedIcon from "@mui/icons-material/CheckCircleRounded";
 import HotelRoundedIcon from "@mui/icons-material/HotelRounded";
+import VerifiedUserRoundedIcon from "@mui/icons-material/VerifiedUserRounded";
 import { useLocation, useNavigate } from "react-router-dom";
 import secureLocalStorage from "react-secure-storage";
 import NavBar from "../../Shared/NavBar/NavBar";
-import { bookTravelportHotel } from "../../utils/travelportHotel";
+import {
+  bookTravelportHotel,
+  fetchTravelportHotelRules,
+} from "../../utils/travelportHotel";
 
 const HotelBooking = () => {
   const location = useLocation();
@@ -37,6 +43,7 @@ const HotelBooking = () => {
     return null;
   }, [location?.state]);
 
+  const [title, setTitle] = useState("MR");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -45,11 +52,19 @@ const HotelBooking = () => {
   const [cardNumber, setCardNumber] = useState("");
   const [expiryMonth, setExpiryMonth] = useState("");
   const [expiryYear, setExpiryYear] = useState("");
+  const [billingStreet, setBillingStreet] = useState("");
+  const [billingCity, setBillingCity] = useState("");
+  const [billingCountry, setBillingCountry] = useState("AE");
   const [specialRequests, setSpecialRequests] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [requiresLogin, setRequiresLogin] = useState(false);
   const [confirmation, setConfirmation] = useState(null);
+
+  // Step 4: optional live rules verification right on checkout page
+  const [rateRules, setRateRules] = useState(bookingContext?.rateRules || null);
+  const [rulesLoading, setRulesLoading] = useState(false);
+  const [rulesError, setRulesError] = useState("");
 
   if (!bookingContext) {
     return (
@@ -76,7 +91,44 @@ const HotelBooking = () => {
     );
   }
 
-  const { property, roomOffer, searchCriteria, nights } = bookingContext;
+  const { property, roomOffer, searchCriteria, nights, fromPackage } = bookingContext;
+
+  const displayCurrency =
+    rateRules?.currencyCode || roomOffer?.currencyCode || searchCriteria?.currency || "USD";
+  const displayBase =
+    rateRules?.basePrice !== undefined && rateRules?.basePrice !== null
+      ? Number(rateRules.basePrice)
+      : Number(roomOffer?.basePrice || 0);
+  const displayTaxes =
+    rateRules?.taxes !== undefined && rateRules?.taxes !== null
+      ? Number(rateRules.taxes)
+      : Number(roomOffer?.taxes || 0);
+  const displayTotal =
+    rateRules?.totalPrice !== undefined && rateRules?.totalPrice !== null
+      ? Number(rateRules.totalPrice)
+      : Number(roomOffer?.totalPrice || 0);
+
+  const handleLoadRules = async () => {
+    setRulesLoading(true);
+    setRulesError("");
+    try {
+      const res = await fetchTravelportHotelRules(
+        {
+          catalogOfferingsIdentifier: roomOffer?.catalogOfferingsIdentifier,
+          catalogOfferingIdentifier: roomOffer?.catalogOfferingIdentifier,
+          authority: roomOffer?.authority || roomOffer?.aggregator || "TVPT",
+          propertyCode: property?.propertyCode,
+          chainCode: property?.chainCode,
+        },
+        token
+      );
+      setRateRules(res?.rules || {});
+    } catch (err) {
+      setRulesError(err?.message || "Unable to fetch live rate rules.");
+    } finally {
+      setRulesLoading(false);
+    }
+  };
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -100,12 +152,14 @@ const HotelBooking = () => {
           rooms: searchCriteria?.rooms,
           adults: searchCriteria?.adults,
           children: searchCriteria?.children,
-          currency: roomOffer?.currencyCode || searchCriteria?.currency || "USD",
+          currency: displayCurrency,
           catalogOfferingsIdentifier: roomOffer?.catalogOfferingsIdentifier,
           catalogOfferingIdentifier: roomOffer?.catalogOfferingIdentifier,
-          productIdentifier: roomOffer?.productIdentifier,
-          rateCode: roomOffer?.rateCode,
+          authority: roomOffer?.authority || roomOffer?.aggregator || "TVPT",
+          acceptPriceChangeInd: true,
+          acceptGuaranteeChangeInd: true,
           guest: {
+            title,
             firstName: firstName.trim(),
             lastName: lastName.trim(),
             email: email.trim(),
@@ -118,6 +172,15 @@ const HotelBooking = () => {
                 expiryMonth: expiryMonth.trim(),
                 expiryYear: expiryYear.trim(),
                 cardHolderName: `${firstName.trim()} ${lastName.trim()}`,
+                ...(billingStreet.trim() || billingCity.trim()
+                  ? {
+                      billingAddress: {
+                        street: billingStreet.trim(),
+                        city: billingCity.trim(),
+                        countryCode: billingCountry.trim() || "AE",
+                      },
+                    }
+                  : {}),
               }
             : undefined,
           specialRequests: specialRequests.trim(),
@@ -138,9 +201,49 @@ const HotelBooking = () => {
   return (
     <Box sx={{ minHeight: "100vh", bgcolor: "#f3f7fb", pb: 6 }}>
       <NavBar />
-      <Container sx={{ pt: 3 }}>
+      <Container maxWidth="lg" sx={{ pt: 3 }}>
+        {/* 5-Step Travelport Stays v11 Progress Bar */}
+        <Box
+          sx={{
+            mb: 2.2,
+            px: 2,
+            py: 1.2,
+            borderRadius: "12px",
+            bgcolor: "#ffffff",
+            border: "1px solid #d7e6f5",
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 1.2,
+          }}
+        >
+          <Button
+            type="button"
+            size="small"
+            startIcon={<ArrowBackRoundedIcon />}
+            onClick={() => navigate(fromPackage ? "/package" : -1)}
+            sx={{ textTransform: "none", fontWeight: 800, color: "#0b4a82" }}
+          >
+            {fromPackage ? "Back to Package Organizer" : "Back to Room Selection"}
+          </Button>
+          <Stack direction="row" spacing={0.8} flexWrap="wrap" useFlexGap>
+            <Chip size="small" label="1. Search ✓" color="success" variant="outlined" sx={{ fontWeight: 700 }} />
+            <Chip size="small" label="2. Details ✓" color="success" variant="outlined" sx={{ fontWeight: 700 }} />
+            <Chip size="small" label="3. Availability ✓" color="success" variant="outlined" sx={{ fontWeight: 700 }} />
+            <Chip
+              size="small"
+              label={rateRules ? "4. Rules ✓" : "4. Rules (Optional)"}
+              color={rateRules ? "success" : "default"}
+              variant="outlined"
+              sx={{ fontWeight: 700 }}
+            />
+            <Chip size="small" label="5. Create Reservation" color="primary" sx={{ fontWeight: 800 }} />
+          </Stack>
+        </Box>
+
         <Typography component="h1" sx={{ fontWeight: 800, fontSize: "24px", color: "#0f2942", mb: 2 }}>
-          Complete Your Stay Reservation
+          Step 5: Complete Your Stay Reservation
         </Typography>
 
         {confirmation ? (
@@ -161,14 +264,26 @@ const HotelBooking = () => {
               Confirmation Locator:{" "}
               <strong>{confirmation.confirmationLocator || confirmation.reservationId}</strong>
             </Typography>
-            <Button
-              type="button"
-              variant="contained"
-              sx={{ mt: 2.5, textTransform: "none", fontWeight: 700 }}
-              onClick={() => navigate("/hotel")}
-            >
-              Back to Stays
-            </Button>
+            <Stack direction="row" spacing={1.5} justifyContent="center" sx={{ mt: 2.5 }}>
+              {fromPackage && (
+                <Button
+                  type="button"
+                  variant="outlined"
+                  sx={{ textTransform: "none", fontWeight: 700 }}
+                  onClick={() => navigate("/package")}
+                >
+                  Return to Package Organizer
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="contained"
+                sx={{ textTransform: "none", fontWeight: 700 }}
+                onClick={() => navigate("/hotel")}
+              >
+                Back to Stays
+              </Button>
+            </Stack>
           </Box>
         ) : (
           <Grid container spacing={2.5}>
@@ -207,7 +322,23 @@ const HotelBooking = () => {
                 <fieldset className="flyjatt-filter-fieldset" style={{ marginBottom: "1.2rem" }}>
                   <legend>Primary Guest Details</legend>
                   <Grid container spacing={1.5} sx={{ mt: 0.2 }}>
-                    <Grid item xs={12} sm={6}>
+                    <Grid item xs={12} sm={3}>
+                      <label htmlFor="hotel-guest-title" className="flyjatt-stay-label">
+                        Title
+                      </label>
+                      <select
+                        id="hotel-guest-title"
+                        className="flyjatt-native-select"
+                        value={title}
+                        onChange={(e) => setTitle(e.target.value)}
+                      >
+                        <option value="MR">Mr</option>
+                        <option value="MRS">Mrs</option>
+                        <option value="MS">Ms</option>
+                        <option value="DR">Dr</option>
+                      </select>
+                    </Grid>
+                    <Grid item xs={12} sm={4.5}>
                       <label htmlFor="hotel-guest-first" className="flyjatt-stay-label">
                         First Name <span aria-hidden="true">*</span>
                       </label>
@@ -221,7 +352,7 @@ const HotelBooking = () => {
                         onChange={(e) => setFirstName(e.target.value)}
                       />
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid item xs={12} sm={4.5}>
                       <label htmlFor="hotel-guest-last" className="flyjatt-stay-label">
                         Last Name <span aria-hidden="true">*</span>
                       </label>
@@ -266,7 +397,12 @@ const HotelBooking = () => {
                 </fieldset>
 
                 <fieldset className="flyjatt-filter-fieldset" style={{ marginBottom: "1.2rem" }}>
-                  <legend>Payment / Guarantee Card (Optional unless required by rate)</legend>
+                  <legend>
+                    Payment / Guarantee Card{" "}
+                    {roomOffer?.creditCardRequired || roomOffer?.prepayRequired
+                      ? "(Required by Hotel Rate)"
+                      : "(Optional unless required by rate)"}
+                  </legend>
                   <Grid container spacing={1.5} sx={{ mt: 0.2 }}>
                     <Grid item xs={12} sm={4}>
                       <label htmlFor="hotel-card-type" className="flyjatt-stay-label">
@@ -298,9 +434,9 @@ const HotelBooking = () => {
                         onChange={(e) => setCardNumber(e.target.value)}
                       />
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid item xs={6} sm={3}>
                       <label htmlFor="hotel-exp-month" className="flyjatt-stay-label">
-                        Expiry Month (MM)
+                        Expiry (MM)
                       </label>
                       <input
                         id="hotel-exp-month"
@@ -314,9 +450,9 @@ const HotelBooking = () => {
                         onChange={(e) => setExpiryMonth(e.target.value)}
                       />
                     </Grid>
-                    <Grid item xs={6}>
+                    <Grid item xs={6} sm={3}>
                       <label htmlFor="hotel-exp-year" className="flyjatt-stay-label">
-                        Expiry Year (YY)
+                        Expiry (YY)
                       </label>
                       <input
                         id="hotel-exp-year"
@@ -328,6 +464,49 @@ const HotelBooking = () => {
                         placeholder="YY"
                         value={expiryYear}
                         onChange={(e) => setExpiryYear(e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <label htmlFor="hotel-billing-street" className="flyjatt-stay-label">
+                        Billing Street (Optional)
+                      </label>
+                      <input
+                        id="hotel-billing-street"
+                        type="text"
+                        autoComplete="street-address"
+                        className="flyjatt-native-input"
+                        placeholder="Street address"
+                        value={billingStreet}
+                        onChange={(e) => setBillingStreet(e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={8} sm={4}>
+                      <label htmlFor="hotel-billing-city" className="flyjatt-stay-label">
+                        Billing City
+                      </label>
+                      <input
+                        id="hotel-billing-city"
+                        type="text"
+                        autoComplete="address-level2"
+                        className="flyjatt-native-input"
+                        placeholder="City"
+                        value={billingCity}
+                        onChange={(e) => setBillingCity(e.target.value)}
+                      />
+                    </Grid>
+                    <Grid item xs={4} sm={2}>
+                      <label htmlFor="hotel-billing-country" className="flyjatt-stay-label">
+                        Country
+                      </label>
+                      <input
+                        id="hotel-billing-country"
+                        type="text"
+                        maxLength={2}
+                        autoComplete="country"
+                        className="flyjatt-native-input"
+                        placeholder="AE"
+                        value={billingCountry}
+                        onChange={(e) => setBillingCountry(e.target.value.toUpperCase())}
                       />
                     </Grid>
                   </Grid>
@@ -366,7 +545,7 @@ const HotelBooking = () => {
                       Confirming Stay...
                     </>
                   ) : (
-                    `Confirm Booking • ${roomOffer?.currencyCode || "USD"} ${Number(roomOffer?.totalPrice || 0).toLocaleString()}`
+                    `Confirm Reservation • ${displayCurrency} ${displayTotal.toLocaleString()}`
                   )}
                 </Button>
               </Box>
@@ -381,7 +560,7 @@ const HotelBooking = () => {
                   p: 2.5,
                 }}
               >
-                <Typography sx={{ fontWeight: 800, fontSize: "16px", color: "#0b4a82" }}>
+                <Typography sx={{ fontWeight: 800, fontSize: "16.5px", color: "#0b4a82" }}>
                   {property?.hotelName}
                 </Typography>
                 <Typography sx={{ fontSize: "13px", color: "#64748b", mt: 0.4 }}>
@@ -391,29 +570,78 @@ const HotelBooking = () => {
                 <Typography sx={{ fontWeight: 700, fontSize: "14px", color: "#0f2942" }}>
                   {roomOffer?.roomName}
                 </Typography>
-                <Chip
-                  size="small"
-                  label={roomOffer?.mealPlan || "Room Only"}
-                  sx={{ mt: 0.8, fontWeight: 700 }}
-                />
-                <Typography sx={{ fontSize: "13px", color: "#475569", mt: 1.2 }}>
+                <Stack direction="row" spacing={0.7} flexWrap="wrap" useFlexGap sx={{ mt: 0.8 }}>
+                  <Chip size="small" label={roomOffer?.mealPlan || "Room Only"} sx={{ fontWeight: 700 }} />
+                  {roomOffer?.bedType && (
+                    <Chip size="small" label={roomOffer.bedType} variant="outlined" sx={{ fontWeight: 700 }} />
+                  )}
+                  <Chip
+                    size="small"
+                    icon={<VerifiedUserRoundedIcon sx={{ fontSize: "14px !important" }} />}
+                    label={roomOffer?.cancellationSummary || "Standard Policy"}
+                    color={roomOffer?.refundable ? "success" : "default"}
+                    variant="outlined"
+                    sx={{ fontWeight: 700 }}
+                  />
+                </Stack>
+                <Typography sx={{ fontSize: "13px", color: "#475569", mt: 1.3, lineHeight: 1.6 }}>
                   Check-in: <strong>{searchCriteria?.checkIn}</strong>
                   <br />
                   Check-out: <strong>{searchCriteria?.checkOut}</strong>
                   <br />
                   Duration: <strong>{nights} night(s)</strong> • {searchCriteria?.rooms} room(s)
                 </Typography>
+
                 <Divider sx={{ my: 1.5 }} />
+
+                {/* Verified Step 4 Rules Panel */}
+                {rateRules ? (
+                  <Box sx={{ mb: 1.5, p: 1.2, borderRadius: "10px", bgcolor: "#f0fdf4", border: "1px solid #bbf7d0" }}>
+                    <Typography sx={{ fontSize: "12.5px", fontWeight: 800, color: "#166534", mb: 0.5 }}>
+                      Verified Live Rate Rules (v11 Step 4)
+                    </Typography>
+                    {rateRules.cancellationPolicy && (
+                      <Typography sx={{ fontSize: "11.5px", color: "#334155", mb: 0.4 }}>
+                        <strong>Cancellation:</strong> {rateRules.cancellationPolicy}
+                      </Typography>
+                    )}
+                    {rateRules.guaranteePolicy && (
+                      <Typography sx={{ fontSize: "11.5px", color: "#334155" }}>
+                        <strong>Guarantee:</strong> {rateRules.guaranteePolicy}
+                      </Typography>
+                    )}
+                  </Box>
+                ) : (
+                  <Box sx={{ mb: 1.5 }}>
+                    <Button
+                      type="button"
+                      size="small"
+                      fullWidth
+                      variant="outlined"
+                      disabled={rulesLoading}
+                      onClick={handleLoadRules}
+                      sx={{ textTransform: "none", fontWeight: 700, borderRadius: "9px" }}
+                    >
+                      {rulesLoading ? "Verifying Rate Rules..." : "Verify Live Rate Rules (Step 4)"}
+                    </Button>
+                    {rulesError && (
+                      <Typography sx={{ fontSize: "11.5px", color: "#b91c1c", mt: 0.5 }}>
+                        {rulesError}
+                      </Typography>
+                    )}
+                  </Box>
+                )}
+
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "14px" }}>
                   <span>Room Base</span>
                   <span>
-                    {roomOffer?.currencyCode} {Number(roomOffer?.basePrice || 0).toLocaleString()}
+                    {displayCurrency} {displayBase.toLocaleString()}
                   </span>
                 </Box>
                 <Box sx={{ display: "flex", justifyContent: "space-between", fontSize: "14px", mt: 0.5 }}>
                   <span>Taxes &amp; Fees</span>
                   <span>
-                    {roomOffer?.currencyCode} {Number(roomOffer?.taxes || 0).toLocaleString()}
+                    {displayCurrency} {displayTaxes.toLocaleString()}
                   </span>
                 </Box>
                 <Box
@@ -428,7 +656,7 @@ const HotelBooking = () => {
                 >
                   <span>Total</span>
                   <span>
-                    {roomOffer?.currencyCode} {Number(roomOffer?.totalPrice || 0).toLocaleString()}
+                    {displayCurrency} {displayTotal.toLocaleString()}
                   </span>
                 </Box>
               </Box>

@@ -1,33 +1,25 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withApiHandler } from "@/server/api-handler";
-import { callTravelportHotelApi } from "@/server/travelport-hotel";
+import {
+  callTravelportHotelApi,
+  normalizeHotelRulesResponse,
+} from "@/server/travelport-hotel";
 
 type HotelRulesBody = {
   catalogOfferingsIdentifier?: string;
   catalogOfferingIdentifier?: string;
-  productIdentifier?: string;
+  authority?: string;
+  aggregator?: string;
   propertyCode?: string;
   chainCode?: string;
-  rateCode?: string;
-  checkIn?: string;
-  checkOut?: string;
-  rooms?: number | string;
-  adults?: number | string;
-  currency?: string;
 };
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
   const body = (req.body ?? {}) as HotelRulesBody;
-  const catalogOfferingsIdentifier = String(body.catalogOfferingsIdentifier || "").trim();
   const catalogOfferingIdentifier = String(body.catalogOfferingIdentifier || "").trim();
-  const productIdentifier = String(body.productIdentifier || "").trim();
+  const authority = String(body.authority || body.aggregator || "TVPT").trim() || "TVPT";
 
   if (!catalogOfferingIdentifier) {
     return res.status(400).json({
@@ -35,38 +27,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     });
   }
 
-  const effectiveOfferingsId =
-    catalogOfferingsIdentifier || catalogOfferingIdentifier.split(":")[0] || catalogOfferingIdentifier;
-
   const requestPayload = {
-    OfferQueryBuildFromCatalogOfferingHospitality: {
-      "@type": "OfferQueryBuildFromCatalogOfferingHospitality",
-      CatalogOfferingsIdentifier: {
-        id: "CatalogOfferings_1",
-        Identifier: {
-          value: effectiveOfferingsId,
-          authority: "TVPT",
-        },
-      },
-      CatalogOfferingIdentifier: {
-        id: catalogOfferingIdentifier,
-        CatalogOfferingRef: catalogOfferingIdentifier,
-        Identifier: {
+    OfferQueryBuildFromCatalogOffering: {
+      "@type": "OfferQueryBuildFromCatalogOffering",
+      BuildFromCatalogOfferingHospitality: {
+        "@type": "BuildFromCatalogOfferingHospitality",
+        CatalogOfferingIdentifier: {
           value: catalogOfferingIdentifier,
-          authority: "TVPT",
+          authority,
         },
       },
-      ...(productIdentifier
-        ? {
-            ProductIdentifier: [
-              {
-                Identifier: {
-                  value: productIdentifier,
-                },
-              },
-            ],
-          }
-        : {}),
     },
   };
 
@@ -75,10 +45,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       path: "/rules/offershospitality/buildfromcatalogoffering",
       payload: requestPayload,
       apiName: "hotel-rules",
+      retryOnTransientError: true,
       meta: {
-        catalogOfferingsIdentifier,
         catalogOfferingIdentifier,
-        productIdentifier,
+        authority,
+        propertyCode: body.propertyCode,
+        chainCode: body.chainCode,
       },
     });
 
@@ -95,38 +67,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const offerRoot =
-      (result.data as any)?.OfferListResponse?.OfferID?.[0] ??
-      (result.data as any)?.OfferResponse?.Offer ??
-      result.data;
-    const terms =
-      (offerRoot as any)?.TermsAndConditionsFull?.[0] ??
-      (result.data as any)?.OfferListResponse?.ReferenceList?.find((r: any) =>
-        Array.isArray(r?.TermsAndConditions)
-      )?.TermsAndConditions?.[0] ??
-      {};
+    const rules = normalizeHotelRulesResponse(result.data, catalogOfferingIdentifier);
 
     return res.status(200).json({
       success: true,
       source: "travelport-live",
       correlationId: result.correlationId,
-      offerIdentifier: String((offerRoot as any)?.Identifier?.value || catalogOfferingIdentifier),
-      rules: {
-        cancelPenalties: Array.isArray(terms?.CancelPenalty) ? terms.CancelPenalty : [],
-        guarantees: Array.isArray(terms?.Guarantee) ? terms.Guarantee : [],
-        checkInTime: terms?.CheckInOutPolicy?.checkInTime || null,
-        checkOutTime: terms?.CheckInOutPolicy?.checkOutTime || null,
-        acceptedCards: Array.isArray(terms?.AcceptedCreditCard)
-          ? terms.AcceptedCreditCard
-          : [],
-        descriptions: Array.isArray(terms?.TextBlock) ? terms.TextBlock : [],
-      },
-      raw: result.data,
+      offerIdentifier: rules.offerIdentifier,
+      rules,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Hotel rules lookup failed";
     return res.status(500).json({
       success: false,
+      code: "TRAVELPORT_HOTEL_RULES_ERROR",
       message,
     });
   }

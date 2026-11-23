@@ -15,8 +15,10 @@ type HotelBookBody = {
   currency?: string;
   catalogOfferingsIdentifier?: string;
   catalogOfferingIdentifier?: string;
-  productIdentifier?: string;
-  rateCode?: string;
+  authority?: string;
+  aggregator?: string;
+  acceptPriceChangeInd?: boolean;
+  acceptGuaranteeChangeInd?: boolean;
   guest?: {
     title?: string;
     firstName?: string;
@@ -31,16 +33,18 @@ type HotelBookBody = {
     expiryMonth?: string;
     expiryYear?: string;
     cardHolderName?: string;
+    billingAddress?: {
+      street?: string;
+      city?: string;
+      state?: string;
+      postalCode?: string;
+      countryCode?: string;
+    };
   };
   specialRequests?: string;
 };
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ message: "Method not allowed" });
-  }
-
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
 
   const body = (req.body ?? {}) as HotelBookBody;
@@ -52,67 +56,48 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
 
   if (!firstName || !lastName || !email) {
     return res.status(400).json({
-      message: "Guest firstName, lastName, and email are required to complete hotel booking.",
+      message: "Guest firstName, lastName, and email are required to create a hotel reservation.",
     });
   }
 
-  const catalogOfferingsIdentifier = String(body.catalogOfferingsIdentifier || "").trim();
   const catalogOfferingIdentifier = String(body.catalogOfferingIdentifier || "").trim();
-  const productIdentifier = String(body.productIdentifier || "").trim();
+  const authority = String(body.authority || body.aggregator || "TVPT").trim() || "TVPT";
 
-  if (!catalogOfferingsIdentifier || !catalogOfferingIdentifier) {
+  if (!catalogOfferingIdentifier) {
     return res.status(400).json({
-      message:
-        "catalogOfferingsIdentifier and catalogOfferingIdentifier are required to book a Travelport Stay.",
+      message: "catalogOfferingIdentifier is required to create a Travelport Stay reservation.",
     });
   }
 
   const payment = body.payment || {};
   const cleanCardNumber = String(payment.cardNumber || "").replace(/\D+/g, "");
-  const expiryMonth = String(payment.expiryMonth || "").replace(/\D+/g, "").padStart(2, "0").slice(-2);
-  const expiryYear = String(payment.expiryYear || "").replace(/\D+/g, "").slice(-2);
+  const expiryMonth = String(payment.expiryMonth || "")
+    .replace(/\D+/g, "")
+    .padStart(2, "0")
+    .slice(-2);
+  const expiryYearRaw = String(payment.expiryYear || "").replace(/\D+/g, "");
+  const expiryYearFull =
+    expiryYearRaw.length === 2 ? `20${expiryYearRaw}` : expiryYearRaw.slice(0, 4);
   const specialRequests = String(body.specialRequests || "").trim();
+  const billing = payment.billingAddress || {};
 
   const requestPayload: Record<string, unknown> = {
     ReservationQueryBuild: {
       "@type": "ReservationQueryBuild",
       ReservationBuild: {
-        "@type": "ReservationBuild",
-        OfferList: [
-          {
-            "@type": "OfferQueryBuildFromCatalogOfferingHospitality",
-            BuildFromCatalogOfferingHospitality: {
-              "@type": "BuildFromCatalogOfferingHospitality",
-              CatalogOfferingsIdentifier: {
-                Identifier: {
-                  value: catalogOfferingsIdentifier,
-                  authority: "Travelport",
-                },
-              },
-              CatalogOfferingIdentifier: {
-                Identifier: {
-                  value: catalogOfferingIdentifier,
-                  authority: "Travelport",
-                },
-              },
-              ...(productIdentifier
-                ? {
-                    ProductIdentifier: [
-                      {
-                        Identifier: {
-                          value: productIdentifier,
-                        },
-                      },
-                    ],
-                  }
-                : {}),
-            },
+        "@type": "ReservationBuildFromCatalogOffering",
+        BuildFromCatalogOfferingHospitality: {
+          "@type": "BuildFromCatalogOfferingHospitality",
+          CatalogOfferingIdentifier: {
+            value: catalogOfferingIdentifier,
+            authority,
           },
-        ],
+        },
         Traveler: [
           {
             "@type": "Traveler",
             id: "trav_1",
+            passengerTypeCode: "ADT",
             PersonName: {
               "@type": "PersonName",
               ...(guest.title ? { Prefix: String(guest.title).trim() } : {}),
@@ -140,24 +125,40 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
               : {}),
           },
         ],
-        ...(cleanCardNumber && expiryMonth && expiryYear
+        ...(cleanCardNumber && expiryMonth && expiryYearFull
           ? {
-              FormOfPayment: [
-                {
-                  "@type": "FormOfPaymentPaymentCard",
-                  PaymentCard: {
-                    "@type": "PaymentCard",
-                    CardCode: String(payment.cardType || "VI").trim().toUpperCase().slice(0, 2),
-                    CardNumber: {
-                      "@type": "EncryptionToken",
-                      PlainText: cleanCardNumber,
-                    },
-                    expireDate: `${expiryMonth}${expiryYear}`,
-                    CardHolderName:
-                      String(payment.cardHolderName || `${firstName} ${lastName}`).trim(),
-                  },
+              FormOfPayment: {
+                "@type": "FormOfPayment",
+                Payment: {
+                  "@type": "PaymentCreditCard",
+                  creditCardType: String(payment.cardType || "VI")
+                    .trim()
+                    .toUpperCase()
+                    .slice(0, 2),
+                  accountNumber: cleanCardNumber,
+                  expiryDate: `${expiryYearFull}-${expiryMonth}`,
+                  cardHolderName: String(
+                    payment.cardHolderName || `${firstName} ${lastName}`
+                  ).trim(),
+                  ...(billing.street || billing.city
+                    ? {
+                        BillingAddress: {
+                          "@type": "Address",
+                          AddressLine: [String(billing.street || "123 Main St").trim()],
+                          city: String(billing.city || "Dubai").trim(),
+                          ...(billing.state ? { state: String(billing.state).trim() } : {}),
+                          ...(billing.postalCode
+                            ? { postalCode: String(billing.postalCode).trim() }
+                            : {}),
+                          countryCode: String(billing.countryCode || "AE")
+                            .trim()
+                            .toUpperCase()
+                            .slice(0, 2),
+                        },
+                      }
+                    : {}),
                 },
-              ],
+              },
             }
           : {}),
         ...(specialRequests
@@ -174,9 +175,18 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     },
   };
 
+  const queryParams = new URLSearchParams();
+  if (body.acceptPriceChangeInd !== false) {
+    queryParams.set("acceptPriceChangeInd", "true");
+  }
+  if (body.acceptGuaranteeChangeInd !== false) {
+    queryParams.set("acceptGuaranteeChangeInd", "true");
+  }
+  const bookPath = `/book/reservations/build${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
+
   try {
     const result = await callTravelportHotelApi({
-      path: "/book/reservations/build",
+      path: bookPath,
       payload: requestPayload,
       apiName: "hotel-book",
       meta: {
@@ -206,6 +216,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       {};
     const locator =
       reservation?.Receipt?.[0]?.Confirmation?.Locator?.value ||
+      reservation?.Offer?.[0]?.Identifier?.value ||
       reservation?.Identifier?.value ||
       "";
 
@@ -222,6 +233,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     const message = error instanceof Error ? error.message : "Hotel booking failed";
     return res.status(500).json({
       success: false,
+      code: "TRAVELPORT_HOTEL_BOOK_ERROR",
       message,
     });
   }

@@ -176,6 +176,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       path: "/search/properties/search",
       payload: requestPayload,
       apiName: "hotel-search",
+      retryOnTransientError: true,
       meta: {
         cityCode: resolvedCode || destinationRaw,
         checkIn,
@@ -210,16 +211,20 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const properties = normalizeHotelSearchResponse(result.data, nights);
+    const normalized = normalizeHotelSearchResponse(result.data, nights);
 
     return res.status(200).json({
       success: true,
       source: "travelport-live",
       correlationId: result.correlationId,
       nights,
-      count: properties.length,
-      properties,
-      ...(properties.length === 0 && result.errorMessage
+      count: normalized.properties.length,
+      totalProperties: normalized.totalProperties,
+      propertiesPerPage: normalized.propertiesPerPage,
+      numberOfPages: normalized.numberOfPages,
+      searchIdentifier: normalized.searchIdentifier,
+      properties: normalized.properties,
+      ...(normalized.properties.length === 0 && result.errorMessage
         ? { warning: result.errorMessage }
         : {}),
       searchCriteria: {
