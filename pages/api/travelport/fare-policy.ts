@@ -1101,12 +1101,24 @@ async function resolveFareRulesWithFallback(
 
   for (let index = 0; index < attempts.length; index += 1) {
     const attempt = attempts[index];
-    const { response, payload } = await fetchFareRulesPayload(
-      attempt.url,
-      accessGroup,
-      version,
-      accessToken
-    );
+    let response: Response;
+    let payload: Record<string, unknown>;
+    try {
+      const fetched = await fetchFareRulesPayload(
+        attempt.url,
+        accessGroup,
+        version,
+        accessToken
+      );
+      response = fetched.response;
+      payload = fetched.payload as Record<string, unknown>;
+    } catch (fetchErr) {
+      lastErrorDetails =
+        fetchErr instanceof Error
+          ? `${fetchErr.message} [${attempt.strategy}, type=${attempt.fareRuleType}]`
+          : `Upstream fare rule error [${attempt.strategy}, type=${attempt.fareRuleType}]`;
+      continue;
+    }
 
     if (!response.ok) {
       const details = getErrorDetails(payload, response.status);
@@ -1138,11 +1150,24 @@ async function resolveFareRulesWithFallback(
         strategy: attempt.strategy,
         offerIdentifier: attempt.offerIdentifier,
         productIdentifier: attempt.productIdentifier || null,
+        unavailable: !usableData,
+        unavailableReason: usableData ? null : lastErrorDetails || null,
       };
     }
   }
 
-  throw new Error(lastErrorDetails || "Travelport fare policy failed");
+  return {
+    fareRules: [],
+    penaltiesCancellation: { change: [], cancel: [] },
+    fareRuleType: requestedFareRuleType,
+    fallbackUsed: true,
+    strategy: attempts[attempts.length - 1]?.strategy || "fromoffer",
+    offerIdentifier: offerIdentifiers[0] || "",
+    productIdentifier: primaryProductIdentifier || null,
+    unavailable: true,
+    unavailableReason:
+      lastErrorDetails || "Fare rules are not available from Travelport for this offer.",
+  };
 }
 
 async function createToken(): Promise<string> {
@@ -1212,18 +1237,24 @@ async function handler(
       requestedOfferIdentifier: offerIdentifier,
       offerListIdentifier,
       productIdentifier: resolved.productIdentifier,
+      unavailable: Boolean(resolved.unavailable),
+      ...(resolved.unavailableReason
+        ? { unavailableReason: resolved.unavailableReason }
+        : {}),
     });
   } catch (error) {
-    const message =
-      publicErrorMessage(error, "Unexpected server error");
-    const normalized = String(message).toUpperCase();
+    const rawMessage = error instanceof Error ? error.message : String(error || "");
+    const normalized = rawMessage.toUpperCase();
     if (normalized.includes("OFFER NOT FOUND")) {
-      return res.status(404).json({
-        message: "Fare rules offer not found",
-        details:
-          "This offer identifier is no longer valid. Search again and request fare rules with a fresh offerIdentifier.",
+      return res.status(200).json({
+        fareRules: [],
+        penaltiesCancellation: { change: [], cancel: [] },
+        unavailable: true,
+        unavailableReason:
+          "This offer identifier is no longer valid. Search again for updated fare rules.",
       });
     }
+    const message = publicErrorMessage(error, "Unexpected server error");
     return res.status(500).json({ message });
   }
 }

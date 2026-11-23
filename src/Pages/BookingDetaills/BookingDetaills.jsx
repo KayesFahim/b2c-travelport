@@ -18,12 +18,13 @@ import {
   Select,
   Stack,
   Typography,
+  useMediaQuery,
 } from "@mui/material";
 import React, { useEffect, useMemo, useState } from "react";
 import NavBar from "../../Shared/NavBar/NavBar";
 import FareBreakdown from "./FareBreakdown/FareBreakdown";
 import Support from "./Support/Support";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import secureLocalStorage from "react-secure-storage";
 import Swal from "sweetalert2";
 import commaNumber from "comma-number";
@@ -915,6 +916,8 @@ const BookingDetaills = () => {
   const [ancillaryData, setAncillaryData] = useState(null);
   const [ancillarySelectionState, setAncillarySelectionState] = useState({});
   const location = useLocation();
+  const navigate = useNavigate();
+  const isDesktopLayout = useMediaQuery("(min-width:900px)");
   const isPassengerInputPage = location?.pathname === "/bookingdetails";
   const [showFlightInfoSection, setShowFlightInfoSection] = useState(
     location?.pathname !== "/bookingdetails"
@@ -1236,13 +1239,13 @@ const BookingDetaills = () => {
   }, [loading, selectedAirPrice]);
 
   useEffect(() => {
-    if (loading || isSelectedFareBookable) return;
+    if (loading || priceError || isSelectedFareBookable || !airPriceOptions.length) return;
     Swal.fire({
       icon: "warning",
       title: "Class/Fare Not Available",
       text: "Selected fare class is not available anymore. Please choose another brand/fare option.",
     });
-  }, [loading, isSelectedFareBookable]);
+  }, [loading, priceError, isSelectedFareBookable, airPriceOptions.length]);
 
   useEffect(() => {
     let isCancelled = false;
@@ -1382,57 +1385,102 @@ const BookingDetaills = () => {
     }
   };
 
+  const hasSelectedOffer = isFlightOfferShape(selectedOffer);
+
+  const sidebarContent = (
+    <Grid container>
+      <Grid item xs={12} sm={12} md={12} lg={12}>
+        <BrandSelector
+          loading={loading}
+          options={airPriceOptions}
+          selectedKey={selectedBrandKey}
+          onSelect={setSelectedBrandKey}
+        />
+      </Grid>
+      <Grid item xs={12} sm={12} md={12} lg={12}>
+        <FareBreakdown
+          loading={loading}
+          data={selectedOffer}
+          airPriceData={airPriceData}
+          selectedAirPrice={selectedAirPrice}
+        />
+      </Grid>
+      <Grid item xs={12} sm={12} md={12} lg={12} mt={2}>
+        <RightSidebarInfo
+          data={activeBookingData}
+          seatAvailabilityData={seatAvailabilityData}
+          seatAvailabilityLoading={seatAvailabilityLoading}
+          seatAvailabilityError={seatAvailabilityError}
+          seatAvailabilityRequest={seatAvailabilityRequest}
+          enablePostBuildFetch={buildProductsReady}
+          seatSelections={seatSelections}
+          onSeatSelectionsChange={setSeatSelections}
+        />
+      </Grid>
+      <Grid item xs={12} sm={12} md={12} lg={12} mt={2}>
+        <Support />
+      </Grid>
+    </Grid>
+  );
+
+  if (!loading && !hasSelectedOffer) {
+    return (
+      <Box className="travelport-page" sx={{ backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
+        <NavBar />
+        <Container maxWidth="md" sx={{ py: 8 }}>
+          <Box
+            sx={{
+              bgcolor: "#FFFFFF",
+              borderRadius: "16px",
+              border: "1px solid #D7E6F5",
+              p: { xs: 3, md: 5 },
+              textAlign: "center",
+              boxShadow: "0 12px 28px rgba(8, 49, 85, 0.08)",
+            }}
+          >
+            <Typography
+              component="h1"
+              sx={{ fontSize: { xs: "20px", md: "24px" }, fontWeight: 800, color: "#13406B" }}
+            >
+              No Flight Offer Selected
+            </Typography>
+            <Typography sx={{ mt: 1, fontSize: "14px", color: "#526B86", maxWidth: 460, mx: "auto" }}>
+              Please select a flight from search results to review fare rules, baggage, seat map, and continue booking.
+            </Typography>
+            <Button
+              type="button"
+              variant="contained"
+              onClick={() => navigate("/")}
+              sx={{
+                mt: 3,
+                px: 3,
+                py: 1.1,
+                borderRadius: "10px",
+                textTransform: "none",
+                fontWeight: 800,
+                bgcolor: "var(--primary-button)",
+                "&:hover": { bgcolor: "var(--primary-button)" },
+              }}
+            >
+              Search Flights
+            </Button>
+          </Box>
+        </Container>
+      </Box>
+    );
+  }
+
   return (
     <Box className="travelport-page" sx={{ backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
       <NavBar />
       <Container maxWidth="xl">
         {priceError && <Alert severity="error" sx={{ mt: 3, borderRadius: 2 }} action={<Button color="inherit" onClick={() => setPriceAttempt((value) => value + 1)}>Try again</Button>}>{priceError} Your booking has not been submitted.</Alert>}
         <Grid container sx={{ pt: "50px" }} spacing={2}>
-          <Grid
-            item
-            xs={12}
-            md={3}
-            sx={{
-              display: {
-                xs: "block",
-                md: "none",
-              },
-            }}
-          >
-            <Grid contaner>
-              <Grid item xs={12} sm={12} md={12} lg={12}>
-                <BrandSelector
-                  loading={loading}
-                  options={airPriceOptions}
-                  selectedKey={selectedBrandKey}
-                  onSelect={setSelectedBrandKey}
-                />
-              </Grid>
-              <Grid item xs={12} sm={12} md={12} lg={12}>
-                <FareBreakdown
-                  loading={loading}
-                  data={selectedOffer}
-                  airPriceData={airPriceData}
-                  selectedAirPrice={selectedAirPrice}
-                />
-              </Grid>
-              <Grid item xs={12} sm={12} md={12} lg={12} mt={2}>
-                <RightSidebarInfo
-                  data={activeBookingData}
-                  seatAvailabilityData={seatAvailabilityData}
-                  seatAvailabilityLoading={seatAvailabilityLoading}
-                  seatAvailabilityError={seatAvailabilityError}
-                  seatAvailabilityRequest={seatAvailabilityRequest}
-                  enablePostBuildFetch={buildProductsReady}
-                  seatSelections={seatSelections}
-                  onSeatSelectionsChange={setSeatSelections}
-                />
-              </Grid>
-              <Grid item xs={12} sm={12} md={12} lg={12} mt={2}>
-                <Support />
-              </Grid>
+          {!isDesktopLayout && (
+            <Grid item xs={12} md={3}>
+              {sidebarContent}
             </Grid>
-          </Grid>
+          )}
           <Grid item xs={12} sm={12} md={9} lg={9}>
             <Grid container>
               {!isPassengerInputPage && (
@@ -1632,51 +1680,11 @@ const BookingDetaills = () => {
               </Grid>
             </Grid>
           </Grid>
-          <Grid
-            item
-            xs={12}
-            md={3}
-            sx={{
-              display: {
-                xs: "none",
-                md: "block",
-              },
-            }}
-          >
-            <Grid contaner>
-              <Grid item xs={12} sm={12} md={12} lg={12}>
-                <BrandSelector
-                  loading={loading}
-                  options={airPriceOptions}
-                  selectedKey={selectedBrandKey}
-                  onSelect={setSelectedBrandKey}
-                />
-              </Grid>
-              <Grid item xs={12} sm={12} md={12} lg={12}>
-                <FareBreakdown
-                  loading={loading}
-                  data={selectedOffer}
-                  airPriceData={airPriceData}
-                  selectedAirPrice={selectedAirPrice}
-                />
-              </Grid>
-              <Grid item xs={12} sm={12} md={12} lg={12} mt={2}>
-                <RightSidebarInfo
-                  data={activeBookingData}
-                  seatAvailabilityData={seatAvailabilityData}
-                  seatAvailabilityLoading={seatAvailabilityLoading}
-                  seatAvailabilityError={seatAvailabilityError}
-                  seatAvailabilityRequest={seatAvailabilityRequest}
-                  enablePostBuildFetch={buildProductsReady}
-                  seatSelections={seatSelections}
-                  onSeatSelectionsChange={setSeatSelections}
-                />
-              </Grid>
-              <Grid item xs={12} sm={12} md={12} lg={12} mt={2}>
-                <Support />
-              </Grid>
+          {isDesktopLayout && (
+            <Grid item xs={12} md={3}>
+              {sidebarContent}
             </Grid>
-          </Grid>
+          )}
         </Grid>
       </Container>
       <Dialog

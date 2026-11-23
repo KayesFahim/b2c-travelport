@@ -65,25 +65,44 @@ function persistLastSearchInBrowser({
     return;
   }
 
+  const nowIso = new Date().toISOString();
   try {
-    const nowIso = new Date().toISOString();
     window.localStorage.setItem(
       LAST_SEARCH_REQUEST_KEY,
       JSON.stringify(requestPayload)
-    );
-    window.localStorage.setItem(
-      LAST_SEARCH_RESPONSE_KEY,
-      JSON.stringify(responsePayload)
     );
     window.localStorage.setItem(
       LAST_SEARCH_META_KEY,
       JSON.stringify({
         savedAt: nowIso,
         endpoint: url,
+        offerCount: Array.isArray(responsePayload) ? responsePayload.length : 0,
       })
     );
-  } catch (storageError) {
-    console.warn("Unable to persist last search response", storageError);
+  } catch {
+    // Ignore storage quota errors for metadata
+  }
+
+  try {
+    const compactPayload = Array.isArray(responsePayload)
+      ? responsePayload.slice(0, 40).map((item) => {
+          if (!item || typeof item !== "object") return item;
+          const { sourceUnified: _ignored, ...rest } = item;
+          return rest;
+        })
+      : responsePayload;
+    const serialized = JSON.stringify(compactPayload);
+    if (serialized.length <= 1_500_000) {
+      window.localStorage.setItem(LAST_SEARCH_RESPONSE_KEY, serialized);
+    } else {
+      window.localStorage.removeItem(LAST_SEARCH_RESPONSE_KEY);
+    }
+  } catch {
+    try {
+      window.localStorage.removeItem(LAST_SEARCH_RESPONSE_KEY);
+    } catch {
+      // Ignore cleanup errors
+    }
   }
 }
 

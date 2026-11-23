@@ -416,6 +416,7 @@ const SingleFlight = ({
   groupedFlights = [],
   onSelectFlight,
   selectButtonLabel,
+  legPriceComparisonBase = null,
 }) => {
   const [flightDetails, setFlightDetails] = useState(false);
   const token = secureLocalStorage.getItem("access_token");
@@ -796,6 +797,30 @@ const SingleFlight = ({
   };
   const netFareLabel = formatFare(selectedFareOption?.NetFare);
   const grossFareLabel = formatFare(selectedFareOption?.GrossFare);
+  const hasLegPriceComparison =
+    legPriceComparisonBase !== null &&
+    legPriceComparisonBase !== undefined &&
+    Number.isFinite(Number(legPriceComparisonBase));
+  const formatPriceDelta = (
+    offerFare,
+    currencyCode = fareCurrencyCode,
+    currencySymbol = fareCurrencySymbol
+  ) => {
+    if (!hasLegPriceComparison) return null;
+    const total = Number(offerFare ?? 0);
+    const base = Number(legPriceComparisonBase);
+    if (!Number.isFinite(total) || !Number.isFinite(base)) return null;
+    const diff = Math.round((total - base) * 100) / 100;
+    if (Math.abs(diff) < 0.01) {
+      return { diff: 0, label: "+0", tone: "same" };
+    }
+    const formattedAbs = formatFare(Math.abs(diff), currencyCode, currencySymbol);
+    if (diff > 0) {
+      return { diff, label: `+${formattedAbs}`, tone: "increase" };
+    }
+    return { diff, label: `-${formattedAbs}`, tone: "decrease" };
+  };
+  const selectedFareDelta = formatPriceDelta(selectedFareOption?.NetFare);
   const brandName = getBrandName(selectedFareOption);
   const brandImageUrl = getBrandImageUrl(selectedFareOption);
 
@@ -973,27 +998,44 @@ const SingleFlight = ({
                   mb: 0.3,
                 }}
               >
-                Total Fare
+                {selectedFareDelta ? "Inbound Price Diff" : "Total Fare"}
               </Typography>
               <Typography
                 sx={{
-                  color: "var(--depature-color)",
+                  color: selectedFareDelta
+                    ? selectedFareDelta.tone === "increase"
+                      ? "#b45309"
+                      : "#047857"
+                    : "var(--depature-color)",
                   fontSize: { xs: "24px", md: "28px" },
                   fontWeight: 800,
                   lineHeight: 1.1,
                 }}
               >
-                {netFareLabel}
+                {selectedFareDelta ? selectedFareDelta.label : netFareLabel}
               </Typography>
-              <Typography
-                sx={{
-                  color: "var(--text-color)",
-                  fontSize: "12px",
-                  fontWeight: 500,
-                }}
-              >
-                <del>{grossFareLabel}</del>
-              </Typography>
+              {selectedFareDelta ? (
+                <Typography
+                  sx={{
+                    color: "#27496A",
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    mt: 0.25,
+                  }}
+                >
+                  Total: {netFareLabel}
+                </Typography>
+              ) : (
+                <Typography
+                  sx={{
+                    color: "var(--text-color)",
+                    fontSize: "12px",
+                    fontWeight: 500,
+                  }}
+                >
+                  <del>{grossFareLabel}</del>
+                </Typography>
+              )}
               <Typography
                 sx={{
                   mt: 0.45,
@@ -1092,7 +1134,9 @@ const SingleFlight = ({
               <Box component="span" aria-hidden>
                 •
               </Box>
-              <Box component="span">{netFareLabel}</Box>
+              <Box component="span">
+                {selectedFareDelta ? selectedFareDelta.label : netFareLabel}
+              </Box>
             </Button>
           </Box>
         </Grid>
@@ -1185,6 +1229,11 @@ const SingleFlight = ({
                     const optionCurrencyCode = getFlightCurrencyCode(option);
                     const optionCurrencySymbol = getCurrencySymbol(optionCurrencyCode);
                     const optionFareLabel = formatFare(
+                      option?.NetFare,
+                      optionCurrencyCode,
+                      optionCurrencySymbol
+                    );
+                    const optionDelta = formatPriceDelta(
                       option?.NetFare,
                       optionCurrencyCode,
                       optionCurrencySymbol
@@ -1325,13 +1374,29 @@ const SingleFlight = ({
                           <Typography
                             sx={{
                               fontSize: { xs: "12px", md: "13px" },
-                              color: "#0C3F68",
+                              color: optionDelta
+                                ? optionDelta.tone === "increase"
+                                  ? "#b45309"
+                                  : "#047857"
+                                : "#0C3F68",
                               fontWeight: 700,
                               whiteSpace: "nowrap",
                             }}
                           >
-                            {optionFareLabel}
+                            {optionDelta ? optionDelta.label : optionFareLabel}
                           </Typography>
+                          {optionDelta && (
+                            <Typography
+                              sx={{
+                                fontSize: "10px",
+                                color: "#526B86",
+                                fontWeight: 600,
+                                whiteSpace: "nowrap",
+                              }}
+                            >
+                              Total {optionFareLabel}
+                            </Typography>
+                          )}
                           <Typography
                             sx={{
                               mt: 0.25,

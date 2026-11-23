@@ -278,6 +278,7 @@ const RoundWaySearchResult = () => {
   const isLegBasedMode = roundTripMode === "leg_based";
   const [legStep, setLegStep] = useState("outbound"); // "outbound" | "return"
   const [outboundOffersCache, setOutboundOffersCache] = useState([]);
+  const [inboundOffersCache, setInboundOffersCache] = useState([]);
   const [selectedOutbound, setSelectedOutbound] = useState(null);
   const [nextLegLoading, setNextLegLoading] = useState(false);
   const [nextLegError, setNextLegError] = useState("");
@@ -358,6 +359,7 @@ const RoundWaySearchResult = () => {
       setLegStep("outbound");
       setSelectedOutbound(null);
       setOutboundOffersCache([]);
+      setInboundOffersCache([]);
       setNextLegError("");
       setNextLegLoading(false);
       setCurrentPage(1);
@@ -386,10 +388,18 @@ const RoundWaySearchResult = () => {
         const data = await searchTravelportFlights(effectivePayload, token);
         const normalizedData = Array.isArray(data) ? data : [];
         const usableData = isLegBasedMode
-          ? normalizedData.filter((item) => {
-              const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
-              return legs.length >= 1;
-            })
+          ? normalizedData
+              .filter((item) => {
+                const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
+                return legs.length >= 1;
+              })
+              .map((item) => {
+                const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
+                return {
+                  ...item,
+                  AllLegsInfo: legs.slice(0, 1),
+                };
+              })
           : normalizedData.filter((item) => {
               const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
               return legs.length > 1;
@@ -520,6 +530,33 @@ const RoundWaySearchResult = () => {
     };
   }, []);
 
+  const toInboundOnlyDisplayOffer = useCallback(
+    (outboundOffer, returnOffer) => {
+      const completeOffer = mergeOutboundWithReturnOffer(outboundOffer, returnOffer);
+      const completeLegs = Array.isArray(completeOffer?.AllLegsInfo)
+        ? completeOffer.AllLegsInfo
+        : [];
+      const inboundLeg =
+        completeLegs.length >= 2 ? completeLegs[1] : completeLegs[0] || null;
+      const firstInboundSegment = Array.isArray(inboundLeg?.Segments)
+        ? inboundLeg.Segments[0]
+        : null;
+
+      return {
+        ...completeOffer,
+        Carrier: firstInboundSegment?.MarketingCarrier || completeOffer?.Carrier || "",
+        CarrierName:
+          firstInboundSegment?.MarketingCarrierName ||
+          completeOffer?.CarrierName ||
+          completeOffer?.Carrier ||
+          "",
+        AllLegsInfo: inboundLeg ? [inboundLeg] : [],
+        __completeRoundTripOffer: completeOffer,
+      };
+    },
+    [mergeOutboundWithReturnOffer]
+  );
+
   const handleSelectOutbound = useCallback(
     async (outboundOffer) => {
       if (!outboundOffer) return;
@@ -543,6 +580,7 @@ const RoundWaySearchResult = () => {
 
       setSelectedOutbound(outboundOffer);
       setLegStep("return");
+      setInboundOffersCache([]);
       setNextLegLoading(true);
       setNextLegError("");
       setCurrentPage(1);
@@ -564,34 +602,36 @@ const RoundWaySearchResult = () => {
         const rawReturnOffers = Array.isArray(nextLegResponse?.offers)
           ? nextLegResponse.offers
           : [];
-        const mergedReturnOffers = rawReturnOffers.map((item) =>
-          mergeOutboundWithReturnOffer(outboundOffer, item)
+        const inboundDisplayOffers = rawReturnOffers.map((item) =>
+          toInboundOnlyDisplayOffer(outboundOffer, item)
         );
 
-        setFlights(mergedReturnOffers);
-        setFilteredFlights(mergedReturnOffers);
-        setInitialFetchData(mergedReturnOffers);
-        updatePriceBounds(mergedReturnOffers);
+        setInboundOffersCache(inboundDisplayOffers);
+        setFlights(inboundDisplayOffers);
+        setFilteredFlights(inboundDisplayOffers);
+        setInitialFetchData(inboundDisplayOffers);
+        updatePriceBounds(inboundDisplayOffers);
 
-        if (mergedReturnOffers.length === 0) {
+        if (inboundDisplayOffers.length === 0) {
           setNextLegError(
-            "No combinable return flights were returned for this outbound selection. Try selecting another outbound flight."
+            "No combinable inbound flights were returned for this outbound selection. Try selecting another outbound flight."
           );
         }
       } catch (error) {
+        setInboundOffersCache([]);
         setFlights([]);
         setFilteredFlights([]);
         setInitialFetchData([]);
         updatePriceBounds([]);
         setNextLegError(
-          error?.message || "Failed to fetch return flights from Travelport Next Leg API."
+          error?.message || "Failed to fetch inbound flights from Travelport Next Leg API."
         );
       } finally {
         setNextLegLoading(false);
       }
     },
     [
-      mergeOutboundWithReturnOffer,
+      toInboundOnlyDisplayOffer,
       resolvedSearchContext?.payload?.contentSourceList,
       resolvedSearchContext?.payload?.segments,
       token,
@@ -599,9 +639,33 @@ const RoundWaySearchResult = () => {
     ]
   );
 
+  const handleSwitchToOutboundTab = useCallback(() => {
+    setLegStep("outbound");
+    setNextLegError("");
+    setNextLegLoading(false);
+    setCurrentPage(1);
+    setFlights(outboundOffersCache);
+    setFilteredFlights(outboundOffersCache);
+    setInitialFetchData(outboundOffersCache);
+    updatePriceBounds(outboundOffersCache);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [outboundOffersCache, updatePriceBounds]);
+
+  const handleSwitchToInboundTab = useCallback(() => {
+    if (!selectedOutbound) return;
+    setLegStep("return");
+    setCurrentPage(1);
+    setFlights(inboundOffersCache);
+    setFilteredFlights(inboundOffersCache);
+    setInitialFetchData(inboundOffersCache);
+    updatePriceBounds(inboundOffersCache);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [inboundOffersCache, selectedOutbound, updatePriceBounds]);
+
   const handleChangeOutbound = useCallback(() => {
     setLegStep("outbound");
     setSelectedOutbound(null);
+    setInboundOffersCache([]);
     setNextLegError("");
     setNextLegLoading(false);
     setCurrentPage(1);
@@ -614,11 +678,15 @@ const RoundWaySearchResult = () => {
 
   const handleSelectReturnAndBook = useCallback(
     (returnOffer) => {
-      const completeOffer = selectedOutbound
-        ? mergeOutboundWithReturnOffer(selectedOutbound, returnOffer)
-        : returnOffer;
+      const completeOffer =
+        returnOffer?.__completeRoundTripOffer ||
+        (selectedOutbound
+          ? mergeOutboundWithReturnOffer(selectedOutbound, returnOffer)
+          : returnOffer);
+      const { __completeRoundTripOffer: _unused, ...cleanCompleteOffer } =
+        completeOffer || {};
       const bookingState = {
-        selectedOffer: completeOffer || {},
+        selectedOffer: cleanCompleteOffer,
         source: "search-results-leg-based",
         selectedAt: new Date().toISOString(),
       };
@@ -1562,33 +1630,70 @@ const RoundWaySearchResult = () => {
                 </Box>
 
                 {isLegBasedMode && (
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Chip
-                      size="small"
-                      label={`1. Outbound (${displayContext.fromCode}→${displayContext.toCode})`}
-                      aria-current={legStep === "outbound" ? "step" : undefined}
+                  <Box
+                    role="tablist"
+                    aria-label="Leg-Based Outbound and Inbound Tabs"
+                    sx={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 0.75,
+                      p: "3px",
+                      borderRadius: "12px",
+                      bgcolor: "#eaf4fc",
+                      border: "1px solid #c5dff3",
+                    }}
+                  >
+                    <Button
+                      type="button"
+                      role="tab"
+                      aria-selected={legStep === "outbound"}
+                      onClick={handleSwitchToOutboundTab}
                       sx={{
-                        fontWeight: 700,
-                        bgcolor:
-                          legStep === "outbound"
-                            ? "#007bb0"
-                            : "rgba(16, 185, 129, 0.16)",
-                        color: legStep === "outbound" ? "#ffffff" : "#047857",
+                        textTransform: "none",
+                        fontWeight: 800,
+                        fontSize: "12.5px",
+                        borderRadius: "9px",
+                        px: 1.6,
+                        py: 0.6,
+                        minHeight: "36px",
+                        bgcolor: legStep === "outbound" ? "#007bb0" : "transparent",
+                        color: legStep === "outbound" ? "#ffffff" : "#0b4a82",
+                        "&:hover": {
+                          bgcolor:
+                            legStep === "outbound" ? "#006a99" : "rgba(0,123,176,0.1)",
+                        },
                       }}
-                    />
-                    <Typography sx={{ color: "#64748b", fontWeight: 700 }}>→</Typography>
-                    <Chip
-                      size="small"
-                      label={`2. Return (${displayContext.toCode}→${displayContext.fromCode})`}
-                      aria-current={legStep === "return" ? "step" : undefined}
+                    >
+                      1. Outbound ({displayContext.fromCode} → {displayContext.toCode})
+                    </Button>
+                    <Button
+                      type="button"
+                      role="tab"
+                      aria-selected={legStep === "return"}
+                      disabled={!selectedOutbound}
+                      onClick={handleSwitchToInboundTab}
                       sx={{
-                        fontWeight: 700,
-                        bgcolor:
-                          legStep === "return" ? "#007bb0" : "rgba(100, 116, 139, 0.14)",
-                        color: legStep === "return" ? "#ffffff" : "#475569",
+                        textTransform: "none",
+                        fontWeight: 800,
+                        fontSize: "12.5px",
+                        borderRadius: "9px",
+                        px: 1.6,
+                        py: 0.6,
+                        minHeight: "36px",
+                        bgcolor: legStep === "return" ? "#007bb0" : "transparent",
+                        color: legStep === "return" ? "#ffffff" : "#0b4a82",
+                        "&:hover": {
+                          bgcolor:
+                            legStep === "return" ? "#006a99" : "rgba(0,123,176,0.1)",
+                        },
+                        "&.Mui-disabled": {
+                          color: "#94a3b8",
+                        },
                       }}
-                    />
-                  </Stack>
+                    >
+                      2. Inbound ({displayContext.toCode} → {displayContext.fromCode})
+                    </Button>
+                  </Box>
                 )}
               </Box>
 
@@ -1615,7 +1720,9 @@ const RoundWaySearchResult = () => {
                         color: "#047857",
                       }}
                     >
-                      Selected Outbound Flight (Locked for Next Leg)
+                      Selected Outbound Flight (Base Fare:{" "}
+                      {getCurrencySymbol(getFlightCurrencyCode(selectedOutbound))}
+                      {Number(selectedOutbound?.NetFare || 0).toLocaleString()} — Inbound shows +0 or difference)
                     </Typography>
                     <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#0f2942", mt: 0.2 }}>
                       {selectedOutbound?.CarrierName || selectedOutbound?.Carrier || "Airline"} •{" "}
@@ -1752,8 +1859,13 @@ const RoundWaySearchResult = () => {
                           isLegBasedMode
                             ? legStep === "outbound"
                               ? "Select Outbound"
-                              : "Book Combined Fare"
+                              : "Select Inbound & Book"
                             : "Book Now"
+                        }
+                        legPriceComparisonBase={
+                          isLegBasedMode && legStep === "return" && selectedOutbound
+                            ? Number(selectedOutbound?.NetFare ?? selectedOutbound?.GrossFare ?? 0)
+                            : null
                         }
                       />
                     </Grid>

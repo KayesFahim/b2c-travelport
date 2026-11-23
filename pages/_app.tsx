@@ -67,7 +67,7 @@ export default function NextApp({ Component, pageProps }: AppProps) {
         <meta name="twitter:image" content={`${siteUrl}/logo2.jpg`} />
       </Head>
       <Component {...pageProps} />
-      {process.env.NODE_ENV === "production" ? <SpeedInsights /> : null}
+      {process.env.NEXT_PUBLIC_VERCEL_ENV ? <SpeedInsights /> : null}
     </>
   );
 }
