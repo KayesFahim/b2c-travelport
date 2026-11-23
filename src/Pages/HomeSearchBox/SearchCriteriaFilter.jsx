@@ -24,7 +24,7 @@ import {
   normalizeTravelportSearchFilters,
 } from "../../utils/travelportSearchCriteria";
 
-const SearchCriteriaFilter = ({ filters, onChange }) => {
+const SearchCriteriaFilter = ({ filters, onChange, compact = false }) => {
   const reactId = useId();
   const baseId = useMemo(
     () => `tp-filter-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`,
@@ -244,20 +244,20 @@ const SearchCriteriaFilter = ({ filters, onChange }) => {
         <button
           ref={triggerRef}
           type="button"
-          className="flyjatt-filter-trigger flyjatt-touch-btn"
+          className={`flyjatt-filter-trigger${compact ? " is-compact" : " flyjatt-touch-btn"}`}
           aria-expanded={isOpen}
           aria-controls={popoverId}
           onClick={supportsNativePopover ? undefined : handleFallbackToggle}
         >
-          <TuneRoundedIcon sx={{ fontSize: 18, color: "#007bb0" }} />
+          <TuneRoundedIcon sx={{ fontSize: compact ? 16 : 18, color: "#007bb0" }} />
           <span>Search Criteria</span>
           <span
             style={{
               display: "inline-flex",
               alignItems: "center",
-              padding: "2px 8px",
+              padding: compact ? "1px 7px" : "2px 8px",
               borderRadius: "999px",
-              fontSize: "0.75rem",
+              fontSize: compact ? "0.7rem" : "0.75rem",
               fontWeight: 800,
               backgroundColor: "rgba(0, 123, 176, 0.12)",
               color: "#0b4a82",
@@ -353,7 +353,7 @@ const SearchCriteriaFilter = ({ filters, onChange }) => {
       <div
         id={popoverId}
         ref={popoverRef}
-        className={`flyjatt-filter-popover${
+        className={`flyjatt-filter-popover${compact ? " is-compact-aligned" : ""}${
           !supportsNativePopover && isOpen ? " flyjatt-popover-fallback-open" : ""
         }`}
         hidden={supportsNativePopover ? undefined : !isOpen}

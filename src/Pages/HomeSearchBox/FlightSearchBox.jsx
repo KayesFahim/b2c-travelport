@@ -380,7 +380,18 @@ const FlightSearchBox = ({
           </Typography>
         </Box>
 
-        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+        <Stack
+          direction="row"
+          spacing={1}
+          alignItems="center"
+          flexWrap="wrap"
+          useFlexGap
+        >
+          <SearchCriteriaFilter
+            filters={effectiveSearchFilters}
+            onChange={handleSearchFiltersChange}
+            compact
+          />
           <Chip
             size="small"
             label={currentTripLabel}
@@ -475,22 +486,17 @@ const FlightSearchBox = ({
         })}
       </Box>
 
-      <Box
-        sx={{
-          display: "flex",
-          flexWrap: "wrap",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 1.1,
-          mb: 1.5,
-        }}
-      >
-        <SearchCriteriaFilter
-          filters={effectiveSearchFilters}
-          onChange={handleSearchFiltersChange}
-        />
-
-        {valueBox === "roundway" && (
+      {valueBox === "roundway" && (
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            alignItems: "center",
+            justifyContent: "flex-end",
+            gap: 1.1,
+            mb: 1.4,
+          }}
+        >
           <Box
             sx={{
               display: "inline-flex",
@@ -553,8 +559,8 @@ const FlightSearchBox = ({
               }}
             />
           </Box>
-        )}
-      </Box>
+        </Box>
+      )}
 
       <Box
         sx={{

@@ -418,6 +418,21 @@
   transition: box-shadow 150ms ease-out, scale 150ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out;
 }
 
+.flyjatt-filter-trigger.is-compact {
+  min-block-size: 30px;
+  gap: 0.38rem;
+  padding-block: 0.2rem;
+  padding-inline: 0.68rem;
+  border-radius: 999px;
+  font-size: 0.78rem;
+}
+
+@media (pointer: coarse) {
+  .flyjatt-filter-trigger.is-compact {
+    min-block-size: 40px;
+  }
+}
+
 .flyjatt-filter-trigger:hover {
   border-color: #007bb0;
   background-color: #f4fafe;
@@ -495,6 +510,12 @@
     margin-block-start: 0.45rem;
     position-area: block-end span-inline-end;
     position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  }
+
+[popover].flyjatt-filter-popover.is-compact-aligned {
+    position-area: block-end span-inline-start;
+    transform-origin: top right;
+    position-try-fallbacks: flip-inline, flip-block, flip-block flip-inline;
   }
 }
 
