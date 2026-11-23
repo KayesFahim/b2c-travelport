@@ -1,16 +1,17 @@
 {
   "provider": "Travelport",
-  "transactionId": "545ec8d9a85695fca4d067187fc79431",
+  "contentSource": "GDS",
+  "transactionId": "dadf6cfec97a79cad41433265c4caa4b",
   "identifier": "o1",
   "offerIdentifier": "o1",
   "OfferIdentifier": "o1",
-  "offerListIdentifier": "05ff4b3c-5d9c-483b-88a8-872c594190f6",
+  "offerListIdentifier": "e2055413-c8d8-408d-984e-9e00f8554e36",
   "productIdentifiers": [
     "p0"
   ],
   "farePolicyRequest": {
     "offerIdentifier": "o1",
-    "offerListIdentifier": "05ff4b3c-5d9c-483b-88a8-872c594190f6",
+    "offerListIdentifier": "e2055413-c8d8-408d-984e-9e00f8554e36",
     "productIdentifiers": [
       "p0"
     ]
@@ -18,41 +19,41 @@
   "instantPayment": false,
   "issuePermit": true,
   "isBookable": true,
-  "journeyType": "ONE_WAY",
-  "tripType": "ONE_WAY",
+  "journeyType": "ROUND_TRIP_LEG",
+  "tripType": "ROUND_TRIP_LEG",
   "fareType": "PublicFare",
-  "carrierCode": "QR",
-  "carrierName": "QR",
+  "carrierCode": "EK",
+  "carrierName": "EK",
   "cabinClass": "Economy",
   "currencyCode": "USD",
-  "baseFare": 763,
-  "taxes": 328.99,
-  "netFare": 1091.99,
-  "grossFare": 1091.99,
+  "baseFare": 1087,
+  "taxes": 459.69,
+  "netFare": 1546.69,
+  "grossFare": 1546.69,
   "markUp": "0",
-  "timeLimit": "2026-11-22T23:59:00Z",
+  "timeLimit": "2026-12-28T23:59:00Z",
   "refundable": true,
-  "totalSegments": 2,
+  "totalSegments": 1,
   "amenities": {
     "basic": [
-      {
-        "classification": "Refund",
-        "inclusion": "Not Offered"
-      },
-      {
-        "classification": "Rebooking",
-        "inclusion": "Included"
-      },
       {
         "classification": "Meals",
         "inclusion": "Included"
       },
       {
-        "classification": "WiFi",
-        "inclusion": "Included"
+        "classification": "Rebooking",
+        "inclusion": "Chargeable"
+      },
+      {
+        "classification": "Refund",
+        "inclusion": "Chargeable"
       },
       {
         "classification": "CarryOn",
+        "inclusion": "Included"
+      },
+      {
+        "classification": "WiFi",
         "inclusion": "Included"
       },
       {
@@ -62,8 +63,8 @@
     ],
     "additional": [
       {
-        "classification": "Mileage Accrual",
-        "inclusion": "Included"
+        "classification": "Priority CheckIn",
+        "inclusion": "Not Offered"
       },
       {
         "classification": "In Flight Entertainment",
@@ -71,15 +72,7 @@
       },
       {
         "classification": "Lounge Access",
-        "inclusion": "Chargeable"
-      },
-      {
-        "classification": "Priority Boarding",
-        "inclusion": "Chargeable"
-      },
-      {
-        "classification": "Priority CheckIn",
-        "inclusion": "Chargeable"
+        "inclusion": "Not Offered"
       }
     ]
   },
@@ -94,7 +87,7 @@
         ],
         "appliesTo": "PerTicket",
         "amount": {
-          "value": 275,
+          "value": 150,
           "currencyCode": "USD"
         }
       }
@@ -105,17 +98,7 @@
           "ADT"
         ],
         "penaltyTypes": [
-          "NoShow"
-        ],
-        "appliesTo": "PerTicket",
-        "amount": null
-      },
-      {
-        "passengerTypeCodes": [
-          "ADT"
-        ],
-        "penaltyTypes": [
-          "Anytime"
+          "AfterDeparture"
         ],
         "appliesTo": "PerTicket",
         "amount": null
@@ -125,12 +108,12 @@
   "priceBreakDown": [
     {
       "paxType": "ADT",
-      "baseFare": 763,
-      "taxes": 328.99,
-      "totalFare": 1091.99,
+      "baseFare": 1087,
+      "taxes": 459.69,
+      "totalFare": 1546.69,
       "paxCount": 1,
       "bag": {
-        "airline": "QR",
+        "airline": "EK",
         "allowance": [
           {
             "type": "Checked",
@@ -145,404 +128,126 @@
   ],
   "allLegsInfo": [
     {
-      "departureDate": "2026-12-18",
+      "departureDate": "2026-12-31",
       "departureFrom": "DXB",
       "arrivalTo": "JFK",
-      "totalDuration": "PT18H20M",
-      "brandName": "Main Cabin",
-      "brandCode": "MAIN",
+      "totalDuration": "PT18H40M",
+      "brandName": "Economy Flex",
+      "brandCode": "EcoFlex",
       "brandTier": "3",
       "brandFeatures": {
-        "name": "Main Cabin",
+        "name": "Economy Flex",
         "tier": 3,
         "shelfNumbers": [],
-        "code": "MAIN",
+        "code": "EcoFlex",
         "id": "b0",
         "Identifier": {
-          "value": "2156407"
+          "value": "1380518"
         },
         "BrandAttribute": [
           {
-            "classification": "Refund",
-            "inclusion": "Not Offered",
-            "groupCode": "BF",
-            "subGroupCode": "RF",
-            "subCode": "056"
+            "classification": "Meals",
+            "inclusion": "Included",
+            "groupCode": "ML"
           },
           {
             "classification": "Rebooking",
-            "inclusion": "Included",
-            "groupCode": "BF",
-            "subGroupCode": "VC",
-            "subCode": "059"
+            "inclusion": "Chargeable",
+            "groupCode": "RO",
+            "subGroupCode": "31"
           },
           {
-            "classification": "Meals",
-            "inclusion": "Included",
-            "groupCode": "ML",
-            "subGroupCode": "SN",
-            "subCode": "0AT"
-          },
-          {
-            "classification": "WiFi",
-            "inclusion": "Included",
-            "groupCode": "IE",
-            "subGroupCode": "IT",
-            "subCode": "032"
+            "classification": "Refund",
+            "inclusion": "Chargeable",
+            "groupCode": "RO",
+            "subGroupCode": "33"
           },
           {
             "classification": "CarryOn",
             "inclusion": "Included",
             "groupCode": "BG",
-            "subGroupCode": "CY",
-            "subCode": "0MM"
+            "subGroupCode": "CY"
+          },
+          {
+            "classification": "WiFi",
+            "inclusion": "Included",
+            "groupCode": "IE",
+            "subGroupCode": "IT"
           },
           {
             "classification": "SeatAssignment",
             "inclusion": "Included",
-            "groupCode": "SA",
-            "subCode": "PSA"
+            "groupCode": "SA"
           }
         ],
         "AdditionalBrandAttribute": [
           {
-            "groupCode": "BF",
-            "subGroupCode": "FR",
-            "subCode": "057",
-            "Classification": "Mileage Accrual",
-            "Inclusion": "Included"
+            "groupCode": "TS",
+            "subGroupCode": "CI",
+            "Classification": "Priority CheckIn",
+            "Inclusion": "Not Offered"
           },
           {
             "groupCode": "IE",
-            "subCode": "0B1",
             "Classification": "In Flight Entertainment",
             "Inclusion": "Included"
           },
           {
             "groupCode": "LG",
-            "subCode": "0BX",
             "Classification": "Lounge Access",
-            "Inclusion": "Chargeable"
-          },
-          {
-            "groupCode": "TS",
-            "subGroupCode": "PR",
-            "subCode": "0G6",
-            "Classification": "Priority Boarding",
-            "Inclusion": "Chargeable"
-          },
-          {
-            "groupCode": "TS",
-            "subGroupCode": "PO",
-            "subCode": "03P",
-            "Classification": "Priority CheckIn",
-            "Inclusion": "Chargeable"
+            "Inclusion": "Not Offered"
           }
+        ],
+        "ImageURL": [
+          "https://cdn.travelport.com/emirates/EK_general_medium_281052.JPG"
         ]
       },
       "segments": [
         {
-          "marketingCarrier": "QR",
-          "marketingCarrierName": "QR",
-          "marketingFlightNumber": "1019",
-          "operatingCarrier": "QR",
-          "operatingFlightNumber": "1019",
-          "operatingCarrierName": "QR",
+          "marketingCarrier": "EK",
+          "marketingCarrierName": "EK",
+          "marketingFlightNumber": "209",
+          "operatingCarrier": "EK",
+          "operatingFlightNumber": "209",
+          "operatingCarrierName": "EK",
           "depFrom": "DXB",
           "depAirport": "DXB",
           "depLocation": "DXB",
           "depDateAdjustment": 0,
-          "depTime": "2026-12-18T22:50:00",
-          "arrTo": "DOH",
-          "arrAirport": "DOH",
-          "arrLocation": "DOH",
+          "depTime": "2026-12-31T11:30:00",
+          "arrTo": "EWR",
+          "arrAirport": "EWR",
+          "arrLocation": "EWR",
           "arrDateAdjustment": 0,
-          "arrTime": "2026-12-18T23:05:00",
-          "operatedBy": "QR",
+          "arrTime": "2026-12-31T21:10:00",
+          "operatedBy": "EK",
           "stopCount": 0,
-          "duration": "PT1H15M",
-          "aircraftTypeName": "359",
-          "departureGate": "1",
-          "arrivalGate": "TBA",
+          "duration": "PT18H40M",
+          "aircraftTypeName": "77W",
+          "departureGate": "3",
+          "arrivalGate": "B",
           "hiddenStops": [],
-          "totalMilesFlown": 229,
-          "availabilitySourceCode": "S",
+          "totalMilesFlown": 6846,
+          "availabilitySourceCode": "Q",
+          "contentSource": "GDS",
           "brandTier": "3",
           "segmentCode": {
-            "bookingCode": "N",
+            "bookingCode": "K",
             "cabinCode": "Economy",
-            "seatsAvailable": 7,
-            "fareBasisCode": "NLW0OCN1",
+            "seatsAvailable": 9,
+            "fareBasisCode": "KLXESAE1",
             "fareTypeCode": "PublicFare"
           },
-          "amenities": [
-            {
-              "id": "a1",
-              "category": "Layout",
-              "text": "3-3-3 seat layout"
-            },
-            {
-              "id": "a4",
-              "category": "Beverage",
-              "text": "Alcohol & beverages provided"
-            },
-            {
-              "id": "a15",
-              "category": "Seat",
-              "text": "79 cm seat pitch"
-            },
-            {
-              "id": "a16",
-              "category": "Food",
-              "text": "Meal provided"
-            },
-            {
-              "id": "a19",
-              "category": "WiFi",
-              "text": "Ultra-fast Wi-Fi"
-            },
-            {
-              "id": "a26",
-              "category": "Aircraft",
-              "text": "A350 (widebody)"
-            },
-            {
-              "id": "a29",
-              "category": "Power",
-              "text": "Power & USB outlets"
-            },
-            {
-              "id": "a32",
-              "category": "Entertainment",
-              "text": "Seatback on-demand video"
-            }
-          ],
-          "amenityRefs": [
-            "a1",
-            "a4",
-            "a15",
-            "a16",
-            "a19",
-            "a26",
-            "a29",
-            "a32"
-          ],
-          "universalProductAttributeRefs": [
-            "u0",
-            "u5",
-            "u22",
-            "u33",
-            "u35",
-            "u37",
-            "u38",
-            "u40",
-            "u43",
-            "u49",
-            "u51",
-            "u56",
-            "u67",
-            "u68",
-            "u75"
-          ],
-          "universalProductAttributes": [
-            {
-              "id": "u0",
-              "headline": "Starlink: The fastest Wi‑Fi in the sky",
-              "description": "Thanks to Starlink, you’ll enjoy complimentary, seamless, ultra‑fast Wi‑Fi with speeds of up to 500 megabits per second.",
-              "iconSmall": "https://upamedia.atpco.net/icons/c13dbb98-a915-452e-8c4e-193332c7eb36/small/Wi-Fi.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/c13dbb98-a915-452e-8c4e-193332c7eb36/large/Wi-Fi.png"
-            },
-            {
-              "id": "u5",
-              "headline": "Unparalleled comfort",
-              "description": "relax in one of the widest seats in the industry, with an adjustable headrest and soft cushioning to provide support and ultimate comfort.",
-              "iconSmall": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/large/Seat.png"
-            },
-            {
-              "id": "u22",
-              "headline": "Economy Comfort fares",
-              "description": "Unlock the highest level of flexibility, preferred seating, and full premium benefits for a stress‑free journey.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u33",
-              "headline": "Enjoy our Standard Seat",
-              "description": "Standard Seats include window, aisle and middle seats, and are located towards the rear of the cabin behind Preferred Seats.",
-              "iconSmall": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/large/Seat.png"
-            },
-            {
-              "id": "u35",
-              "headline": "Business Lite fares",
-              "description": "Choose a streamlined option designed for travellers who value simplicity,with lounge access available for an additional fee.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u37",
-              "headline": "Choose your Preferred Seat",
-              "description": "Preferred Seats are at the front of the Economy Class cabin, allowing you to leave the aircraft more swiftly upon arrival.",
-              "iconSmall": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/large/Seat.png"
-            },
-            {
-              "id": "u38",
-              "headline": "First Class Elite",
-              "description": "Choose Elite for the highest level of refinement, offering elevated personal space, seamless flexibility, and premium service throughout.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u40",
-              "headline": "A world of flavour awaits",
-              "description": "Delight your taste buds with regionally inspired flavours, skilfully prepared by award‑winning chefs.",
-              "iconSmall": "https://upamedia.atpco.net/icons/0fd514ae-5d32-4677-910a-92d4ff0b7c70/small/meals-beverage.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/0fd514ae-5d32-4677-910a-92d4ff0b7c70/large/meals-beverage.png"
-            },
-            {
-              "id": "u43",
-              "headline": "Movie night in the sky",
-              "description": "Enjoy the latest blockbuster movies, TV shows, games and music, along with delicious movie snacks, to really create that cinema feeling.",
-              "iconSmall": "https://upamedia.atpco.net/icons/bbbe68c4-912f-4819-aa9b-a3765468c2cb/small/entertainment.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/bbbe68c4-912f-4819-aa9b-a3765468c2cb/large/entertainment.png"
-            },
-            {
-              "id": "u49",
-              "headline": "Economy Elite fares",
-              "description": "Choose Business Elite for the highest level of premium travel, with maximum flexibility and full Avios accumulation.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u51",
-              "headline": "Economy Lite fares",
-              "description": "Choose a streamlined option designed for travellers who value simplicity, offering essential benefits at the most accessible fare.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u56",
-              "headline": "Economy Classic fares",
-              "description": "Access added value with greater flexibility, more generous baggage, and comfort features that support a smooth and reliable journey.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u67",
-              "headline": "Benefit from extra legroom",
-              "description": "Extra Legroom Seats are located in the exit rows and bulk head seats offering more room to stretch your legs out.",
-              "iconSmall": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/small/Seat.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/fb5c6997-f4de-4235-830a-556b212c1cf4/large/Seat.png"
-            },
-            {
-              "id": "u68",
-              "headline": "Business Comfort fares",
-              "description": "Fly Business Comfort for elevated flexibility and enhanced refinement, with complimentary seat selection at the time of booking.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            },
-            {
-              "id": "u75",
-              "headline": "Business Classic fares",
-              "description": "Select a Classic fare for added value and key benefits, including access to lounges where available.",
-              "iconSmall": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/small/custom.png",
-              "iconLarge": "https://upamedia.atpco.net/icons/17a31597-d2fc-47ec-8624-021aeef53530/large/custom.png"
-            }
-          ]
-        },
-        {
-          "marketingCarrier": "AA",
-          "marketingCarrierName": "AA",
-          "marketingFlightNumber": "8308",
-          "operatingCarrier": "QR",
-          "operatingFlightNumber": "703",
-          "operatingCarrierName": "QATAR AIRWAYS",
-          "depFrom": "DOH",
-          "depAirport": "DOH",
-          "depLocation": "DOH",
-          "depDateAdjustment": 0,
-          "depTime": "2026-12-19T01:25:00",
-          "arrTo": "JFK",
-          "arrAirport": "JFK",
-          "arrLocation": "JFK",
-          "arrDateAdjustment": 0,
-          "arrTime": "2026-12-19T08:10:00",
-          "operatedBy": "QR",
-          "stopCount": 0,
-          "duration": "PT14H45M",
-          "aircraftTypeName": "777",
-          "departureGate": "TBA",
-          "arrivalGate": "8",
-          "hiddenStops": [],
-          "totalMilesFlown": 6691,
-          "availabilitySourceCode": "S",
-          "brandTier": "3",
-          "segmentCode": {
-            "bookingCode": "N",
-            "cabinCode": "Economy",
-            "seatsAvailable": 7,
-            "fareBasisCode": "NLW0OCN1",
-            "fareTypeCode": "PublicFare"
-          },
-          "amenities": [
-            {
-              "id": "a4",
-              "category": "Beverage",
-              "text": "Alcohol & beverages provided"
-            },
-            {
-              "id": "a10",
-              "category": "Seat",
-              "text": "79 cm seat pitch"
-            },
-            {
-              "id": "a16",
-              "category": "Food",
-              "text": "Meal provided"
-            },
-            {
-              "id": "a18",
-              "category": "Aircraft",
-              "text": "777 (widebody)"
-            },
-            {
-              "id": "a19",
-              "category": "WiFi",
-              "text": "Ultra-fast Wi-Fi"
-            },
-            {
-              "id": "a29",
-              "category": "Power",
-              "text": "Power & USB outlets"
-            },
-            {
-              "id": "a30",
-              "category": "Layout",
-              "text": "3-4-3 seat layout"
-            },
-            {
-              "id": "a32",
-              "category": "Entertainment",
-              "text": "Seatback on-demand video"
-            }
-          ],
-          "amenityRefs": [
-            "a4",
-            "a10",
-            "a16",
-            "a18",
-            "a19",
-            "a29",
-            "a30",
-            "a32"
-          ],
+          "amenities": [],
+          "amenityRefs": [],
           "universalProductAttributeRefs": [],
           "universalProductAttributes": []
         }
       ]
     }
   ],
-  "combination": "j1"
+  "combination": "j1",
+  "isLegBased": true,
+  "searchRepresentation": "Leg",
+  "legSequence": 1
 }

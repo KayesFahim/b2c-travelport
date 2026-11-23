@@ -118,46 +118,46 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         },
         SearchRadius: {
           "@type": "SearchRadius",
-          value: radiusValue,
+          value: Math.min(25, radiusValue),
           unitOfDistance: "Kilometers",
         },
       }
     : airportCode
       ? {
           "@type": "SearchByAirport",
-          Airport: airportCode,
+          SearchAirport: airportCode,
           SearchRadius: {
             "@type": "SearchRadius",
-            value: radiusValue,
+            value: Math.min(25, radiusValue),
             unitOfDistance: "Kilometers",
           },
         }
       : {
           "@type": "SearchByCity",
-          City: resolvedCode || destinationRaw,
+          SearchCity: resolvedCode || destinationRaw,
           SearchRadius: {
             "@type": "SearchRadius",
-            value: radiusValue,
+            value: Math.min(25, radiusValue),
             unitOfDistance: "Kilometers",
           },
         };
+
+  const roomStayCandidates = Array.from({ length: rooms }, () => ({
+    "@type": "RoomStayCandidate",
+    GuestCounts: {
+      "@type": "GuestCounts",
+      GuestCount: guestCountItems,
+    },
+  }));
 
   const requestPayload: Record<string, unknown> = {
     PropertiesQuerySearch: {
       "@type": "PropertiesQuerySearch",
       CheckInDate: checkIn,
       CheckOutDate: checkOut,
-      NumberOfRooms: rooms,
-      RoomStayCandidate: {
-        "@type": "RoomStayCandidate",
-        GuestCounts: {
-          "@type": "GuestCounts",
-          GuestCount: guestCountItems,
-        },
-      },
+      RoomStayCandidate: roomStayCandidates,
       SearchBy: searchBy,
       RequestedCurrency: currency,
-      returnOnlyAvailablePropertiesInd: body.returnOnlyAvailable !== false,
       ...(hotelName ? { HotelName: hotelName } : {}),
       ...(chainCodes.length > 0 ? { ChainCodes: chainCodes } : {}),
       ...(minStarRating >= 1 && minStarRating <= 5
@@ -188,6 +188,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (!result.ok) {
       return res.status(result.status >= 400 ? result.status : 502).json({
         success: false,
+        code: "TRAVELPORT_HOTEL_SEARCH_ERROR",
         source: "travelport-live",
         message: result.errorMessage,
         status: result.status,
@@ -218,6 +219,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       nights,
       count: properties.length,
       properties,
+      ...(properties.length === 0 && result.errorMessage
+        ? { warning: result.errorMessage }
+        : {}),
       searchCriteria: {
         destination: destinationRaw || resolvedCode,
         cityCode: resolvedCode,

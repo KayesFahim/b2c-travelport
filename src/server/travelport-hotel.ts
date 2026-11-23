@@ -102,6 +102,7 @@ export async function callTravelportHotelApi(params: {
   correlationId: string;
   data: Record<string, unknown>;
   errorMessage: string;
+  hasPayloadErrors: boolean;
   isProvisioningError: boolean;
 }> {
   const accessToken = await getTravelportAccessToken();
@@ -166,12 +167,13 @@ export async function callTravelportHotelApi(params: {
     /INTERNAL SERVER ERROR|NOT AUTHORIZED|ENTITLEMENT|PROVISION/i.test(errorMessage);
 
   return {
-    ok: response.ok && !hasHotelPayloadErrors(data),
+    ok: response.ok,
     status: response.status,
     url,
     correlationId,
     data,
     errorMessage,
+    hasPayloadErrors: hasHotelPayloadErrors(data),
     isProvisioningError,
   };
 }
@@ -191,6 +193,7 @@ export function extractHotelErrorMessage(
   status: number
 ): string {
   const candidates: unknown[] = [
+    (payload as any)?.ErrorResponse?.Result?.Error?.[0]?.Message,
     (payload as any)?.PropertiesResponse?.Result?.Error?.[0]?.Message,
     (payload as any)?.CatalogOfferingsHospitalityResponse?.Result?.Error?.[0]?.Message,
     (payload as any)?.OfferListResponse?.Result?.Error?.[0]?.Message,
@@ -219,6 +222,7 @@ export function extractHotelErrorMessage(
 
 export function hasHotelPayloadErrors(payload: Record<string, unknown>): boolean {
   const errorLists = [
+    (payload as any)?.ErrorResponse?.Result?.Error,
     (payload as any)?.PropertiesResponse?.Result?.Error,
     (payload as any)?.CatalogOfferingsHospitalityResponse?.Result?.Error,
     (payload as any)?.OfferListResponse?.Result?.Error,
@@ -288,21 +292,32 @@ export function normalizeHotelSearchResponse(
         : [];
     const imageUrl = toStr(images[0]?.url || images[0]?.value || images[0]);
 
-    const minAmountObj =
+    const lowestRateObj =
+      entry?.LowestAvailableRate ||
       entry?.MinimumAmount ||
       entry?.LowestRate ||
       entry?.Price ||
       detail?.MinimumAmount ||
       {};
     const currencyCode = toStr(
-      minAmountObj?.code || minAmountObj?.CurrencyCode?.value || "USD"
+      lowestRateObj?.code || lowestRateObj?.CurrencyCode?.value || "USD"
     );
-    const rawTotal = toNum(
-      minAmountObj?.value ?? minAmountObj?.TotalPrice ?? minAmountObj?.Amount
+    const rawRateVal = toNum(
+      lowestRateObj?.value ?? lowestRateObj?.TotalPrice ?? lowestRateObj?.Amount
     );
-    const minTotalPrice = rawTotal !== null ? rawTotal : null;
+    const isNightlyLowestRate = Boolean(entry?.LowestAvailableRate?.value !== undefined);
     const minNightlyPrice =
-      minTotalPrice !== null ? Math.round((minTotalPrice / Math.max(1, nights)) * 100) / 100 : null;
+      rawRateVal !== null
+        ? isNightlyLowestRate
+          ? Math.round(rawRateVal * 100) / 100
+          : Math.round((rawRateVal / Math.max(1, nights)) * 100) / 100
+        : null;
+    const minTotalPrice =
+      rawRateVal !== null
+        ? isNightlyLowestRate
+          ? Math.round(rawRateVal * Math.max(1, nights) * 100) / 100
+          : Math.round(rawRateVal * 100) / 100
+        : null;
 
     const propertyCode = toStr(
       detail?.PropertyKey?.propertyCode ||
@@ -319,7 +334,16 @@ export function normalizeHotelSearchResponse(
     );
 
     const phones = Array.isArray(detail?.Telephone) ? detail.Telephone : [];
-    const phone = toStr(phones[0]?.phoneNumber || phones[0]?.value || "");
+    const firstPhone = phones[0];
+    const phone =
+      typeof firstPhone === "string"
+        ? firstPhone.trim()
+        : toStr(firstPhone?.phoneNumber || firstPhone?.value || "");
+
+    const availabilityText = toStr(entry?.availability).toLowerCase();
+    const available =
+      availabilityText === "open" ||
+      (availabilityText !== "close" && availabilityText !== "notavailable");
 
     return {
       propertyCode,
@@ -341,11 +365,19 @@ export function normalizeHotelSearchResponse(
       currencyCode,
       minTotalPrice,
       minNightlyPrice,
-      available: entry?.availability !== "NotAvailable",
-      aggregator: toStr(entry?.aggregator || detail?.aggregator || "TVP"),
+      available,
+      aggregator: toStr(entry?.Identifier?.authority || entry?.aggregator || detail?.aggregator || "TVPT"),
       identifier: toStr(entry?.id || `${chainCode}-${propertyCode}`),
       raw: entry,
     };
+  }).sort((a, b) => {
+    if (a.available !== b.available) return a.available ? -1 : 1;
+    if (a.minNightlyPrice !== null && b.minNightlyPrice !== null) {
+      return a.minNightlyPrice - b.minNightlyPrice;
+    }
+    if (a.minNightlyPrice !== null) return -1;
+    if (b.minNightlyPrice !== null) return 1;
+    return 0;
   });
 }
 
@@ -381,29 +413,56 @@ export function normalizeHotelAvailabilityResponse(
   const offers: NormalizedHotelRoomOffer[] = [];
 
   catalogOfferingList.forEach((offering, idx) => {
-    const offeringId = toStr(offering?.id || offering?.Identifier?.value || `co-${idx + 1}`);
+    const offeringIdentifierValue = toStr(
+      offering?.Identifier?.value || offering?.id || `co-${idx + 1}`
+    );
+    const offeringAuthority = toStr(offering?.Identifier?.authority || "TVPT");
     const productOption = Array.isArray(offering?.ProductOptions)
       ? offering.ProductOptions[0]
       : null;
+    const inlineProduct =
+      productOption?.Product?.[0] || offering?.Product?.[0] || {};
     const productRef = toStr(
-      offering?.Product?.[0]?.productRef ||
-        productOption?.Product?.[0]?.productRef ||
-        offering?.Product?.[0]?.id
+      inlineProduct?.productRef ||
+        inlineProduct?.id ||
+        inlineProduct?.bookingCode ||
+        `p-${idx}`
     );
-    const product = productMap.get(productRef) || offering?.Product?.[0] || {};
+    const product = productMap.get(productRef) || inlineProduct || {};
     const termsRef = toStr(offering?.TermsAndConditions?.termsAndConditionsRef);
-    const terms = termsMap.get(termsRef) || offering?.TermsAndConditions || {};
+    const terms =
+      termsMap.get(termsRef) ||
+      (Array.isArray(offering?.TermsAndConditionsFull)
+        ? offering.TermsAndConditionsFull[0]
+        : offering?.TermsAndConditions) ||
+      {};
 
     const price = offering?.Price || offering?.TotalPrice || {};
     const currencyCode = toStr(price?.CurrencyCode?.value || price?.CurrencyCode || "USD");
     const totalPrice = toNum(price?.TotalPrice ?? price?.Total ?? price?.Amount) ?? 0;
     const basePrice = toNum(price?.Base) ?? totalPrice;
     const taxes = toNum(price?.TotalTaxes) ?? Math.max(0, totalPrice - basePrice);
+    const firstNightlyAmount = toNum(
+      price?.PriceBreakdown?.[0]?.NightlyRate?.[0]?.Amount?.Base
+    );
     const nightlyPrice =
-      Math.round((totalPrice / Math.max(1, nights)) * 100) / 100;
+      firstNightlyAmount !== null
+        ? Math.round(firstNightlyAmount * 100) / 100
+        : Math.round((totalPrice / Math.max(1, nights)) * 100) / 100;
 
     const roomType = product?.RoomType || product?.RoomStay?.RoomType || {};
     const roomCharacteristics = roomType?.RoomCharacteristics || {};
+    const bedConfigs = Array.isArray(roomCharacteristics?.BedConfiguration)
+      ? roomCharacteristics.BedConfiguration
+      : Array.isArray(roomCharacteristics?.bedConfiguration)
+        ? roomCharacteristics.bedConfiguration
+        : [];
+    const bedText = bedConfigs
+      .map((b: any) =>
+        [b?.quantity ? `${b.quantity}x` : "", toStr(b?.bedType)].filter(Boolean).join(" ")
+      )
+      .filter(Boolean)
+      .join(", ");
     const ratePlan = product?.RatePlan || product?.RoomStay?.RatePlan || {};
     const propertyKey = product?.PropertyKey || offering?.PropertyKey || {};
 
@@ -412,7 +471,11 @@ export function normalizeHotelAvailabilityResponse(
     const refundable = Boolean(
       firstPenalty?.refundableInd !== false && !firstPenalty?.NonRefundableInd
     );
-    const deadline = toStr(firstPenalty?.Deadline?.SpecificDate?.date || "");
+    const deadline = toStr(
+      firstPenalty?.Deadline?.SpecificDate?.date ||
+        firstPenalty?.Deadline?.Time ||
+        ""
+    );
     const cancellationSummary = toStr(
       firstPenalty?.Description?.value ||
         (refundable
@@ -422,22 +485,30 @@ export function normalizeHotelAvailabilityResponse(
           : "Non-refundable rate")
     );
 
-    const guarantee = terms?.Guarantee?.[0] || {};
-    const guaranteeRequired = Boolean(guarantee?.guaranteeType || terms?.Guarantee?.length);
+    const guarantee = Array.isArray(terms?.Guarantee)
+      ? terms.Guarantee[0] || {}
+      : terms?.Guarantee || {};
+    const guaranteeRequired = Boolean(guarantee?.guaranteeType || terms?.Guarantee);
+    const roomFullDesc = toStr(
+      roomType?.Description?.value || ratePlan?.Description?.value || ""
+    );
+    const roomTitle = toStr(
+      roomType?.name ||
+        (roomFullDesc ? roomFullDesc.split(",")[0] : "") ||
+        roomType?.roomCategory ||
+        "Standard Room"
+    );
 
     offers.push({
-      offerId: `${offeringId}-${productRef || idx}`,
-      catalogOfferingsIdentifier,
-      catalogOfferingIdentifier: offeringId,
-      productIdentifier: productRef || `p-${idx}`,
+      offerId: `${offeringIdentifierValue}-${idx}`,
+      catalogOfferingsIdentifier:
+        catalogOfferingsIdentifier || offeringIdentifierValue.split(":")[0] || offeringIdentifierValue,
+      catalogOfferingIdentifier: offeringIdentifierValue,
+      productIdentifier: productRef,
       propertyCode: toStr(propertyKey?.propertyCode),
       chainCode: toStr(propertyKey?.chainCode),
-      roomName: toStr(
-        roomType?.name || roomType?.Description?.value || roomType?.roomCategory || "Standard Room"
-      ),
-      roomDescription: toStr(
-        roomType?.Description?.value || ratePlan?.Description?.value || ""
-      ),
+      roomName: roomTitle,
+      roomDescription: roomFullDesc,
       rateCode: toStr(ratePlan?.rateCode || product?.bookingCode),
       ratePlanName: toStr(ratePlan?.ratePlanName || ratePlan?.name || "Best Available Rate"),
       mealPlan: toStr(
@@ -447,7 +518,7 @@ export function normalizeHotelAvailabilityResponse(
             ? "All Inclusive"
             : "Room Only"
       ),
-      bedType: toStr(roomCharacteristics?.bedConfiguration?.[0]?.bedType || ""),
+      bedType: bedText,
       maxOccupancy: toNum(roomType?.maxOccupancy),
       refundable,
       freeCancellationDeadline: deadline || null,
@@ -460,7 +531,7 @@ export function normalizeHotelAvailabilityResponse(
       totalPrice,
       nightlyPrice,
       commissionable: Boolean(ratePlan?.commissionableInd),
-      aggregator: toStr(offering?.aggregator || "TVP"),
+      aggregator: offeringAuthority,
       raw: offering,
     });
   });

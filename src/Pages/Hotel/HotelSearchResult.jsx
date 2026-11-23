@@ -399,11 +399,39 @@ const HotelSearchResult = () => {
                       mb: 1.8,
                       boxShadow: "0 8px 22px rgba(8, 49, 85, 0.06)",
                       display: "grid",
-                      gridTemplateColumns: { xs: "1fr", md: "1fr 220px" },
+                      gridTemplateColumns: { xs: "1fr", sm: "180px 1fr", md: "190px 1fr 220px" },
                       gap: 2,
                       alignItems: "center",
                     }}
                   >
+                    <Box
+                      sx={{
+                        borderRadius: "12px",
+                        overflow: "hidden",
+                        bgcolor: "#e8f2fb",
+                        aspectRatio: "4 / 3",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      {property.imageUrl ? (
+                        <img
+                          src={property.imageUrl}
+                          alt={property.hotelName}
+                          loading="lazy"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                            display: "block",
+                          }}
+                        />
+                      ) : (
+                        <HotelRoundedIcon sx={{ fontSize: 42, color: "#7aa7cc" }} />
+                      )}
+                    </Box>
+
                     <Box>
                       <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                         <Typography sx={{ fontWeight: 800, fontSize: "17px", color: "#0f2942" }}>
@@ -417,6 +445,17 @@ const HotelSearchResult = () => {
                             size="small"
                           />
                         )}
+                        <Chip
+                          size="small"
+                          label={property.available ? "Available" : "Check Dates"}
+                          sx={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            height: 22,
+                            bgcolor: property.available ? "#dcfce7" : "#f1f5f9",
+                            color: property.available ? "#166534" : "#475569",
+                          }}
+                        />
                         {property.chainCode && (
                           <Chip
                             size="small"

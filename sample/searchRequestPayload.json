@@ -7,6 +7,7 @@
     "contentSourceList": [
       "GDS"
     ],
+    "returnBrandedFaresInd": true,
     "PassengerCriteria": [
       {
         "@type": "PassengerCriteria",
@@ -18,12 +19,22 @@
     "SearchCriteriaFlight": [
       {
         "@type": "SearchCriteriaFlight",
-        "departureDate": "2026-12-18",
+        "departureDate": "2026-12-31",
         "From": {
           "value": "DXB"
         },
         "To": {
           "value": "JFK"
+        }
+      },
+      {
+        "@type": "SearchCriteriaFlight",
+        "departureDate": "2027-01-30",
+        "From": {
+          "value": "JFK"
+        },
+        "To": {
+          "value": "DXB"
         }
       }
     ],
@@ -32,7 +43,8 @@
       "includeFlightAmenitiesInd": true,
       "includeUniversalProductAttributesInd": true,
       "excludeBaggageFeesInd": true,
-      "includeCo2EmissionsDataInd": true
+      "includeCo2EmissionsDataInd": true,
+      "SearchRepresentation": "Leg"
     },
     "SearchModifiersAir": {
       "@type": "SearchModifiersAir",
@@ -42,6 +54,15 @@
           "preferenceType": "Permitted",
           "cabins": [
             "Economy"
+          ]
+        }
+      ],
+      "CarrierPreference": [
+        {
+          "@type": "CarrierPreference",
+          "preferenceType": "Permitted",
+          "carriers": [
+            "EK"
           ]
         }
       ],

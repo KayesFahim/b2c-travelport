@@ -520,10 +520,10 @@ const HotelSearchBox = ({
                   value={radiusKm}
                   onChange={(e) => setRadiusKm(Number(e.target.value))}
                 >
+                  <option value={5}>Within 5 km</option>
                   <option value={10}>Within 10 km</option>
-                  <option value={25}>Within 25 km (Default)</option>
-                  <option value={50}>Within 50 km</option>
-                  <option value={80}>Within 80 km</option>
+                  <option value={15}>Within 15 km (Default)</option>
+                  <option value={25}>Within 25 km (Max)</option>
                 </select>
               </Box>
 

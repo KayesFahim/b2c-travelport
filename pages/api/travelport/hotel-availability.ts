@@ -65,41 +65,45 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 
   const requestPayload = {
-    CatalogOfferingsRequestHospitality: {
-      "@type": "CatalogOfferingsRequestHospitality",
-      HotelSearchCriterion: {
-        "@type": "HotelSearchCriterion",
-        numberOfRooms: rooms,
-        PropertyRequest: [
-          {
-            "@type": "PropertyRequest",
-            PropertyKey: {
-              "@type": "PropertyKey",
-              ...(chainCode ? { chainCode } : {}),
-              propertyCode,
+    CatalogOfferingsQueryRequest: {
+      "@type": "CatalogOfferingsQueryRequest",
+      CatalogOfferingsRequest: [
+        {
+          "@type": "CatalogOfferingsRequestHospitality",
+          verboseResponseInd: true,
+          requestedCurrency: currency,
+          StayDates: {
+            start: checkIn,
+            end: checkOut,
+          },
+          HotelSearchCriterion: {
+            "@type": "HotelSearchCriterion",
+            numberOfRooms: rooms,
+            PropertyRequest: [
+              {
+                "@type": "PropertyRequest",
+                PropertyKey: {
+                  "@type": "PropertyKey",
+                  ...(chainCode ? { chainCode } : {}),
+                  propertyCode,
+                },
+              },
+            ],
+            RoomStayCandidates: {
+              "@type": "RoomStayCandidates",
+              RoomStayCandidate: [
+                {
+                  "@type": "RoomStayCandidate",
+                  GuestCounts: {
+                    "@type": "GuestCounts",
+                    GuestCount: guestCounts,
+                  },
+                },
+              ],
             },
           },
-        ],
-        RoomStayCandidates: {
-          "@type": "RoomStayCandidates",
-          RoomStayCandidate: [
-            {
-              "@type": "RoomStayCandidate",
-              GuestCounts: {
-                "@type": "GuestCounts",
-                GuestCount: guestCounts,
-              },
-            },
-          ],
         },
-        StayDates: {
-          "@type": "DateRange",
-          start: checkIn,
-          end: checkOut,
-        },
-      },
-      RequestedCurrency: currency,
-      ...(body.aggregator ? { aggregator: String(body.aggregator).trim() } : {}),
+      ],
     },
   };
 
@@ -114,6 +118,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (!result.ok) {
       return res.status(result.status >= 400 ? result.status : 502).json({
         success: false,
+        code: "TRAVELPORT_HOTEL_AVAILABILITY_ERROR",
         source: "travelport-live",
         message: result.errorMessage,
         status: result.status,
@@ -134,6 +139,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       catalogOfferingsIdentifier: normalized.catalogOfferingsIdentifier,
       count: normalized.offers.length,
       offers: normalized.offers,
+      ...(normalized.offers.length === 0 && result.errorMessage
+        ? { warning: result.errorMessage }
+        : {}),
     });
   } catch (error) {
     const message =

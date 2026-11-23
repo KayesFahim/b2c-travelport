@@ -187,9 +187,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       },
     });
 
-    if (!result.ok) {
+    if (!result.ok || result.hasPayloadErrors) {
       return res.status(result.status >= 400 ? result.status : 502).json({
         success: false,
+        code: "TRAVELPORT_HOTEL_BOOK_ERROR",
         source: "travelport-live",
         message: result.errorMessage,
         status: result.status,

@@ -29,42 +29,44 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   const catalogOfferingIdentifier = String(body.catalogOfferingIdentifier || "").trim();
   const productIdentifier = String(body.productIdentifier || "").trim();
 
-  if (!catalogOfferingsIdentifier || !catalogOfferingIdentifier) {
+  if (!catalogOfferingIdentifier) {
     return res.status(400).json({
-      message:
-        "catalogOfferingsIdentifier and catalogOfferingIdentifier are required for hotel rules.",
+      message: "catalogOfferingIdentifier is required for hotel rules.",
     });
   }
+
+  const effectiveOfferingsId =
+    catalogOfferingsIdentifier || catalogOfferingIdentifier.split(":")[0] || catalogOfferingIdentifier;
 
   const requestPayload = {
     OfferQueryBuildFromCatalogOfferingHospitality: {
       "@type": "OfferQueryBuildFromCatalogOfferingHospitality",
-      BuildFromCatalogOfferingHospitality: {
-        "@type": "BuildFromCatalogOfferingHospitality",
-        CatalogOfferingsIdentifier: {
-          Identifier: {
-            value: catalogOfferingsIdentifier,
-            authority: "Travelport",
-          },
+      CatalogOfferingsIdentifier: {
+        id: "CatalogOfferings_1",
+        Identifier: {
+          value: effectiveOfferingsId,
+          authority: "TVPT",
         },
-        CatalogOfferingIdentifier: {
-          Identifier: {
-            value: catalogOfferingIdentifier,
-            authority: "Travelport",
-          },
-        },
-        ...(productIdentifier
-          ? {
-              ProductIdentifier: [
-                {
-                  Identifier: {
-                    value: productIdentifier,
-                  },
-                },
-              ],
-            }
-          : {}),
       },
+      CatalogOfferingIdentifier: {
+        id: catalogOfferingIdentifier,
+        CatalogOfferingRef: catalogOfferingIdentifier,
+        Identifier: {
+          value: catalogOfferingIdentifier,
+          authority: "TVPT",
+        },
+      },
+      ...(productIdentifier
+        ? {
+            ProductIdentifier: [
+              {
+                Identifier: {
+                  value: productIdentifier,
+                },
+              },
+            ],
+          }
+        : {}),
     },
   };
 
@@ -80,9 +82,10 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       },
     });
 
-    if (!result.ok) {
+    if (!result.ok || result.hasPayloadErrors) {
       return res.status(result.status >= 400 ? result.status : 502).json({
         success: false,
+        code: "TRAVELPORT_HOTEL_RULES_ERROR",
         source: "travelport-live",
         message: result.errorMessage,
         status: result.status,
