@@ -1,4 +1,5 @@
 import { scanPassportImage } from "@/utils/passportScanner";
+import PassportScanModal from "./PassportScanModal";
 import React, { useEffect, useState } from "react";
 import {
   CircularProgress,
@@ -609,6 +610,7 @@ const FlightForm = ({
     phone: false,
   });
   const [passportScanState, setPassportScanState] = useState({});
+  const [passportModalTarget, setPassportModalTarget] = useState(null);
   const [travellers, setTravellers] = useState([]);
   const [selectedTravelerKeys, setSelectedTravelerKeys] = useState({});
 
@@ -1317,44 +1319,39 @@ const FlightForm = ({
                       </Box>
                       <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                         <Button
-                          component="label"
+                          type="button"
                           variant="outlined"
                           size="small"
                           startIcon={passportScanState[getScanKey(category, index)]?.loading ? <CircularProgress size={16} color="inherit" /> : <FaCamera />}
                           disabled={Boolean(passportScanState[getScanKey(category, index)]?.loading)}
                           aria-busy={Boolean(passportScanState[getScanKey(category, index)]?.loading)}
+                          aria-label={`Scan passport for ${category} ${index + 1}`}
+                          onClick={() =>
+                            setPassportModalTarget({
+                              category,
+                              index,
+                              label: `${category.charAt(0).toUpperCase() + category.slice(1)} ${index + 1}`,
+                            })
+                          }
                           sx={{
                             borderColor: "var(--primary-button)",
                             color: "var(--primary-button)",
                             textTransform: "none",
                             borderRadius: "9px",
-                            fontWeight: 600,
+                            fontWeight: 700,
                             fontSize: "14px",
                             minHeight: 44,
-                            px: 1.5,
+                            px: 1.8,
                             py: 0.5,
                             ":hover": {
                               borderColor: "var(--primary-button)",
-                              backgroundColor: "rgba(0,0,0,0.03)",
+                              backgroundColor: "rgba(0,154,214,0.08)",
                             },
                           }}
                         >
                           {passportScanState[getScanKey(category, index)]?.loading
                             ? "Scanning..."
                             : "Scan Passport"}
-                          <input
-                            type="file"
-                            hidden
-                            aria-label={`Scan passport for ${category} ${index + 1}`}
-                            accept="image/jpeg,image/png,image/webp"
-                            capture="environment"
-                            onChange={(event) =>
-                              handlePassportScanAndAutofill(event, category, index)
-                            }
-                            disabled={
-                              passportScanState[getScanKey(category, index)]?.loading
-                            }
-                          />
                         </Button>
                       </Box>
                     </Box>
@@ -2226,6 +2223,29 @@ const FlightForm = ({
           Preview Booking
         </Button>
       </form>
+
+      <PassportScanModal
+        open={Boolean(passportModalTarget)}
+        travelerLabel={passportModalTarget?.label || "Traveler"}
+        onClose={() => setPassportModalTarget(null)}
+        parsePayload={parsePassportExtractionPayload}
+        hasFields={hasExtractedPassportFields}
+        onApplyExtracted={(extractedData) => {
+          if (!passportModalTarget) return;
+          applyExtractedPassportData(
+            passportModalTarget.category,
+            passportModalTarget.index,
+            extractedData,
+            ""
+          );
+          setScanStatus(passportModalTarget.category, passportModalTarget.index, {
+            loading: false,
+            error: "",
+            success:
+              "Details filled in from passport scan. Please verify every field before continuing.",
+          });
+        }}
+      />
     </Box>
   );
 };

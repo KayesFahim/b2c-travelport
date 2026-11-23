@@ -700,3 +700,201 @@
     line-height: 1;
   }
 }
+
+/* --- Modern State-Aware Sticky Header & Single-Tree Responsive Navbar (modern-web-guidance) --- */
+html {
+  scroll-padding-top: 88px;
+}
+
+.travelport-shell {
+  overflow-anchor: none;
+}
+
+.flyjatt-sticky-header-container {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1100;
+  inline-size: 100%;
+  container-type: scroll-state;
+  container-name: site-header;
+}
+
+.flyjatt-header-bar {
+  position: relative;
+  min-block-size: 72px;
+  background: linear-gradient(180deg, rgba(6, 20, 42, 0.88) 0%, rgba(10, 31, 60, 0.82) 100%);
+  backdrop-filter: blur(16px) saturate(145%);
+  -webkit-backdrop-filter: blur(16px) saturate(145%);
+  border-block-end: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 24px rgba(2, 12, 28, 0.22);
+  transition: background-color 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.flyjatt-header-bar.is-light {
+  background: rgba(250, 253, 255, 0.9);
+  border-block-end: 1px solid rgba(11, 56, 98, 0.12);
+  box-shadow: 0 6px 20px rgba(10, 38, 68, 0.08);
+}
+
+@container site-header scroll-state(stuck: top) {
+  .flyjatt-header-bar {
+    background: linear-gradient(180deg, rgba(4, 15, 34, 0.97) 0%, rgba(8, 26, 52, 0.95) 100%);
+    border-block-end-color: rgba(56, 189, 248, 0.28);
+    box-shadow: 0 14px 36px rgba(2, 10, 24, 0.36);
+  }
+  .flyjatt-header-bar.is-light {
+    background: rgba(255, 255, 255, 0.97);
+    border-block-end-color: rgba(0, 130, 196, 0.22);
+    box-shadow: 0 12px 30px rgba(10, 38, 68, 0.14);
+  }
+}
+
+/* IntersectionObserver fallback for browsers without scroll-state container queries */
+.flyjatt-sticky-header-container.is-stuck .flyjatt-header-bar {
+  background: linear-gradient(180deg, rgba(4, 15, 34, 0.97) 0%, rgba(8, 26, 52, 0.95) 100%);
+  border-block-end-color: rgba(56, 189, 248, 0.28);
+  box-shadow: 0 14px 36px rgba(2, 10, 24, 0.36);
+}
+.flyjatt-sticky-header-container.is-stuck .flyjatt-header-bar.is-light {
+  background: rgba(255, 255, 255, 0.97);
+  border-block-end-color: rgba(0, 130, 196, 0.22);
+  box-shadow: 0 12px 30px rgba(10, 38, 68, 0.14);
+}
+
+/* Single-tree responsive navbar with native popover on narrow screens */
+.flyjatt-nav-menu-btn {
+  anchor-name: --flyjatt-nav-trigger;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-block-size: 44px;
+  padding-inline: 0.85rem;
+  padding-block: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.09);
+  color: #f1f7ff;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.flyjatt-header-bar.is-light .flyjatt-nav-menu-btn {
+  border-color: rgba(11, 56, 98, 0.22);
+  background: rgba(11, 74, 130, 0.06);
+  color: #0f2745;
+}
+
+.flyjatt-nav-menu-btn:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+@supports not selector(:popover-open) {
+  .flyjatt-nav-list[popover]:not(.\:popover-open) {
+    display: none;
+  }
+}
+
+.flyjatt-nav-list[popover] {
+  position: fixed;
+  inset: auto;
+  inset-block-start: 4.75rem;
+  inset-block-start: anchor(--flyjatt-nav-trigger bottom);
+  inset-inline-end: 1rem;
+  inline-size: min(86dvw, 21rem);
+  max-inline-size: calc(100dvw - 2rem);
+  block-size: fit-content;
+  max-block-size: calc(100dvh - 6rem);
+  margin: 0;
+  margin-block-start: 0.5rem;
+  padding: 0.65rem;
+  list-style: none;
+  border-radius: 16px;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  background: rgba(7, 23, 47, 0.97);
+  box-shadow: 0 22px 48px rgba(2, 10, 24, 0.42);
+  overflow: auto;
+}
+
+.flyjatt-nav-list[popover]:is(:popover-open, .\:popover-open) {
+  display: grid;
+  gap: 0.3rem;
+}
+
+.flyjatt-nav-list[popover] .flyjatt-nav-link {
+  inline-size: 100%;
+  justify-content: flex-start;
+  min-block-size: 44px;
+  color: #eaf2ff;
+}
+
+@media (min-width: 900px) {
+  .flyjatt-nav-menu-btn {
+    display: none;
+  }
+
+  .flyjatt-nav-list {
+    position: static;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    list-style: none;
+    margin: 0;
+    padding: 0.32rem;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    inline-size: auto;
+    max-inline-size: none;
+    block-size: auto;
+    max-block-size: none;
+    overflow: visible;
+  }
+
+  .flyjatt-header-bar.is-light .flyjatt-nav-list {
+    border-color: rgba(15, 39, 69, 0.11);
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 6px 18px rgba(15, 39, 69, 0.06);
+  }
+}
+
+@media (forced-colors: active) {
+  .flyjatt-nav-link[aria-current="page"] {
+    outline: 2px solid Highlight;
+  }
+}
+
+/* --- Hero Airplane Banner Image (LCP-optimized real <img>) --- */
+.flyjatt-hero-media {
+  position: absolute;
+  inset: 0;
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: 64% 38%;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* --- Brand Attribute Horizontal Scroll-Snap Track (fixes slick empty height) --- */
+.flyjatt-brand-attr-track {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(175px, 1fr);
+  gap: 10px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+  padding-block: 4px;
+}
+
+.flyjatt-brand-attr-track::-webkit-scrollbar {
+  display: none;
+}
+
+.flyjatt-brand-attr-track > * {
+  scroll-snap-align: start;
+}

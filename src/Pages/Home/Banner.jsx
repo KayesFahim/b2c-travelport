@@ -14,6 +14,10 @@ import CalendarMonthRoundedIcon from "@mui/icons-material/CalendarMonthRounded";
 import ArrowOutwardRoundedIcon from "@mui/icons-material/ArrowOutwardRounded";
 import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
+import FlightTakeoffRoundedIcon from "@mui/icons-material/FlightTakeoffRounded";
+import HotelRoundedIcon from "@mui/icons-material/HotelRounded";
+import CardTravelRoundedIcon from "@mui/icons-material/CardTravelRounded";
+import VerifiedRoundedIcon from "@mui/icons-material/VerifiedRounded";
 import Slider from "react-slick";
 import { readRecentSearches } from "../../utils/recentSearches";
 import {
@@ -21,14 +25,19 @@ import {
   normalizeTravelportSearchFilters,
 } from "../../utils/travelportSearchCriteria";
 
-const FLIGHT_BANNER_IMAGE_URL =
-  "https://www.savethestudent.org/uploads/flights.jpg";
+const FLIGHT_BANNER_IMAGE_URL = "/images/hero-airplane.jpg";
 
 const Banner = ({ data, onTabChange }) => {
+  const cmsBannerUrl = String(
+    data?.bannerimage?.imageUrl || data?.bannerimageMobile?.imageUrl || ""
+  ).trim();
+  // Prefer local high-res airplane hero unless CMS defines a bespoke non-placeholder image
   const heroImage =
-    data?.bannerimage?.imageUrl ||
-    data?.bannerimageMobile?.imageUrl ||
-    FLIGHT_BANNER_IMAGE_URL;
+    cmsBannerUrl &&
+    !cmsBannerUrl.includes("unsplash.com/photo-1488646953014") &&
+    !cmsBannerUrl.includes("savethestudent.org")
+      ? cmsBannerUrl
+      : FLIGHT_BANNER_IMAGE_URL;
 
   //todo: state for retrigger useEffect
   const [changeState, setChangeState] = useState(null);
@@ -283,15 +292,15 @@ const Banner = ({ data, onTabChange }) => {
   };
 
   const heroHighlights = [
-    "Compare flights in one place",
-    "Up-to-date flight options",
-    "Baggage and fare details",
+    "Live Global GDS Airlines",
+    "Hotels Quoted in USD",
+    "Multi-City Split-Stay Packages",
   ];
 
   const heroStatCards = [
-    { label: "Explore", value: "More choice", note: "Compare airlines and routes" },
-    { label: "Plan with confidence", value: "Clear fares", note: "Review details before you book" },
-    { label: "Travel together", value: "Here to help", note: "Contact our support team" },
+    { label: "Flight Network", value: "400+ Airlines", note: "Real-time schedules & branded fares" },
+    { label: "Stays Worldwide", value: "USD Pricing", note: "Live rooms, taxes & instant rules" },
+    { label: "Custom Trips", value: "Split Stays", note: "Combine flights + multi-city hotels" },
   ];
 
   if (!data) return null;
@@ -303,40 +312,58 @@ const Banner = ({ data, onTabChange }) => {
           sx={{
             position: "relative",
             overflow: "hidden",
-            backgroundImage: `linear-gradient(118deg, rgba(2, 16, 37, 0.9) 0%, rgba(5, 41, 79, 0.8) 46%, rgba(0, 154, 214, 0.44) 100%), url(${heroImage})`,
-            backgroundRepeat: "no-repeat",
-            backgroundSize: "cover",
-            backgroundPosition: "center",
-            minHeight: { xs: "380px", md: "460px" },
+            bgcolor: "#04142b",
+            minHeight: { xs: "430px", md: "510px" },
           }}
         >
+          {/* Real LCP-optimized hero airplane image (modern-web-guidance: optimize-image-priority) */}
+          <img
+            src={heroImage}
+            alt="Commercial wide-body airplane gleaming against a golden sunrise sky"
+            fetchPriority="high"
+            decoding="async"
+            width={1920}
+            height={1080}
+            className="flyjatt-hero-media"
+          />
+          {/* Directional luxury-aviation gradient scrim for crisp left typography & clear airplane visibility on right */}
           <Box
+            aria-hidden="true"
             sx={{
               position: "absolute",
               inset: 0,
-              opacity: 0.2,
               background:
-                "radial-gradient(circle at 20% 16%, rgba(255,255,255,0.32), transparent 48%), radial-gradient(circle at 78% 38%, rgba(255,255,255,0.26), transparent 40%)",
+                "linear-gradient(102deg, rgba(3, 15, 34, 0.94) 0%, rgba(5, 29, 62, 0.82) 42%, rgba(7, 41, 82, 0.36) 72%, rgba(4, 18, 38, 0.44) 100%)",
             }}
           />
           <Box
+            aria-hidden="true"
             sx={{
               position: "absolute",
-              top: { xs: "-120px", md: "-180px" },
-              right: { xs: "-120px", md: "-150px" },
-              width: { xs: "260px", md: "380px" },
-              height: { xs: "260px", md: "380px" },
+              inset: 0,
+              background:
+                "linear-gradient(180deg, rgba(4, 16, 36, 0.32) 0%, rgba(4, 16, 36, 0.05) 55%, rgba(4, 16, 36, 0.72) 100%)",
+            }}
+          />
+          <Box
+            aria-hidden="true"
+            sx={{
+              position: "absolute",
+              top: { xs: "-120px", md: "-160px" },
+              left: { xs: "-90px", md: "-120px" },
+              width: { xs: "280px", md: "440px" },
+              height: { xs: "280px", md: "440px" },
               borderRadius: "50%",
               background:
-                "radial-gradient(circle, rgba(255,255,255,0.18), rgba(255,255,255,0))",
+                "radial-gradient(circle, rgba(0,180,240,0.22), rgba(0,180,240,0))",
               pointerEvents: "none",
             }}
           />
           <Container sx={{ position: "relative", zIndex: 1 }}>
             <Box
               sx={{
-                pt: { xs: 2.6, md: 4.1 },
-                pb: { xs: 8.6, md: 11.6 },
+                pt: { xs: 2.8, md: 4.4 },
+                pb: { xs: 9.2, md: 12.4 },
               }}
             >
               <Box
@@ -352,9 +379,10 @@ const Banner = ({ data, onTabChange }) => {
                   sx={{
                     border: "1px solid rgba(255,255,255,0.28)",
                     borderRadius: "999px",
-                    p: "3px",
-                    background: "rgba(255,255,255,0.08)",
-                    backdropFilter: "blur(10px)",
+                    p: "4px",
+                    background: "rgba(4, 20, 44, 0.56)",
+                    backdropFilter: "blur(14px)",
+                    boxShadow: "0 12px 28px rgba(0, 0, 0, 0.24)",
                   }}
                 >
                   <TabList
@@ -363,132 +391,145 @@ const Banner = ({ data, onTabChange }) => {
                     TabIndicatorProps={{ sx: { display: "none" } }}
                     sx={{
                       minHeight: 0,
-                      "& .MuiTabs-flexContainer": { gap: 0.4 },
+                      "& .MuiTabs-flexContainer": { gap: 0.45, flexWrap: "wrap" },
                     }}
                   >
                     <Tab
+                      icon={<FlightTakeoffRoundedIcon sx={{ fontSize: 17 }} />}
+                      iconPosition="start"
                       label="Flight"
                       value="flight"
                       sx={{
-                        textTransform: "capitalize",
-                        color: "rgba(255,255,255,0.9)",
+                        textTransform: "none",
+                        color: "rgba(255,255,255,0.92)",
                         opacity: 1,
-                        minHeight: 0,
-                        minWidth: { xs: "96px", md: "120px" },
-                        py: 0.75,
+                        minHeight: 40,
+                        minWidth: { xs: "96px", md: "118px" },
+                        py: 0.65,
                         px: 2,
                         fontSize: "14px",
-                        fontWeight: 700,
+                        fontWeight: 800,
                         borderRadius: "999px",
-                        transition: "all 0.25s ease",
+                        transition: "all 0.22s ease",
                         "&.MuiTab-root.Mui-selected": {
-                          backgroundColor: "var(--primary-button)",
-                          color: "var(--white)",
-                          boxShadow: "0 6px 14px rgba(0,154,214,0.35)",
+                          background: "linear-gradient(120deg, #00b0f0 0%, #0077b6 100%)",
+                          color: "#ffffff",
+                          boxShadow: "0 8px 18px rgba(0,154,214,0.42)",
                         },
                       }}
                     />
                     <Tab
+                      icon={<HotelRoundedIcon sx={{ fontSize: 17 }} />}
+                      iconPosition="start"
                       label="Stay"
                       value="stay"
                       sx={{
-                        textTransform: "capitalize",
-                        color: "rgba(255,255,255,0.9)",
+                        textTransform: "none",
+                        color: "rgba(255,255,255,0.92)",
                         opacity: 1,
-                        minHeight: 0,
-                        minWidth: { xs: "96px", md: "120px" },
-                        py: 0.75,
+                        minHeight: 40,
+                        minWidth: { xs: "96px", md: "118px" },
+                        py: 0.65,
                         px: 2,
                         fontSize: "14px",
-                        fontWeight: 700,
+                        fontWeight: 800,
                         borderRadius: "999px",
-                        transition: "all 0.25s ease",
+                        transition: "all 0.22s ease",
                         "&.MuiTab-root.Mui-selected": {
-                          backgroundColor: "var(--primary-button)",
-                          color: "var(--white)",
-                          boxShadow: "0 6px 14px rgba(0,154,214,0.35)",
+                          background: "linear-gradient(120deg, #00b0f0 0%, #0077b6 100%)",
+                          color: "#ffffff",
+                          boxShadow: "0 8px 18px rgba(0,154,214,0.42)",
                         },
                       }}
                     />
                     <Tab
+                      icon={<CardTravelRoundedIcon sx={{ fontSize: 17 }} />}
+                      iconPosition="start"
                       label="Package: Flight + Hotel"
                       value="package"
                       sx={{
                         textTransform: "none",
-                        color: "rgba(255,255,255,0.9)",
+                        color: "rgba(255,255,255,0.92)",
                         opacity: 1,
-                        minHeight: 0,
-                        minWidth: { xs: "150px", md: "185px" },
-                        py: 0.75,
+                        minHeight: 40,
+                        minWidth: { xs: "155px", md: "198px" },
+                        py: 0.65,
                         px: 2,
                         fontSize: "14px",
-                        fontWeight: 700,
+                        fontWeight: 800,
                         borderRadius: "999px",
-                        transition: "all 0.25s ease",
+                        transition: "all 0.22s ease",
                         "&.MuiTab-root.Mui-selected": {
-                          backgroundColor: "var(--primary-button)",
-                          color: "var(--white)",
-                          boxShadow: "0 6px 14px rgba(0,154,214,0.35)",
+                          background: "linear-gradient(120deg, #00b0f0 0%, #0077b6 100%)",
+                          color: "#ffffff",
+                          boxShadow: "0 8px 18px rgba(0,154,214,0.42)",
                         },
                       }}
                     />
                   </TabList>
                 </Box>
 
-                <Typography
+                <Box
                   sx={{
-                    fontSize: "14px",
-                    fontWeight: 600,
-                    color: "rgba(255,255,255,0.88)",
-                    border: "1px solid rgba(255,255,255,0.3)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 0.75,
+                    fontSize: "13px",
+                    fontWeight: 700,
+                    color: "#e0f2fe",
+                    border: "1px solid rgba(125, 211, 252, 0.36)",
                     borderRadius: "999px",
-                    px: 1.2,
-                    py: 0.5,
-                    backgroundColor: "rgba(255,255,255,0.09)",
-                    backdropFilter: "blur(8px)",
+                    px: 1.5,
+                    py: 0.65,
+                    backgroundColor: "rgba(4, 22, 48, 0.56)",
+                    backdropFilter: "blur(10px)",
                   }}
                 >
-                  Real-time fares from Travelport
-                </Typography>
+                  <VerifiedRoundedIcon sx={{ fontSize: 16, color: "#38bdf8" }} />
+                  <span>Real-time fares powered by Travelport+</span>
+                </Box>
               </Box>
 
               <Box
                 sx={{
-                  mt: { xs: 2.2, md: 3.6 },
+                  mt: { xs: 2.4, md: 4 },
                   display: "grid",
-                  gridTemplateColumns: { xs: "1fr", md: "1fr 330px" },
-                  gap: { xs: 2.2, md: 2.6 },
-                  alignItems: "start",
+                  gridTemplateColumns: { xs: "1fr", md: "1fr 310px" },
+                  gap: { xs: 2.2, md: 3 },
+                  alignItems: "end",
                 }}
               >
-                <Box sx={{ maxWidth: "680px" }}>
+                <Box sx={{ maxWidth: "650px" }}>
                   <Typography
                     component="h1"
+                    className="flyjatt-hero-heading"
                     sx={{
-                      color: "var(--white)",
-                      fontWeight: 800,
-                      fontSize: { xs: "32px", sm: "40px", md: "52px" },
-                      lineHeight: 1.12,
+                      color: "#ffffff",
+                      fontWeight: 900,
+                      fontSize: { xs: "32px", sm: "42px", md: "54px" },
+                      lineHeight: 1.08,
                       letterSpacing: "-0.035em",
+                      textShadow: "0 8px 28px rgba(0, 0, 0, 0.42)",
                     }}
                   >
                     {data.mainTitle}
                   </Typography>
                   <Typography
                     sx={{
-                      mt: 1.05,
-                      color: "rgba(255,255,255,0.9)",
+                      mt: 1.2,
+                      color: "rgba(232, 244, 255, 0.94)",
                       fontWeight: 500,
-                      fontSize: { xs: "14px", md: "18px" },
-                      maxWidth: "620px",
+                      fontSize: { xs: "14.5px", md: "18px" },
+                      maxWidth: "580px",
                       lineHeight: 1.5,
+                      textShadow: "0 2px 12px rgba(0, 0, 0, 0.35)",
                     }}
                   >
                     {data.subTitle}
                   </Typography>
                   <Box
                     sx={{
-                      mt: 1.8,
+                      mt: 2,
                       display: "flex",
                       flexWrap: "wrap",
                       gap: 0.9,
@@ -499,14 +540,14 @@ const Banner = ({ data, onTabChange }) => {
                         key={item}
                         sx={{
                           borderRadius: "999px",
-                          px: 1.2,
+                          px: 1.4,
                           py: 0.6,
                           border: "1px solid rgba(255,255,255,0.28)",
-                          bgcolor: "rgba(255,255,255,0.09)",
-                          color: "#fff",
-                          fontSize: { xs: "13px", md: "14px" },
-                          fontWeight: 600,
-                          backdropFilter: "blur(8px)",
+                          bgcolor: "rgba(4, 20, 44, 0.52)",
+                          color: "#f0f9ff",
+                          fontSize: { xs: "12.5px", md: "13.5px" },
+                          fontWeight: 700,
+                          backdropFilter: "blur(10px)",
                         }}
                       >
                         {item}
@@ -528,38 +569,39 @@ const Banner = ({ data, onTabChange }) => {
                         borderRadius: "14px",
                         border: "1px solid rgba(255,255,255,0.24)",
                         background:
-                          "linear-gradient(180deg, rgba(255,255,255,0.16) 0%, rgba(255,255,255,0.08) 100%)",
-                        backdropFilter: "blur(10px)",
-                        px: 1.4,
+                          "linear-gradient(135deg, rgba(5, 22, 48, 0.68) 0%, rgba(11, 56, 98, 0.46) 100%)",
+                        backdropFilter: "blur(14px)",
+                        px: 1.6,
                         py: 1.15,
+                        boxShadow: "0 12px 24px rgba(0, 0, 0, 0.22)",
                       }}
                     >
                       <Typography
                         sx={{
-                          fontSize: "13px",
-                          letterSpacing: "0.06em",
+                          fontSize: "11px",
+                          letterSpacing: "0.08em",
                           textTransform: "uppercase",
-                          fontWeight: 700,
-                          color: "rgba(255,255,255,0.78)",
+                          fontWeight: 800,
+                          color: "#7dd3fc",
                         }}
                       >
                         {item.label}
                       </Typography>
                       <Typography
                         sx={{
-                          mt: 0.2,
-                          color: "#fff",
-                          fontSize: "28px",
-                          lineHeight: 1.1,
-                          fontWeight: 800,
+                          mt: 0.15,
+                          color: "#ffffff",
+                          fontSize: "22px",
+                          lineHeight: 1.15,
+                          fontWeight: 900,
                         }}
                       >
                         {item.value}
                       </Typography>
                       <Typography
                         sx={{
-                          fontSize: "14px",
-                          color: "rgba(255,255,255,0.86)",
+                          fontSize: "12.5px",
+                          color: "rgba(226, 240, 255, 0.88)",
                           fontWeight: 500,
                         }}
                       >

@@ -325,6 +325,26 @@ const parseTravelerReferenceRows = (value) => {
   return parsed;
 };
 
+const ANCILLARY_WRAPPER_TYPES = new Set([
+  "catalogofferingsancillarylistresponse",
+  "catalogofferingsresponse",
+  "catalogofferingsid",
+  "catalogofferingsancillary",
+  "catalogofferings",
+  "result",
+  "error",
+  "errordetail",
+  "warning",
+  "referencelist",
+  "referencelistproduct",
+  "referencelistbrand",
+  "referencelistancillary",
+  "referencelistflight",
+  "identifier",
+  "currencycode",
+  "pricedetail",
+]);
+
 const extractAncillaryItems = (payload) => {
   if (!payload || typeof payload !== "object") return [];
   const root =
@@ -340,6 +360,22 @@ const extractAncillaryItems = (payload) => {
       "identifier",
     ])
   );
+
+  // Build ReferenceList lookup maps for Product / Ancillary / Brand refs
+  const refProductMap = new Map();
+  const refAncillaryMap = new Map();
+  const referenceLists = getArrayByKeys(root, ["ReferenceList", "referenceList"]);
+  referenceLists.forEach((refList) => {
+    getArrayByKeys(refList, ["Product", "product"]).forEach((prod) => {
+      const id = normalizeIdentifier(getValueByKeys(prod, ["id", "ID", "Identifier", "identifier"]));
+      if (id) refProductMap.set(id, prod);
+    });
+    getArrayByKeys(refList, ["Ancillary", "ancillary"]).forEach((anc) => {
+      const id = normalizeIdentifier(getValueByKeys(anc, ["id", "ID", "Identifier", "identifier"]));
+      if (id) refAncillaryMap.set(id, anc);
+    });
+  });
+
   const items = [];
   const dedupe = new Set();
 
@@ -355,8 +391,18 @@ const extractAncillaryItems = (payload) => {
     productIdentifier = "",
     travelerReferences = [],
   }) => {
-    if (!name && !classification && amount === null) return;
-    const normalizedName = name || classification || "Ancillary";
+    const cleanName = String(name || "").trim();
+    const cleanClass = String(classification || "").trim();
+    // Never emit response wrapper types as fake ancillary items
+    if (
+      ANCILLARY_WRAPPER_TYPES.has(cleanName.toLowerCase()) ||
+      (ANCILLARY_WRAPPER_TYPES.has(cleanClass.toLowerCase()) && !cleanName)
+    ) {
+      return;
+    }
+    if (!cleanName && !cleanClass && amount === null) return;
+    const normalizedName = cleanName || cleanClass || "Ancillary";
+    if (ANCILLARY_WRAPPER_TYPES.has(normalizedName.toLowerCase())) return;
     const normalizedCategory = category || "Other Addons";
     const normalizedTravelerReferences = Array.isArray(travelerReferences)
       ? travelerReferences
@@ -402,7 +448,7 @@ const extractAncillaryItems = (payload) => {
     items.push({
       category: normalizedCategory,
       name: normalizedName,
-      classification: classification || "Ancillary",
+      classification: cleanClass && !ANCILLARY_WRAPPER_TYPES.has(cleanClass.toLowerCase()) ? cleanClass : "Ancillary",
       details: details || "",
       amount,
       currencyCode: currencyCode || "",
@@ -415,21 +461,44 @@ const extractAncillaryItems = (payload) => {
     });
   };
 
-  const processNodeAsItem = (node, context = {}) => {
-    if (!node || typeof node !== "object") return;
+  const processNodeAsItem = (rawNode, context = {}) => {
+    if (!rawNode || typeof rawNode !== "object") return;
+    const nodeType = toTextValue(getValueByKeys(rawNode, ["@type", "type"])).toLowerCase();
+    if (ANCILLARY_WRAPPER_TYPES.has(nodeType)) return;
+
+    const productRef = normalizeIdentifier(
+      getValueByKeys(rawNode, ["productRef", "ProductRef"])
+    );
+    const node = (productRef && refProductMap.get(productRef))
+      ? { ...refProductMap.get(productRef), ...rawNode }
+      : rawNode;
+
+    const rawAncillary = getValueByKeys(node, ["Ancillary", "ancillary"]);
+    const ancRef = normalizeIdentifier(getValueByKeys(node, ["ancillaryRef", "AncillaryRef"]));
     const ancillaryNode =
-      getValueByKeys(node, ["Ancillary", "ancillary"]) &&
-      typeof getValueByKeys(node, ["Ancillary", "ancillary"]) === "object"
-        ? getValueByKeys(node, ["Ancillary", "ancillary"])
-        : null;
+      rawAncillary && typeof rawAncillary === "object"
+        ? rawAncillary
+        : ancRef && refAncillaryMap.get(ancRef)
+          ? refAncillaryMap.get(ancRef)
+          : null;
+
     const name =
       toTextValue(
-        getValueByKeys(ancillaryNode || {}, ["Description", "description", "Name", "name"])
+        getValueByKeys(ancillaryNode || {}, [
+          "Description",
+          "description",
+          "Name",
+          "name",
+          "CommercialName",
+          "commercialName",
+        ])
       ) ||
       toTextValue(
         getValueByKeys(node, [
           "Name",
           "name",
+          "CommercialName",
+          "commercialName",
           "Description",
           "description",
           "Text",
@@ -443,11 +512,10 @@ const extractAncillaryItems = (payload) => {
         ])
       ) ||
       toTextValue(getValueByKeys(node?.Brand || {}, ["Name", "name"]));
+
     const classification = toTextValue(
-      getValueByKeys(ancillaryNode || {}, ["@type", "type", "classification"]) ||
+      getValueByKeys(ancillaryNode || {}, ["classification", "Classification", "type", "@type"]) ||
       getValueByKeys(node, [
-        "@type",
-        "type",
         "classification",
         "Classification",
         "AncillaryType",
@@ -456,21 +524,34 @@ const extractAncillaryItems = (payload) => {
         "productType",
         "GroupCode",
         "groupCode",
+        "@type",
+        "type",
       ])
     );
+
     const inclusion = toTextValue(getValueByKeys(node, ["Inclusion", "inclusion"]));
     const identifier = normalizeIdentifier(
-      getValueByKeys(node, ["id", "ID", "ProductIdentifier", "productIdentifier"])
+      getValueByKeys(node, ["id", "ID", "productRef", "ProductIdentifier", "productIdentifier"])
     );
     const ancillaryDescription = toTextValue(
       getValueByKeys(ancillaryNode || {}, ["Description", "description", "value"])
     );
-    const details = [ancillaryDescription, classification, inclusion, identifier]
+    const details = [
+      ancillaryDescription && ancillaryDescription !== name ? ancillaryDescription : "",
+      inclusion,
+      identifier ? `Code: ${identifier}` : "",
+    ]
       .filter(Boolean)
       .join(" • ");
-    const price = resolvePriceFromNode(node);
-    const amount = price.amount;
-    const currencyCode = price.currencyCode || context.currencyCode || "";
+
+    const nodePrice = resolvePriceFromNode(node);
+    const amount =
+      nodePrice.amount !== null
+        ? nodePrice.amount
+        : context.amount !== undefined && context.amount !== null
+          ? context.amount
+          : null;
+    const currencyCode = nodePrice.currencyCode || context.currencyCode || "";
     const category = resolveAncillaryCategory({
       name,
       classification,
@@ -481,6 +562,7 @@ const extractAncillaryItems = (payload) => {
         getValueByKeys(node, [
           "id",
           "ID",
+          "productRef",
           "ProductIdentifier",
           "productIdentifier",
           "Identifier",
@@ -527,10 +609,11 @@ const extractAncillaryItems = (payload) => {
     });
   };
 
-  const catalogOfferingGroups = getArrayByKeys(root, [
-    "CatalogOfferingsID",
-    "catalogOfferingsID",
-  ]);
+  const catalogOfferingGroups = [
+    ...getArrayByKeys(root, ["CatalogOfferingsID", "catalogOfferingsID"]),
+    ...getArrayByKeys(root, ["CatalogOfferingsAncillary", "catalogOfferingsAncillary"]),
+    ...getArrayByKeys(root, ["CatalogOfferings", "catalogOfferings"]),
+  ];
 
   catalogOfferingGroups.forEach((groupNode) => {
     const groupOfferListIdentifier =
@@ -552,7 +635,12 @@ const extractAncillaryItems = (payload) => {
         "travelerRef",
       ])
     );
-    const offerings = getArrayByKeys(groupNode, ["CatalogOffering", "catalogOffering"]);
+    const offerings = getArrayByKeys(groupNode, [
+      "CatalogOffering",
+      "catalogOffering",
+      "AncillaryOffering",
+      "ancillaryOffering",
+    ]);
     offerings.forEach((offeringNode) => {
       const offeringPrice = resolvePriceFromNode(offeringNode);
       const offerIdentifier = normalizeIdentifier(
@@ -592,6 +680,7 @@ const extractAncillaryItems = (payload) => {
         ]);
         products.forEach((productNode) =>
           processNodeAsItem(productNode, {
+            amount: offeringPrice.amount,
             currencyCode: offeringPrice.currencyCode,
             offerListIdentifier: groupOfferListIdentifier,
             offerIdentifier,
@@ -608,12 +697,24 @@ const extractAncillaryItems = (payload) => {
       ]);
       directProducts.forEach((productNode) =>
         processNodeAsItem(productNode, {
+          amount: offeringPrice.amount,
           currencyCode: offeringPrice.currencyCode,
           offerListIdentifier: groupOfferListIdentifier,
           offerIdentifier,
           travelerReferences,
         })
       );
+
+      // If an offering carries Ancillary/Price directly with no nested Product array
+      if (productOptions.length === 0 && directProducts.length === 0) {
+        processNodeAsItem(offeringNode, {
+          amount: offeringPrice.amount,
+          currencyCode: offeringPrice.currencyCode,
+          offerListIdentifier: groupOfferListIdentifier,
+          offerIdentifier,
+          travelerReferences,
+        });
+      }
     });
   });
 
@@ -621,6 +722,7 @@ const extractAncillaryItems = (payload) => {
     return items;
   }
 
+  // Safe fallback walk: strictly require an actual price OR Ancillary/SSR/SubCode field and NEVER match response wrappers
   const walk = (node, depth = 0) => {
     if (depth > 6 || node === null || node === undefined) return;
     if (Array.isArray(node)) {
@@ -629,32 +731,21 @@ const extractAncillaryItems = (payload) => {
     }
     if (typeof node !== "object") return;
 
-    const hintText = `${toTextValue(
-      getValueByKeys(node, [
-        "@type",
-        "type",
-        "classification",
-        "Classification",
-        "name",
-        "Name",
-        "description",
-        "Description",
-        "SubCode",
-        "subCode",
-      ])
-    )} ${toTextValue(getValueByKeys(node, ["SSRCode", "ssrCode"]))}`.toLowerCase();
-    const price = resolvePriceFromNode(node);
+    const nodeType = toTextValue(getValueByKeys(node, ["@type", "type"])).toLowerCase();
+    const isWrapper = ANCILLARY_WRAPPER_TYPES.has(nodeType);
+    const hasRealAncillarySignal =
+      !isWrapper &&
+      (Boolean(getValueByKeys(node, ["Ancillary", "ancillary", "SSRCode", "ssrCode", "SubCode", "subCode", "CommercialName", "commercialName"])) ||
+        resolvePriceFromNode(node).amount !== null);
 
-    if (
-      /ancillary|service|bag|meal|seat|ssr|upgrade|wifi|lounge|priority/.test(
-        hintText
-      ) ||
-      price.amount !== null
-    ) {
+    if (hasRealAncillarySignal) {
       processNodeAsItem(node);
     }
 
-    Object.values(node).forEach((childNode) => walk(childNode, depth + 1));
+    Object.entries(node).forEach(([k, childNode]) => {
+      if (k === "Result" || k === "Error" || k === "Warning" || k === "ancillaryShopMeta") return;
+      walk(childNode, depth + 1);
+    });
   };
 
   walk(root);
@@ -1751,16 +1842,20 @@ const BookingDetaills = () => {
           ) : null}
 
           {!ancillaryLoading && !ancillaryError && ancillaryItems.length === 0 ? (
-            <Typography
-              sx={{
-                color: "#47688A",
-                fontSize: "14px",
-                fontWeight: 500,
-                py: 1,
-              }}
-            >
-              No ancillary items were returned for this offer.
-            </Typography>
+            <Alert severity="info" sx={{ borderRadius: "10px" }}>
+              <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#0b4a82" }}>
+                No purchasable add-ons / ancillaries are offered for this fare.
+              </Typography>
+              {ancillaryData?.ancillaryNotice ? (
+                <Typography sx={{ fontSize: "12.5px", color: "#475569", mt: 0.4 }}>
+                  Airline / GDS note: {ancillaryData.ancillaryNotice}
+                </Typography>
+              ) : (
+                <Typography sx={{ fontSize: "12.5px", color: "#475569", mt: 0.4 }}>
+                  You can continue directly to traveler details and booking confirmation.
+                </Typography>
+              )}
+            </Alert>
           ) : null}
 
           {!ancillaryLoading && !ancillaryError && ancillaryItems.length > 0 ? (

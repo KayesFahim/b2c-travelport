@@ -69,14 +69,12 @@ const Home = () => {
       <Box component="div" sx={{ bgcolor: "#f5f8fc" }}>
         <Banner onTabChange={handleTabChange} data={data} />
 
-        {selectedTab === "flight" && (
-          <div className="flyjatt-home-sections relative">
-            <DiscountSlider data={data} />
-            <TopDestination />
-            <HotDeals />
-            <PartnerAirlines />
-          </div>
-        )}
+        <div className="flyjatt-home-sections relative">
+          <DiscountSlider data={data} />
+          <TopDestination />
+          <HotDeals />
+          <PartnerAirlines />
+        </div>
       </Box>
     </Box>
   );

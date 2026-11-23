@@ -1,10 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withApiHandler } from "@/server/api-handler";
+import { cacheGet, cacheSet } from "@/server/redis-cache";
+import { getUsdExchangeRates } from "@/server/currency-usd";
 import {
   callTravelportHotelApi,
   computeStayNights,
   normalizeHotelSearchResponseUsd,
 } from "@/server/travelport-hotel";
+
+const HOTEL_SEARCH_CACHE_TTL_SECONDS = 180; // 3-minute live inventory cache for instant repeat queries
 
 type HotelSearchBody = {
   destination?: string;
@@ -167,20 +171,49 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     },
   };
 
+  const cacheKey = [
+    "hotel:search:usd:v2",
+    hasCoordinates ? `${lat.toFixed(3)},${lng.toFixed(3)}` : resolvedCode || destinationRaw.toLowerCase(),
+    checkIn,
+    checkOut,
+    rooms,
+    adults,
+    children,
+    Math.min(25, radiusValue),
+    hotelName.toLowerCase(),
+    minStarRating,
+    chainCodes.join(","),
+  ].join(":");
+
   try {
-    const result = await callTravelportHotelApi({
-      path: "/search/properties/search",
-      payload: requestPayload,
-      apiName: "hotel-search",
-      retryOnTransientError: true,
-      meta: {
-        cityCode: resolvedCode || destinationRaw,
-        checkIn,
-        checkOut,
-        rooms,
-        adults,
-      },
-    });
+    // Fast-path cache check (~2-5ms)
+    const cachedJson = await cacheGet(cacheKey).catch(() => null);
+    if (cachedJson) {
+      try {
+        const parsed = JSON.parse(cachedJson) as Record<string, unknown>;
+        return res.status(200).json({ ...parsed, cached: true });
+      } catch {
+        // ignore corrupted cache entry
+      }
+    }
+
+    // Run live USD FX rate lookup and Travelport Stays v11 search concurrently
+    const [fxRates, result] = await Promise.all([
+      getUsdExchangeRates(),
+      callTravelportHotelApi({
+        path: "/search/properties/search",
+        payload: requestPayload,
+        apiName: "hotel-search",
+        retryOnTransientError: true,
+        meta: {
+          cityCode: resolvedCode || destinationRaw,
+          checkIn,
+          checkOut,
+          rooms,
+          adults,
+        },
+      }),
+    ]);
 
     if (!result.ok) {
       return res.status(result.status >= 400 ? result.status : 502).json({
@@ -207,11 +240,12 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const normalized = await normalizeHotelSearchResponseUsd(result.data, nights);
+    const normalized = await normalizeHotelSearchResponseUsd(result.data, nights, fxRates);
 
-    return res.status(200).json({
+    const responseBody = {
       success: true,
       source: "travelport-live",
+      cached: false,
       correlationId: result.correlationId,
       nights,
       count: normalized.properties.length,
@@ -233,7 +267,15 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
         children,
         currency,
       },
-    });
+    };
+
+    if (normalized.properties.length > 0) {
+      void cacheSet(cacheKey, JSON.stringify(responseBody), HOTEL_SEARCH_CACHE_TTL_SECONDS).catch(
+        () => {}
+      );
+    }
+
+    return res.status(200).json(responseBody);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Hotel search failed";
     return res.status(500).json({

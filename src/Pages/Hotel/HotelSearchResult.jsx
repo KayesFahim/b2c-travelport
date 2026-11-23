@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useState } from "react";
 import {
   Alert,
   Box,
@@ -224,79 +224,90 @@ const HotelSearchResult = () => {
     starFilter,
   ]);
 
+  const deferredNameFilter = useDeferredValue(nameFilter);
+  const deferredPriceRange = useDeferredValue(priceRange);
+
+  // Pre-compute lowercase search corpus once when properties arrive so filtering is O(n) with zero per-keystroke allocations
+  const indexedProperties = useMemo(
+    () =>
+      properties.map((prop) => {
+        const amenitiesText = (Array.isArray(prop?.amenities) ? prop.amenities : [])
+          .join(" ")
+          .toLowerCase();
+        const searchCorpus = `${prop?.hotelName || ""} ${prop?.address || ""} ${prop?.chainCode || ""}`.toLowerCase();
+        return {
+          prop,
+          flags: prop?.amenityFlags || {},
+          amenitiesText,
+          searchCorpus,
+          hasNonRefundableText: /\bnon-refundable|non refundable\b/.test(amenitiesText),
+          hasBreakfastText: /\bbreakfast|buffet|continental\b/.test(amenitiesText),
+        };
+      }),
+    [properties]
+  );
+
   const filteredAndSortedProperties = useMemo(() => {
-    const q = nameFilter.trim().toLowerCase();
+    const q = deferredNameFilter.trim().toLowerCase();
     const isPriceFiltered =
-      priceRange[0] > priceBounds[0] || priceRange[1] < priceBounds[1];
+      deferredPriceRange[0] > priceBounds[0] || deferredPriceRange[1] < priceBounds[1];
 
-    const filtered = properties.filter((prop) => {
-      const flags = prop?.amenityFlags || {};
-      const amenitiesText = (Array.isArray(prop?.amenities) ? prop.amenities : [])
-        .join(" ")
-        .toLowerCase();
+    const filtered = [];
+    for (let i = 0; i < indexedProperties.length; i += 1) {
+      const entry = indexedProperties[i];
+      const { prop, flags } = entry;
 
-      if (policyFilters.availableOnly && !prop.available) {
-        return false;
-      }
-      if (starFilter > 0 && Number(prop.starRating || 0) < starFilter) {
-        return false;
-      }
+      if (policyFilters.availableOnly && !prop.available) continue;
+      if (starFilter > 0 && Number(prop.starRating || 0) < starFilter) continue;
       if (
         maxDistanceKm > 0 &&
         (prop.distanceKm === null ||
           prop.distanceKm === undefined ||
           Number(prop.distanceKm) > maxDistanceKm)
       ) {
-        return false;
+        continue;
       }
       if (isPriceFiltered) {
         const nightly = Number(prop.minNightlyPrice);
-        if (!Number.isFinite(nightly) || nightly < priceRange[0] || nightly > priceRange[1]) {
-          return false;
+        if (!Number.isFinite(nightly) || nightly < deferredPriceRange[0] || nightly > deferredPriceRange[1]) {
+          continue;
         }
       }
-      if (
-        q &&
-        !String(prop.hotelName || "").toLowerCase().includes(q) &&
-        !String(prop.address || "").toLowerCase().includes(q) &&
-        !String(prop.chainCode || "").toLowerCase().includes(q)
-      ) {
-        return false;
-      }
+      if (q && !entry.searchCorpus.includes(q)) continue;
       if (policyFilters.freeCancellation) {
         const hasFreeCancel =
           Boolean(flags.freeCancellationHint) ||
-          (prop.available && !/\bnon-refundable|non refundable\b/.test(amenitiesText));
-        if (!hasFreeCancel) return false;
+          (prop.available && !entry.hasNonRefundableText);
+        if (!hasFreeCancel) continue;
       }
       if (policyFilters.withBreakfast) {
-        const hasBreakfast =
-          Boolean(flags.hasBreakfast) || /\bbreakfast|buffet|continental\b/.test(amenitiesText);
-        if (!hasBreakfast) return false;
+        const hasBreakfast = Boolean(flags.hasBreakfast) || entry.hasBreakfastText;
+        if (!hasBreakfast) continue;
       }
       if (policyFilters.creditCardRequired === "required") {
-        const needsCard = Boolean(flags.creditCardRequiredHint) || Boolean(prop.available);
-        if (!needsCard) return false;
+        if (!Boolean(flags.creditCardRequiredHint) && !Boolean(prop.available)) continue;
       } else if (policyFilters.creditCardRequired === "not_required") {
-        if (Boolean(flags.creditCardRequiredHint)) return false;
+        if (Boolean(flags.creditCardRequiredHint)) continue;
       }
       if (policyFilters.prepayRequired === "required") {
-        if (!Boolean(flags.prepayRequiredHint)) return false;
+        if (!Boolean(flags.prepayRequiredHint)) continue;
       } else if (policyFilters.prepayRequired === "not_required") {
-        if (Boolean(flags.prepayRequiredHint)) return false;
+        if (Boolean(flags.prepayRequiredHint)) continue;
       }
 
-      for (const amenityKey of selectedAmenities) {
-        if (!flags[amenityKey]) {
-          return false;
+      let missingAmenity = false;
+      for (let a = 0; a < selectedAmenities.length; a += 1) {
+        if (!flags[selectedAmenities[a]]) {
+          missingAmenity = true;
+          break;
         }
       }
+      if (missingAmenity) continue;
 
-      return true;
-    });
+      filtered.push(prop);
+    }
 
-    const sorted = [...filtered];
-    sorted.sort((a, b) => {
+    filtered.sort((a, b) => {
       if (sortBy === "price_asc") {
         const pa = a.minNightlyPrice ?? Number.MAX_SAFE_INTEGER;
         const pb = b.minNightlyPrice ?? Number.MAX_SAFE_INTEGER;
@@ -315,21 +326,20 @@ const HotelSearchResult = () => {
       if (sortBy === "stars_desc") {
         return Number(b.starRating || 0) - Number(a.starRating || 0);
       }
-      // Recommended: Available first, then lowest price
       if (a.available !== b.available) return a.available ? -1 : 1;
       const pa = a.minNightlyPrice ?? Number.MAX_SAFE_INTEGER;
       const pb = b.minNightlyPrice ?? Number.MAX_SAFE_INTEGER;
       return pa - pb;
     });
 
-    return sorted;
+    return filtered;
   }, [
+    deferredNameFilter,
+    deferredPriceRange,
+    indexedProperties,
     maxDistanceKm,
-    nameFilter,
     policyFilters,
     priceBounds,
-    priceRange,
-    properties,
     selectedAmenities,
     sortBy,
     starFilter,

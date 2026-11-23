@@ -373,25 +373,43 @@ export function computeStayNights(checkIn: string, checkOut: string): number {
   return Math.max(1, diff);
 }
 
+const AMENITY_RX = {
+  pool: /\b(pool|swimming|aquatic)\b/,
+  wifi: /\b(wi-fi|wifi|wireless|internet)\b/,
+  parking: /\b(parking|valet|garage)\b/,
+  gym: /\b(gym|fitness|health club|exercise|workout)\b/,
+  restaurant: /\b(restaurant|dining|cafe|coffee shop|lounge|bar)\b/,
+  spa: /\b(spa|sauna|massage|wellness|steam room|jacuzzi|whirlpool)\b/,
+  ac: /\b(air condition|a\/c|climate control)\b/,
+  shuttle: /\b(shuttle|airport transfer|transportation)\b/,
+  business: /\b(business|meeting|conference)\b/,
+  pet: /\b(pet|pets allowed|dog|cat)\b/,
+  noPets: /\bno pets\b/,
+  breakfast: /\b(breakfast|continental|buffet|complimentary meal|morning meal)\b/,
+  freeCancel: /\b(free cancel|cancellation permitted|refundable)\b/,
+  nonRefundable: /\bnon-refundable|non refundable\b/,
+  creditCard: /\b(credit card|guarantee|card required)\b/,
+  prepay: /\b(prepay|pre-pay|prepaid|advance deposit|deposit required)\b/,
+};
+
 function buildAmenityFlags(amenities: string[], corpusExtra = ""): HotelAmenityFlags {
   const corpus = `${amenities.join(" ")} ${corpusExtra}`.toLowerCase();
   return {
-    hasPool: /\b(pool|swimming|aquatic)\b/.test(corpus),
-    hasWifi: /\b(wi-fi|wifi|wireless|internet)\b/.test(corpus),
-    hasParking: /\b(parking|valet|garage)\b/.test(corpus),
-    hasGym: /\b(gym|fitness|health club|exercise|workout)\b/.test(corpus),
-    hasRestaurant: /\b(restaurant|dining|cafe|coffee shop|lounge|bar)\b/.test(corpus),
-    hasSpa: /\b(spa|sauna|massage|wellness|steam room|jacuzzi|whirlpool)\b/.test(corpus),
-    hasAc: /\b(air condition|a\/c|climate control)\b/.test(corpus),
-    hasShuttle: /\b(shuttle|airport transfer|transportation)\b/.test(corpus),
-    hasBusiness: /\b(business|meeting|conference)\b/.test(corpus),
-    petFriendly: /\b(pet|pets allowed|dog|cat)\b/.test(corpus) && !/\bno pets\b/.test(corpus),
-    hasBreakfast: /\b(breakfast|continental|buffet|complimentary meal|morning meal)\b/.test(corpus),
+    hasPool: AMENITY_RX.pool.test(corpus),
+    hasWifi: AMENITY_RX.wifi.test(corpus),
+    hasParking: AMENITY_RX.parking.test(corpus),
+    hasGym: AMENITY_RX.gym.test(corpus),
+    hasRestaurant: AMENITY_RX.restaurant.test(corpus),
+    hasSpa: AMENITY_RX.spa.test(corpus),
+    hasAc: AMENITY_RX.ac.test(corpus),
+    hasShuttle: AMENITY_RX.shuttle.test(corpus),
+    hasBusiness: AMENITY_RX.business.test(corpus),
+    petFriendly: AMENITY_RX.pet.test(corpus) && !AMENITY_RX.noPets.test(corpus),
+    hasBreakfast: AMENITY_RX.breakfast.test(corpus),
     freeCancellationHint:
-      /\b(free cancel|cancellation permitted|refundable)\b/.test(corpus) &&
-      !/\bnon-refundable|non refundable\b/.test(corpus),
-    creditCardRequiredHint: /\b(credit card|guarantee|card required)\b/.test(corpus),
-    prepayRequiredHint: /\b(prepay|pre-pay|prepaid|advance deposit|deposit required)\b/.test(corpus),
+      AMENITY_RX.freeCancel.test(corpus) && !AMENITY_RX.nonRefundable.test(corpus),
+    creditCardRequiredHint: AMENITY_RX.creditCard.test(corpus),
+    prepayRequiredHint: AMENITY_RX.prepay.test(corpus),
   };
 }
 
@@ -1186,9 +1204,10 @@ function convertRulesToUsd(
 
 export async function normalizeHotelSearchResponseUsd(
   raw: Record<string, unknown>,
-  nights = 1
+  nights = 1,
+  preloadedRates?: Record<string, number>
 ) {
-  const baseRates = await getUsdExchangeRates();
+  const baseRates = preloadedRates || (await getUsdExchangeRates());
   const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
   const normalized = normalizeHotelSearchResponse(raw, nights);
   return {
@@ -1199,20 +1218,22 @@ export async function normalizeHotelSearchResponseUsd(
 
 export async function normalizeHotelDetailsResponseUsd(
   raw: Record<string, unknown>,
-  nights = 1
+  nights = 1,
+  preloadedRates?: Record<string, number>
 ): Promise<NormalizedHotelProperty | null> {
   const prop = normalizeHotelDetailsResponse(raw, nights);
   if (!prop) return null;
-  const baseRates = await getUsdExchangeRates();
+  const baseRates = preloadedRates || (await getUsdExchangeRates());
   const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
   return convertPropertyToUsd(prop, rates);
 }
 
 export async function normalizeHotelAvailabilityResponseUsd(
   raw: Record<string, unknown>,
-  nights = 1
+  nights = 1,
+  preloadedRates?: Record<string, number>
 ) {
-  const baseRates = await getUsdExchangeRates();
+  const baseRates = preloadedRates || (await getUsdExchangeRates());
   const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
   const normalized = normalizeHotelAvailabilityResponse(raw, nights);
   return {
@@ -1223,9 +1244,10 @@ export async function normalizeHotelAvailabilityResponseUsd(
 
 export async function normalizeHotelRulesResponseUsd(
   raw: Record<string, unknown>,
-  fallbackOfferIdentifier = ""
+  fallbackOfferIdentifier = "",
+  preloadedRates?: Record<string, number>
 ): Promise<NormalizedHotelRules> {
-  const baseRates = await getUsdExchangeRates();
+  const baseRates = preloadedRates || (await getUsdExchangeRates());
   const rates = { ...baseRates, ...extractTravelportUsdRates(raw) };
   const rules = normalizeHotelRulesResponse(raw, fallbackOfferIdentifier);
   return convertRulesToUsd(rules, rates);

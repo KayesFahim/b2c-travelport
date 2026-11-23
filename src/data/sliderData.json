@@ -4,7 +4,7 @@
   "bannerimage": {
       "id": 22,
       "index": 1,
-      "imageUrl": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=1200&h=400&fit=crop"
+      "imageUrl": "/images/hero-airplane.jpg"
   },
   "sliderimage": [
       {
@@ -36,7 +36,7 @@
   "bannerimageMobile": {
       "id": 2,
       "index": 1,
-      "imageUrl": "https://images.unsplash.com/photo-1488646953014-85cb44e25828?w=600&h=400&fit=crop"
+      "imageUrl": "/images/hero-airplane.jpg"
   },
   "sliderimageMobile": [
       {

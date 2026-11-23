@@ -621,94 +621,22 @@ const getBrandAttributeSlidesToShow = (itemCount, viewportWidth) => {
 };
 
 const BrandAttributeSlider = ({ attributes = [] }) => {
-  const sliderRef = useRef(null);
-  const sliderWrapRef = useRef(null);
+  const trackRef = useRef(null);
   const items = useMemo(
     () => (Array.isArray(attributes) ? attributes.filter(Boolean) : []),
     [attributes]
   );
-  const [containerWidth, setContainerWidth] = useState(0);
-  const [viewportWidth, setViewportWidth] = useState(() =>
-    typeof window !== "undefined" ? window.innerWidth : 1600
-  );
-  const effectiveSliderWidth = containerWidth > 0 ? Math.min(containerWidth, viewportWidth) : viewportWidth;
-  const visibleSlides = useMemo(
-    () => getBrandAttributeSlidesToShow(items.length, effectiveSliderWidth),
-    [items.length, effectiveSliderWidth]
-  );
-  const canSlide = items.length > visibleSlides;
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-
-    const reflowSlider = () => {
-      sliderRef.current?.innerSlider?.onWindowResized?.();
-    };
-
-    const handleResize = () => {
-      setViewportWidth(window.innerWidth);
-      window.requestAnimationFrame(reflowSlider);
-    };
-
-    handleResize();
-    window.addEventListener("resize", handleResize);
-    const timeoutA = window.setTimeout(reflowSlider, 80);
-    const timeoutB = window.setTimeout(reflowSlider, 260);
-    return () => {
-      window.removeEventListener("resize", handleResize);
-      window.clearTimeout(timeoutA);
-      window.clearTimeout(timeoutB);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return undefined;
-    const container = sliderWrapRef.current;
-    if (!container) return undefined;
-    const reflow = () => sliderRef.current?.innerSlider?.onWindowResized?.();
-    const updateWidth = () => {
-      const width = Number(container.getBoundingClientRect().width || 0);
-      if (width > 0) {
-        setContainerWidth(width);
-      }
-      window.requestAnimationFrame(reflow);
-    };
-
-    updateWidth();
-    if (typeof ResizeObserver === "undefined") return undefined;
-
-    const observer = new ResizeObserver(() => {
-      updateWidth();
-    });
-    observer.observe(container);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const reflow = () => sliderRef.current?.innerSlider?.onWindowResized?.();
-    reflow();
-    const timeout = window.setTimeout(reflow, 120);
-    return () => window.clearTimeout(timeout);
-  }, [items.length, visibleSlides, effectiveSliderWidth]);
-
-  const sliderSettings = useMemo(
-    () => ({
-      dots: false,
-      arrows: false,
-      infinite: canSlide,
-      speed: 450,
-      slidesToShow: visibleSlides,
-      slidesToScroll: 1,
-      swipe: canSlide,
-      touchMove: canSlide,
-      draggable: canSlide,
-      swipeToSlide: canSlide,
-      adaptiveHeight: false,
-    }),
-    [canSlide, visibleSlides]
-  );
 
   if (items.length === 0) return null;
+
+  const canScroll = items.length > 3;
+
+  const scrollTrack = (direction) => {
+    const el = trackRef.current;
+    if (!el) return;
+    const step = Math.max(220, Math.round(el.clientWidth * 0.72));
+    el.scrollBy({ left: direction * step, behavior: "smooth" });
+  };
 
   const renderAttributeCard = (attribute, idx) => {
     const inclusionLabel = normalizeInclusionLabel(attribute.inclusion);
@@ -717,14 +645,14 @@ const BrandAttributeSlider = ({ attributes = [] }) => {
         <Box
           sx={{
             border: "1px solid #D8E5F1",
-            borderRadius: "6px",
+            borderRadius: "8px",
             p: "10px",
             display: "flex",
             flexDirection: "column",
             justifyContent: "space-between",
             gap: "9px",
             background: "#F9FCFF",
-            minHeight: "86px",
+            minHeight: "82px",
             height: "100%",
           }}
         >
@@ -784,7 +712,7 @@ const BrandAttributeSlider = ({ attributes = [] }) => {
     );
   };
 
-  if (!canSlide) {
+  if (!canScroll) {
     return (
       <Box sx={{ mt: "12px" }}>
         <Box
@@ -793,7 +721,7 @@ const BrandAttributeSlider = ({ attributes = [] }) => {
             gridTemplateColumns: {
               xs: "1fr",
               sm: "repeat(2, minmax(0, 1fr))",
-              md: "repeat(3, minmax(0, 1fr))",
+              md: `repeat(${Math.min(3, items.length)}, minmax(0, 1fr))`,
             },
             gap: "10px",
           }}
@@ -806,82 +734,57 @@ const BrandAttributeSlider = ({ attributes = [] }) => {
 
   return (
     <Box
-      ref={sliderWrapRef}
       sx={{
         mt: "12px",
         position: "relative",
         minWidth: 0,
       }}
     >
-      <Box
-        sx={{
-          py: "4px",
-          minWidth: 0,
-          "& .slick-track": {
-            marginLeft: 0,
-          },
-          "& .slick-slide > div": {
-            margin: "0 5px",
-          },
-          "& .slick-list": {
-            margin: "0 -5px",
-          },
-        }}
-      >
-        <Slider
-          key={`brand-attr-slider-${items.length}-${visibleSlides}`}
-          ref={sliderRef}
-          {...sliderSettings}
-        >
-          {items.map((attribute, idx) => renderAttributeCard(attribute, idx))}
-        </Slider>
+      <Box ref={trackRef} className="flyjatt-brand-attr-track">
+        {items.map((attribute, idx) => renderAttributeCard(attribute, idx))}
       </Box>
 
-      {canSlide && (
-        <>
-          <IconButton
-            size="small"
-            onClick={() => sliderRef.current?.slickPrev?.()}
-            sx={{
-              position: "absolute",
-              left: 4,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 28,
-              height: 28,
-              bgcolor: "#FFFFFF",
-              border: "1px solid #D0E0F1",
-              boxShadow: "0 10px 20px rgba(15,39,69,0.18)",
-              "&:hover": {
-                bgcolor: "#FFFFFF",
-              },
-            }}
-          >
-            <ChevronLeftRounded sx={{ fontSize: 16 }} />
-          </IconButton>
+      <IconButton
+        type="button"
+        aria-label="Scroll brand attributes left"
+        size="small"
+        onClick={() => scrollTrack(-1)}
+        sx={{
+          position: "absolute",
+          left: 4,
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: 28,
+          height: 28,
+          bgcolor: "#FFFFFF",
+          border: "1px solid #D0E0F1",
+          boxShadow: "0 8px 18px rgba(15,39,69,0.16)",
+          "&:hover": { bgcolor: "#F0F8FF" },
+        }}
+      >
+        <ChevronLeftRounded sx={{ fontSize: 16 }} />
+      </IconButton>
 
-          <IconButton
-            size="small"
-            onClick={() => sliderRef.current?.slickNext?.()}
-            sx={{
-              position: "absolute",
-              right: 4,
-              top: "50%",
-              transform: "translateY(-50%)",
-              width: 28,
-              height: 28,
-              bgcolor: "#FFFFFF",
-              border: "1px solid #D0E0F1",
-              boxShadow: "0 10px 20px rgba(15,39,69,0.18)",
-              "&:hover": {
-                bgcolor: "#FFFFFF",
-              },
-            }}
-          >
-            <ChevronRightRounded sx={{ fontSize: 16 }} />
-          </IconButton>
-        </>
-      )}
+      <IconButton
+        type="button"
+        aria-label="Scroll brand attributes right"
+        size="small"
+        onClick={() => scrollTrack(1)}
+        sx={{
+          position: "absolute",
+          right: 4,
+          top: "50%",
+          transform: "translateY(-50%)",
+          width: 28,
+          height: 28,
+          bgcolor: "#FFFFFF",
+          border: "1px solid #D0E0F1",
+          boxShadow: "0 8px 18px rgba(15,39,69,0.16)",
+          "&:hover": { bgcolor: "#F0F8FF" },
+        }}
+      >
+        <ChevronRightRounded sx={{ fontSize: 16 }} />
+      </IconButton>
     </Box>
   );
 };

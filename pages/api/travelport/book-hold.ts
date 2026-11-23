@@ -1805,13 +1805,33 @@ async function respondWithLoggedError(
     // Do not block API response when local logging fails.
   }
 
-  const responseBody: ErrorResponse = {
-    message: params.message,
-    ...(params.details ? { details: params.details } : {}),
+  const stageCode = `BOOKING_${String(params.stage || "ERROR")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .toUpperCase()}`;
+  const detailText = toText(params.details);
+  const combinedMessage =
+    detailText && !params.message.includes(detailText)
+      ? `${params.message}: ${detailText}`
+      : params.message;
+
+  // Preserve real Travelport validation/availability failures as 422 instead of generic masked 502 UPSTREAM_ERROR
+  const isUpstreamClientValidation =
+    params.status === 502 &&
+    (/\((400|404|409|422)\)/.test(params.message) ||
+      /INVALID|EXPIRED|UNAVAILABLE|REQUIRED|MISSING|NOT FOUND|SOLD OUT|UNABLE TO SELL|DUPLICATE/i.test(
+        detailText
+      ));
+  const finalStatus = isUpstreamClientValidation ? 422 : params.status;
+
+  const responseBody: ErrorResponse & { code: string; stage: string } = {
+    code: stageCode,
+    stage: params.stage,
+    message: combinedMessage,
+    ...(detailText ? { details: detailText } : {}),
     ...(params.warnings?.length ? { warnings: params.warnings } : {}),
     ...(params.apiFlowLogs ? { apiFlowLogs: params.apiFlowLogs } : {}),
   };
-  return res.status(params.status).json(responseBody);
+  return res.status(finalStatus).json(responseBody);
 }
 
 async function parseJsonSafe(response: Response) {

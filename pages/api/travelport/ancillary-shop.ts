@@ -335,16 +335,60 @@ async function handler(
       "Content-Version": version,
       Authorization: `Bearer ${accessToken}`,
     };
-    const response = await fetchUpstream(ancillaryShopUrl, {
+    let response = await fetchUpstream(ancillaryShopUrl, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(requestPayload),
     });
 
-    const responsePayload = (await response.json().catch(() => ({}))) as Record<
+    let responsePayload = (await response.json().catch(() => ({}))) as Record<
       string,
       unknown
     >;
+
+    const hasAncillaryOfferings = (payloadObj: Record<string, unknown>) => {
+      const root =
+        (payloadObj?.CatalogOfferingsAncillaryListResponse as Record<string, unknown>) ||
+        payloadObj;
+      const listA = Array.isArray(root?.CatalogOfferingsID) ? root.CatalogOfferingsID : [];
+      const listB = Array.isArray(root?.CatalogOfferingsAncillary) ? root.CatalogOfferingsAncillary : [];
+      return listA.length > 0 || listB.length > 0;
+    };
+
+    // If offer mode failed or returned empty ancillaries, fall back to BuildFromOfferList when offerListIdentifier + offerIdentifier exist
+    if (
+      resolvedMode === "offer" &&
+      canUseBuildFromOfferList &&
+      (!response.ok || !hasAncillaryOfferings(responsePayload))
+    ) {
+      const fallbackPayload = {
+        CatalogOfferingsQueryAncillaries: {
+          AncillaryOfferings: {
+            "@type": "AncillaryOfferingsBuildFromOfferList",
+            BuildFromOfferList: {
+              OfferListIdentifier: offerListIdentifier,
+              OfferIdentifier: [{ id: offerIdentifier }],
+            },
+          },
+        },
+      };
+      const fallbackRes = await fetchUpstream(ancillaryShopUrl, {
+        method: "POST",
+        headers: requestHeaders,
+        body: JSON.stringify(fallbackPayload),
+      });
+      const fallbackJson = (await fallbackRes.json().catch(() => ({}))) as Record<
+        string,
+        unknown
+      >;
+      if (fallbackRes.ok && (hasAncillaryOfferings(fallbackJson) || !response.ok)) {
+        response = fallbackRes;
+        responsePayload = fallbackJson;
+        requestPayload = fallbackPayload;
+        resolvedMode = "offerList";
+      }
+    }
+
     try {
       const { logTravelportApi } = await import("@/utils/travelportLogger");
       logTravelportApi({
@@ -356,25 +400,47 @@ async function handler(
       });
     } catch { }
     if (!response.ok) {
-      return res.status(502).json({
-        message: `Travelport ancillary shop failed (${response.status})`,
-        details:
-          normalizeIdentifier(
-            getValueByKeys(responsePayload, [
-              "message",
-              "Message",
-              "error_description",
-              "error",
-            ])
-          ) || "Unable to fetch ancillary offerings for this offer.",
+      const errDetail =
+        normalizeIdentifier(
+          (responsePayload as any)?.CatalogOfferingsAncillaryListResponse?.Result?.Error?.[0]?.Message ||
+          (responsePayload as any)?.ErrorResponse?.Result?.Error?.[0]?.Message ||
+          getValueByKeys(responsePayload, [
+            "message",
+            "Message",
+            "error_description",
+            "error",
+          ])
+        ) || "Unable to fetch ancillary offerings for this offer.";
+
+      // Gracefully report empty add-ons when carrier/offer has no ancillaries available
+      if (/NO ANCILLAR|NOT FOUND|NOT SUPPORTED|NO OPTIONAL/i.test(errDetail)) {
+        return res.status(200).json({
+          CatalogOfferingsAncillaryListResponse: { CatalogOfferingsID: [] },
+          ancillaryNotice: errDetail,
+          ancillaryShopMeta: { mode: resolvedMode, empty: true },
+        });
+      }
+
+      return res.status(response.status >= 400 && response.status < 500 ? 422 : 502).json({
+        code: "ANCILLARY_SHOP_ERROR",
+        message: errDetail,
+        details: errDetail,
         travelportResponse: responsePayload,
         mode: resolvedMode,
-        requestPayload,
       });
     }
 
+    const upstreamWarning = normalizeIdentifier(
+      (responsePayload as any)?.CatalogOfferingsAncillaryListResponse?.Result?.Error?.[0]?.Message ||
+      (responsePayload as any)?.CatalogOfferingsAncillaryListResponse?.Result?.Warning?.[0]?.Message ||
+      ""
+    );
+
     return res.status(200).json({
       ...responsePayload,
+      ...(upstreamWarning && !hasAncillaryOfferings(responsePayload)
+        ? { ancillaryNotice: upstreamWarning }
+        : {}),
       ancillaryShopMeta: {
         mode: resolvedMode,
       },

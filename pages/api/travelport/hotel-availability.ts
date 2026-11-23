@@ -1,5 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withApiHandler } from "@/server/api-handler";
+import { getUsdExchangeRates } from "@/server/currency-usd";
 import {
   callTravelportHotelApi,
   computeStayNights,
@@ -104,13 +105,16 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   };
 
   try {
-    const result = await callTravelportHotelApi({
-      path: "/availability/catalogofferingshospitality",
-      payload: requestPayload,
-      apiName: "hotel-availability",
-      retryOnTransientError: true,
-      meta: { propertyCode, chainCode, checkIn, checkOut },
-    });
+    const [fxRates, result] = await Promise.all([
+      getUsdExchangeRates(),
+      callTravelportHotelApi({
+        path: "/availability/catalogofferingshospitality",
+        payload: requestPayload,
+        apiName: "hotel-availability",
+        retryOnTransientError: true,
+        meta: { propertyCode, chainCode, checkIn, checkOut },
+      }),
+    ]);
 
     if (!result.ok) {
       return res.status(result.status >= 400 ? result.status : 502).json({
@@ -126,7 +130,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       });
     }
 
-    const normalized = await normalizeHotelAvailabilityResponseUsd(result.data, nights);
+    const normalized = await normalizeHotelAvailabilityResponseUsd(result.data, nights, fxRates);
 
     return res.status(200).json({
       success: true,

@@ -22,6 +22,7 @@ import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import KeyboardArrowDownIcon from "@mui/icons-material/KeyboardArrowDown";
 import MenuIcon from "@mui/icons-material/Menu";
+import FlightTakeoffRoundedIcon from "@mui/icons-material/FlightTakeoffRounded";
 import AccountBalanceIcon from "@mui/icons-material/AccountBalance";
 import TourIcon from "@mui/icons-material/Tour";
 import Swal from "sweetalert2";
@@ -541,8 +542,86 @@ const NavBar = () => {
     setDrawerOpen(open);
   };
 
+  const stickyHeaderRef = useRef(null);
+  const navListRef = useRef(null);
+
+  const [fallbackMenuOpen, setFallbackMenuOpen] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const supportsPopover = Object.hasOwn(HTMLElement.prototype, "popover");
+
+    const syncNavPopover = () => {
+      const list = navListRef.current;
+      if (!list) return;
+      const isWide = window.matchMedia("(min-width: 900px)").matches;
+      if (isWide) {
+        list.removeAttribute("popover");
+        list.classList.remove(":popover-open");
+        setFallbackMenuOpen(false);
+      } else {
+        list.setAttribute("popover", "auto");
+      }
+    };
+    syncNavPopover();
+    const mq = window.matchMedia("(min-width: 900px)");
+    if (typeof mq.addEventListener === "function") {
+      mq.addEventListener("change", syncNavPopover);
+    } else {
+      mq.addListener(syncNavPopover);
+    }
+
+    // Fallback Escape handler only when native Popover API is unavailable
+    const onKeyDown = (event) => {
+      if (!supportsPopover && event.key === "Escape") {
+        navListRef.current?.classList.remove(":popover-open");
+        setFallbackMenuOpen(false);
+      }
+    };
+    if (!supportsPopover) {
+      window.addEventListener("keydown", onKeyDown);
+    }
+
+    // IntersectionObserver fallback for state-aware-sticky-headers when scroll-state queries aren't supported
+    let observer;
+    const stickyEl = stickyHeaderRef.current;
+    if (stickyEl && typeof IntersectionObserver !== "undefined") {
+      const sentinel = document.createElement("div");
+      sentinel.setAttribute("aria-hidden", "true");
+      sentinel.style.cssText = "position:absolute;top:0;left:0;width:1px;height:1px;pointer-events:none;";
+      stickyEl.parentElement?.insertBefore(sentinel, stickyEl);
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          stickyEl.classList.toggle("is-stuck", !entry.isIntersecting);
+        },
+        { threshold: [1] }
+      );
+      observer.observe(sentinel);
+      return () => {
+        observer?.disconnect();
+        sentinel.remove();
+        if (!supportsPopover) window.removeEventListener("keydown", onKeyDown);
+        if (typeof mq.removeEventListener === "function") {
+          mq.removeEventListener("change", syncNavPopover);
+        } else {
+          mq.removeListener(syncNavPopover);
+        }
+      };
+    }
+
+    return () => {
+      if (!supportsPopover) window.removeEventListener("keydown", onKeyDown);
+      if (typeof mq.removeEventListener === "function") {
+        mq.removeEventListener("change", syncNavPopover);
+      } else {
+        mq.removeListener(syncNavPopover);
+      }
+    };
+  }, []);
+
   const darkHeaderPaths = new Set([
     "/",
+    "/homepage",
     "/tour",
     "/toursearchresult",
     "/nobooking",
@@ -550,6 +629,13 @@ const NavBar = () => {
     "/blog",
     "/contact",
     "/hotel",
+    "/stays",
+    "/hotels",
+    "/hotelresults",
+    "/hoteldetails",
+    "/hotelbooking",
+    "/package",
+    "/packages",
     "/terms",
     "/privacypolicy",
     "/selectedOffer",
@@ -565,7 +651,6 @@ const NavBar = () => {
     "/userinfov2/usertraveler",
     "/userinfov2/addtravler",
     "/userinfov2/adddeposite",
-
     "/paymentgateway",
     "/userinfov2/updateprofilev2",
     "/my-account",
@@ -585,49 +670,40 @@ const NavBar = () => {
     (isMobile && searchResultPaths.has(location?.pathname));
   const navIconColor = isDarkHeader ? "#EAF2FF" : "#0F2745";
   const primaryNavItems = [
-    { label: "Home", to: "/" },
+    { label: "Flights", to: "/" },
+    { label: "Stays", to: "/hotel" },
+    { label: "Packages", to: "/package" },
     { label: "About", to: "/about" },
     { label: "Blog", to: "/blog" },
     { label: "Contact", to: "/contact" },
   ];
 
-  const isNavItemActive = (path) =>
-    location?.pathname === path ||
-    (path !== "/" && String(location?.pathname || "").startsWith(path));
+  const isNavItemActive = (path) => {
+    const p = String(location?.pathname || "/");
+    if (path === "/") return p === "/" || p === "/homepage";
+    if (path === "/hotel") return p.startsWith("/hotel") || p.startsWith("/stay");
+    if (path === "/package") return p.startsWith("/package");
+    return p === path || p.startsWith(path);
+  };
 
   return (
-    <Box
-      component="header"
-      sx={{
-        background: isDarkHeader
-          ? "linear-gradient(180deg, rgba(10, 22, 42, 0.94) 0%, rgba(16, 36, 64, 0.9) 100%)"
-          : "rgba(248, 252, 255, 0.9)",
-        backdropFilter: "blur(12px)",
-        borderBottom: isDarkHeader
-          ? "1px solid rgba(255, 255, 255, 0.1)"
-          : "1px solid rgba(15, 39, 69, 0.1)",
-        boxShadow: isDarkHeader
-          ? "0px 12px 28px rgba(0, 0, 0, 0.24)"
-          : "0px 8px 24px rgba(16, 42, 67, 0.08)",
-        minHeight: { xs: "72px", md: "82px" },
-        width: "100%",
-        position: "sticky",
-        top: 0,
-        zIndex: 1100,
-      }}
-    >
-      <Box>
+    <Box ref={stickyHeaderRef} className="flyjatt-sticky-header-container">
+      <Box
+        component="header"
+        className={`flyjatt-header-bar${isDarkHeader ? "" : " is-light"}`}
+      >
         <Container maxWidth="xl">
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
               justifyContent: "space-between",
-              gap: 2,
-              py: { xs: 1, md: 1.25 },
+              gap: { xs: 1, md: 2 },
+              py: { xs: 1.1, md: 1.3 },
             }}
           >
-            <Box>
+            {/* Brand Logo + Aviation Emblem */}
+            <Box sx={{ flexShrink: 0 }}>
               <Link
                 className="flyjatt-focus-ring"
                 style={{
@@ -635,79 +711,135 @@ const NavBar = () => {
                   cursor: "pointer",
                   display: "inline-flex",
                   alignItems: "center",
-                  borderRadius: "10px",
-                  padding: "2px 6px",
+                  gap: "10px",
+                  borderRadius: "12px",
+                  padding: "3px 6px",
                 }}
                 to="/"
               >
-                <Typography
+                <Box
+                  aria-hidden="true"
                   sx={{
-                    fontSize: { xs: "26px", md: "32px" },
-                    fontWeight: 900,
-                    letterSpacing: "0.3px",
-                    lineHeight: 1.05,
-                    background: isDarkHeader
-                      ? "linear-gradient(120deg, #ffffff 0%, #d7e9ff 48%, #7dd3fc 100%)"
-                      : "linear-gradient(120deg, #061c39 0%, #0e4a7d 55%, #0082bd 100%)",
-                    WebkitBackgroundClip: "text",
-                    WebkitTextFillColor: "transparent",
-                    textShadow: isDarkHeader
-                      ? "0 8px 24px rgba(0,0,0,0.28)"
-                      : "none",
+                    width: { xs: 36, md: 40 },
+                    height: { xs: 36, md: 40 },
+                    borderRadius: "12px",
+                    background: "linear-gradient(135deg, #00b8f4 0%, #0077b6 58%, #0b3c70 100%)",
+                    boxShadow: "0 8px 20px rgba(0, 163, 224, 0.36), inset 0 1px 1px rgba(255,255,255,0.45)",
+                    display: "grid",
+                    placeItems: "center",
+                    color: "#ffffff",
                   }}
                 >
-                  Fly Jatt
-                </Typography>
+                  <FlightTakeoffRoundedIcon sx={{ fontSize: { xs: 20, md: 22 } }} />
+                </Box>
+                <Box>
+                  <Typography
+                    sx={{
+                      fontSize: { xs: "22px", md: "26px" },
+                      fontWeight: 900,
+                      letterSpacing: "-0.02em",
+                      lineHeight: 1.02,
+                      background: isDarkHeader
+                        ? "linear-gradient(120deg, #ffffff 0%, #dbeeff 52%, #67e8f9 100%)"
+                        : "linear-gradient(120deg, #061c39 0%, #0e4a7d 55%, #0082bd 100%)",
+                      WebkitBackgroundClip: "text",
+                      WebkitTextFillColor: "transparent",
+                    }}
+                  >
+                    Fly Jatt
+                  </Typography>
+                  <Typography
+                    sx={{
+                      display: { xs: "none", sm: "block" },
+                      fontSize: "10px",
+                      fontWeight: 700,
+                      letterSpacing: "0.14em",
+                      textTransform: "uppercase",
+                      color: isDarkHeader
+                        ? "rgba(186, 230, 253, 0.8)"
+                        : "rgba(15, 39, 69, 0.58)",
+                      mt: "1px",
+                    }}
+                  >
+                    Flights • Stays • Packages
+                  </Typography>
+                </Box>
               </Link>
             </Box>
 
+            {/* Single-tree semantic primary navigation (inline on desktop, native popover on mobile) */}
             <Box
               component="nav"
-              aria-label="Primary navigation"
+              aria-label="Primary"
               sx={{
-                display: { xs: "none", md: "flex" },
+                display: "flex",
                 alignItems: "center",
-                gap: 0.75,
-                px: 1,
-                py: 0.65,
-                borderRadius: "999px",
-                background: isDarkHeader
-                  ? "rgba(255, 255, 255, 0.08)"
-                  : "rgba(255, 255, 255, 0.94)",
-                border: isDarkHeader
-                  ? "1px solid rgba(255,255,255,0.16)"
-                  : "1px solid rgba(15,39,69,0.1)",
-                boxShadow: isDarkHeader
-                  ? "none"
-                  : "0 8px 20px rgba(15, 39, 69, 0.08)",
+                justifyContent: "center",
               }}
             >
-              {primaryNavItems.map((item) => {
-                const active = isNavItemActive(item.to);
-                return (
-                  <Link
-                    key={item.to}
-                    to={item.to}
-                    aria-current={active ? "page" : undefined}
-                    className="flyjatt-nav-link"
-                    style={{
-                      color: active
-                        ? "#ffffff"
-                        : isDarkHeader
-                          ? "#eaf2ff"
-                          : "#0f2745",
-                      background: active
-                        ? "linear-gradient(120deg, #0b4a82 0%, #0082c4 100%)"
-                        : "transparent",
-                    }}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
+              <button
+                type="button"
+                className="flyjatt-nav-menu-btn"
+                aria-controls="flyjatt-primary-menu"
+                aria-expanded={fallbackMenuOpen || undefined}
+                onClick={() => {
+                  if (typeof HTMLElement !== "undefined" && !Object.hasOwn(HTMLElement.prototype, "popover")) {
+                    const next = !fallbackMenuOpen;
+                    setFallbackMenuOpen(next);
+                    navListRef.current?.classList.toggle(":popover-open", next);
+                  }
+                }}
+                {...{
+                  popovertarget: "flyjatt-primary-menu",
+                  popovertargetaction: "toggle",
+                }}
+              >
+                <MenuIcon aria-hidden="true" sx={{ fontSize: 20 }} />
+                <span>Menu</span>
+              </button>
+
+              <ul
+                ref={navListRef}
+                id="flyjatt-primary-menu"
+                className="flyjatt-nav-list"
+              >
+                {primaryNavItems.map((item) => {
+                  const active = isNavItemActive(item.to);
+                  return (
+                    <li key={item.to}>
+                      <Link
+                        to={item.to}
+                        aria-current={active ? "page" : undefined}
+                        className="flyjatt-nav-link"
+                        onClick={() => {
+                          if (navListRef.current?.matches?.(":popover-open")) {
+                            navListRef.current.hidePopover?.();
+                          }
+                        }}
+                        style={{
+                          color: active
+                            ? "#ffffff"
+                            : isDarkHeader
+                              ? "#eaf2ff"
+                              : "#0f2745",
+                          background: active
+                            ? "linear-gradient(120deg, #009ad6 0%, #006ba8 100%)"
+                            : "transparent",
+                          boxShadow: active
+                            ? "0 6px 16px rgba(0, 154, 214, 0.34)"
+                            : "none",
+                        }}
+                      >
+                        {item.label}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
             </Box>
 
-            <Box>
+            {/* Right Account / Auth Actions */}
+            <Box sx={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 1 }}>
               {user?.name ? (
                 <Box
                   sx={{
@@ -728,26 +860,36 @@ const NavBar = () => {
                       }}
                     >
                       <Box>
-                        <IconButton
+                        <Button
+                          type="button"
                           onClick={handleClick}
-                          size="small"
                           aria-controls={open ? "account-menu" : undefined}
                           aria-haspopup="true"
                           aria-expanded={open ? "true" : undefined}
+                          sx={{
+                            borderRadius: "999px",
+                            px: 1.4,
+                            py: 0.65,
+                            minHeight: 42,
+                            textTransform: "none",
+                            color: navIconColor,
+                            bgcolor: isDarkHeader
+                              ? "rgba(255,255,255,0.1)"
+                              : "rgba(11,74,130,0.08)",
+                            border: isDarkHeader
+                              ? "1px solid rgba(255,255,255,0.2)"
+                              : "1px solid rgba(11,74,130,0.18)",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: 0.8,
+                            fontWeight: 700,
+                            fontSize: "13px",
+                          }}
                         >
-                          <AccountCircle
-                            sx={{
-                              color: navIconColor,
-                              fontSize: "40px",
-                            }}
-                          />
-                          <KeyboardArrowDownIcon
-                            sx={{
-                              color: navIconColor,
-                              fontSize: "30px",
-                            }}
-                          />
-                        </IconButton>
+                          <AccountCircle sx={{ fontSize: "24px" }} />
+                          <span>{String(user.name).split(" ")[0]}</span>
+                          <KeyboardArrowDownIcon sx={{ fontSize: "18px" }} />
+                        </Button>
                       </Box>
 
                       <Menu
@@ -1137,41 +1279,58 @@ const NavBar = () => {
                   </Box>
                 </Box>
               ) : (
-                <Button
-                  onClick={handleClickSignInOpen}
-                  sx={{
-                    bgcolor: "var(--primary-color)",
-                    textTransform: "capitalize",
-                    color: "#FFFFFF",
-                    width: "112px",
-                    fontSize: "13px",
-                    fontWeight: 700,
-                    borderRadius: "999px",
-                    boxShadow: "0 8px 20px rgba(0, 154, 214, 0.3)",
-                    ":hover": {
-                      bgcolor: "var(--primary-button)",
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                  <Button
+                    type="button"
+                    onClick={handleClickSignUpOpen}
+                    sx={{
+                      display: { xs: "none", sm: "inline-flex" },
+                      textTransform: "none",
+                      color: isDarkHeader ? "#eaf2ff" : "#0b4a82",
+                      border: isDarkHeader
+                        ? "1px solid rgba(255,255,255,0.26)"
+                        : "1px solid rgba(11,74,130,0.24)",
+                      bgcolor: isDarkHeader
+                        ? "rgba(255,255,255,0.07)"
+                        : "rgba(11,74,130,0.05)",
+                      px: 2.1,
+                      minHeight: 40,
+                      fontSize: "13px",
+                      fontWeight: 700,
+                      borderRadius: "999px",
+                      ":hover": {
+                        bgcolor: isDarkHeader
+                          ? "rgba(255,255,255,0.15)"
+                          : "rgba(11,74,130,0.12)",
+                      },
+                    }}
+                  >
+                    Create Account
+                  </Button>
+                  <Button
+                    type="button"
+                    onClick={handleClickSignInOpen}
+                    sx={{
+                      background: "linear-gradient(120deg, #00a8e8 0%, #0077b6 100%)",
+                      textTransform: "none",
                       color: "#FFFFFF",
-                      opacity: 1,
-                    },
-                  }}
-                >
-                  Sign In
-                </Button>
+                      px: { xs: 2.2, md: 2.6 },
+                      minHeight: 40,
+                      fontSize: "13px",
+                      fontWeight: 800,
+                      borderRadius: "999px",
+                      boxShadow: "0 8px 20px rgba(0, 154, 214, 0.36)",
+                      ":hover": {
+                        background: "linear-gradient(120deg, #0093cc 0%, #006299 100%)",
+                        color: "#FFFFFF",
+                      },
+                    }}
+                  >
+                    Sign In
+                  </Button>
+                </Box>
               )}
             </Box>
-          </Box>
-          <Box
-            component="nav"
-            aria-label="Primary navigation"
-            sx={{ display: { xs: "flex", md: "none" }, justifyContent: "center", gap: 0.5, pb: 1.25 }}
-          >
-            {primaryNavItems.map((item) => (
-              <Link key={item.to} to={item.to} className="flyjatt-nav-link"
-                aria-current={isNavItemActive(item.to) ? "page" : undefined}
-                style={{ color: isDarkHeader ? "#eaf2ff" : "#0f2745", background: isNavItemActive(item.to) ? "rgba(0,154,214,0.22)" : "transparent" }}>
-                {item.label}
-              </Link>
-            ))}
           </Box>
         </Container>
       </Box>
