@@ -15,6 +15,7 @@ import {
   MAX_CONNECTION_DURATION_OPTIONS,
   MAX_OVERNIGHT_DURATION_OPTIONS,
   POPULAR_AIRLINE_OPTIONS,
+  ROUND_TRIP_SEARCH_MODES,
   UPSELL_COUNT_OPTIONS,
   countActiveTravelportFilters,
   createDefaultTravelportSearchFilters,
@@ -1063,6 +1064,58 @@ const SearchCriteriaFilter = ({ filters, onChange }) => {
                 />
                 <span>Exclude Optional Bag Fees in Offer Calc</span>
               </label>
+            </Box>
+          </fieldset>
+
+          {/* 6. Round-Trip Search Representation (Combinable vs Leg-Based / Next Leg) */}
+          <fieldset className="flyjatt-filter-fieldset">
+            <legend>Round-Trip Mode (SearchRepresentation)</legend>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" },
+                gap: 0.85,
+                mt: 0.4,
+              }}
+            >
+              {ROUND_TRIP_SEARCH_MODES.map((option) => {
+                const isSelected = currentFilters.roundTripSearchMode === option.value;
+                return (
+                  <label
+                    key={option.value}
+                    htmlFor={`${baseId}-rt-mode-${option.value}`}
+                    className="flyjatt-radio-label"
+                    style={{
+                      border: isSelected
+                        ? "1px solid #007bb0"
+                        : "1px solid #d7e6f5",
+                      background: isSelected ? "#eef7fd" : "#ffffff",
+                      alignItems: "flex-start",
+                      paddingBlock: "0.55rem",
+                    }}
+                  >
+                    <input
+                      id={`${baseId}-rt-mode-${option.value}`}
+                      type="radio"
+                      name={`${baseId}-rt-mode`}
+                      className="flyjatt-radio-input"
+                      style={{ marginTop: "0.15rem" }}
+                      checked={isSelected}
+                      onChange={() =>
+                        updateFilters({ roundTripSearchMode: option.value })
+                      }
+                    />
+                    <span>
+                      <span style={{ display: "block", fontWeight: 700, color: "#0f2942" }}>
+                        {option.label}
+                      </span>
+                      <span style={{ display: "block", fontSize: "0.74rem", fontWeight: 500, color: "#4c657f" }}>
+                        {option.hint}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
             </Box>
           </fieldset>
         </Box>

@@ -1609,7 +1609,11 @@ function buildTravelportPayload(body: LegacySearchBody) {
 export function toUnifiedSearchResult(
   payloadSegments: LegacySegment[],
   rawResponse: unknown,
-  allowedContentSources?: string[]
+  allowedContentSources?: string[],
+  options?: {
+    searchRepresentation?: string;
+    preferLastPricedLeg?: boolean;
+  }
 ): Record<string, unknown>[] {
   const data = removeAtType(rawResponse as Record<string, unknown>);
 
@@ -2029,9 +2033,23 @@ export function toUnifiedSearchResult(
     }
   );
 
-  if (payloadSegments.length <= 1) {
+  const isLegMode =
+    String(options?.searchRepresentation || "").trim().toLowerCase() === "leg";
+
+  if (payloadSegments.length <= 1 || isLegMode) {
     return mappedOfferings
-      .map((item) => item.unified)
+      .map((item) => ({
+        ...item.unified,
+        ...(isLegMode
+          ? {
+              isLegBased: true,
+              searchRepresentation: "Leg",
+              legSequence: item.sequence,
+              journeyType: "ROUND_TRIP_LEG",
+              tripType: "ROUND_TRIP_LEG",
+            }
+          : {}),
+      }))
       .sort((a, b) => toNumber((a as any)?.netFare, 0) - toNumber((b as any)?.netFare, 0));
   }
 
@@ -2077,13 +2095,48 @@ export function toUnifiedSearchResult(
       if (index >= requiredSequences.length) {
         const selectedLegs = [...currentSelection];
         const firstLeg = selectedLegs[0] ?? {};
+        const preferLastPricedLeg = Boolean(options?.preferLastPricedLeg);
+        const firstHasPrice =
+          toNumber((firstLeg as any)?.netFare, 0) > 0 ||
+          toNumber((firstLeg as any)?.grossFare, 0) > 0;
+        const pricedLeg =
+          preferLastPricedLeg || !firstHasPrice
+            ? [...selectedLegs]
+                .reverse()
+                .find(
+                  (item) =>
+                    toNumber((item as any)?.netFare, 0) > 0 ||
+                    toNumber((item as any)?.grossFare, 0) > 0
+                ) ?? firstLeg
+            : firstLeg;
         const primaryOfferIdentifier =
           String(
+            (pricedLeg as any)?.offerIdentifier ??
+            (pricedLeg as any)?.OfferIdentifier ??
             (firstLeg as any)?.offerIdentifier ??
             (firstLeg as any)?.OfferIdentifier ??
             (firstLeg as any)?.identifier ??
             ""
           ).trim() || "";
+        const catalogProductOfferingSelections = selectedLegs
+          .map((item, legIdx) => ({
+            sequence: legIdx + 1,
+            offerIdentifier: String(
+              (item as any)?.offerIdentifier ??
+                (item as any)?.OfferIdentifier ??
+                (item as any)?.identifier ??
+                ""
+            ).trim(),
+            productIdentifiers: Array.isArray((item as any)?.productIdentifiers)
+              ? (item as any).productIdentifiers
+                  .map((value: unknown) => String(value ?? "").trim())
+                  .filter(Boolean)
+              : [],
+          }))
+          .filter(
+            (selection) =>
+              selection.offerIdentifier && selection.productIdentifiers.length > 0
+          );
         const combinedProductIdentifiers = Array.from(
           new Set(
             selectedLegs.flatMap((item) => {
@@ -2125,22 +2178,42 @@ export function toUnifiedSearchResult(
         },
           { change: [] as unknown[], cancel: [] as unknown[] }
         );
+        const resolvedOfferListIdentifier =
+          String((pricedLeg as any)?.offerListIdentifier ?? "").trim() ||
+          String((firstLeg as any)?.offerListIdentifier ?? "").trim() ||
+          catalogProductOfferingsIdentifier;
+        const resolvedPriceBreakDown =
+          Array.isArray((pricedLeg as any)?.priceBreakDown) &&
+          (pricedLeg as any).priceBreakDown.length > 0
+            ? (pricedLeg as any).priceBreakDown
+            : Array.isArray((firstLeg as any)?.priceBreakDown)
+              ? (firstLeg as any).priceBreakDown
+              : [];
 
         combinedOptions.push({
           ...firstLeg,
+          currencyCode: (pricedLeg as any)?.currencyCode || (firstLeg as any)?.currencyCode || "USD",
+          baseFare: toNumber((pricedLeg as any)?.baseFare, 0),
+          taxes: toNumber((pricedLeg as any)?.taxes, 0),
+          netFare: toNumber((pricedLeg as any)?.netFare, 0),
+          grossFare: toNumber((pricedLeg as any)?.grossFare, 0),
+          markUp: (pricedLeg as any)?.markUp ?? (firstLeg as any)?.markUp ?? "0",
+          timeLimit: (pricedLeg as any)?.timeLimit ?? (firstLeg as any)?.timeLimit ?? null,
+          refundable: Boolean((pricedLeg as any)?.refundable || (firstLeg as any)?.refundable),
+          priceBreakDown: resolvedPriceBreakDown,
           identifier: selectedLegs
             .map((item) => String((item as any)?.identifier ?? ""))
             .filter(Boolean)
             .join("_"),
           offerIdentifier: primaryOfferIdentifier || null,
           OfferIdentifier: primaryOfferIdentifier || null,
+          offerListIdentifier: resolvedOfferListIdentifier,
           productIdentifiers: combinedProductIdentifiers,
+          catalogProductOfferingSelections,
           farePolicyRequest: primaryOfferIdentifier
             ? {
               offerIdentifier: primaryOfferIdentifier,
-              offerListIdentifier:
-                String((firstLeg as any)?.offerListIdentifier ?? "").trim() ||
-                catalogProductOfferingsIdentifier,
+              offerListIdentifier: resolvedOfferListIdentifier,
               productIdentifiers: combinedProductIdentifiers,
             }
             : null,
@@ -2807,6 +2880,8 @@ async function handler(
         remaining: 100,
         count: 1,
         mode: "anonymous",
+        ipHash: "",
+        browserFingerprint: "",
       };
     }
 
@@ -2904,7 +2979,8 @@ async function handler(
         unifiedResults = toUnifiedSearchResult(
           payloadSegments,
           responsePayload,
-          contentSourceList
+          contentSourceList,
+          { searchRepresentation }
         );
         if (unifiedResults.length === 0) {
           const catalogErrs = (

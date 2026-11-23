@@ -489,6 +489,71 @@ const FlightSearchBox = ({
           filters={effectiveSearchFilters}
           onChange={handleSearchFiltersChange}
         />
+
+        {valueBox === "roundway" && (
+          <Box
+            sx={{
+              display: "inline-flex",
+              alignItems: "center",
+              flexWrap: "wrap",
+              gap: 0.75,
+              px: 1.25,
+              py: 0.2,
+              borderRadius: "12px",
+              border:
+                effectiveSearchFilters.roundTripSearchMode === "leg_based"
+                  ? "1px solid #007bb0"
+                  : "1px solid rgba(11, 74, 130, 0.2)",
+              background:
+                effectiveSearchFilters.roundTripSearchMode === "leg_based"
+                  ? "rgba(0, 123, 176, 0.09)"
+                  : "#ffffff",
+            }}
+          >
+            <label
+              htmlFor="flyjatt-roundtrip-leg-mode"
+              className="flyjatt-check-label"
+              style={{ paddingInline: "0.2rem", minBlockSize: "40px" }}
+            >
+              <input
+                id="flyjatt-roundtrip-leg-mode"
+                type="checkbox"
+                className="flyjatt-check-input"
+                checked={effectiveSearchFilters.roundTripSearchMode === "leg_based"}
+                onChange={(event) =>
+                  handleSearchFiltersChange({
+                    ...effectiveSearchFilters,
+                    roundTripSearchMode: event.target.checked
+                      ? "leg_based"
+                      : "combinable",
+                  })
+                }
+              />
+              <span>Leg-Based / Next Leg System</span>
+            </label>
+            <Chip
+              size="small"
+              label={
+                effectiveSearchFilters.roundTripSearchMode === "leg_based"
+                  ? "Outbound → Next Leg"
+                  : "Combined Fare"
+              }
+              sx={{
+                fontWeight: 700,
+                fontSize: "11px",
+                height: "22px",
+                bgcolor:
+                  effectiveSearchFilters.roundTripSearchMode === "leg_based"
+                    ? "#007bb0"
+                    : "rgba(11, 74, 130, 0.1)",
+                color:
+                  effectiveSearchFilters.roundTripSearchMode === "leg_based"
+                    ? "#ffffff"
+                    : "#0b4a82",
+              }}
+            />
+          </Box>
+        )}
       </Box>
 
       <Box

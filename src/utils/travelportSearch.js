@@ -238,6 +238,14 @@ function mapUnifiedFlightToLegacyCompat(unified) {
     offerListIdentifier,
     productIdentifiers,
     farePolicyRequest,
+    isLegBased: Boolean(unified?.isLegBased),
+    searchRepresentation: unified?.searchRepresentation || "",
+    legSequence: unified?.legSequence ?? null,
+    isBuildNextOffer: Boolean(unified?.isBuildNextOffer),
+    isLegOnlyFallback: Boolean(unified?.isLegOnlyFallback),
+    catalogProductOfferingSelections: Array.isArray(unified?.catalogProductOfferingSelections)
+      ? unified.catalogProductOfferingSelections
+      : [],
     InstantPayment: Boolean(unified?.instantPayment),
     IsBookable: Boolean(unified?.isBookable),
     TripType:

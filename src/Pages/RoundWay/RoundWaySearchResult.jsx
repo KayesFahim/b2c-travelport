@@ -1,10 +1,14 @@
 import {
+  Alert,
   Box,
   Button,
+  Chip,
+  CircularProgress,
   Container,
   Drawer,
   Grid,
   Pagination,
+  Stack,
   Typography,
 } from "@mui/material";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
@@ -22,7 +26,10 @@ import { debounce } from "lodash";
 import Filter from "../Filter/Filter";
 import SingleFlight from "../SingleFlight/SingleFlight";
 import Slider from "@mui/material/Slider";
-import { searchTravelportFlights } from "../../utils/travelportSearch";
+import {
+  fetchTravelportNextLeg,
+  searchTravelportFlights,
+} from "../../utils/travelportSearch";
 import { groupFlightsBySchedule } from "../common/flightGrouping";
 import { readRecentSearches } from "../../utils/recentSearches";
 import {
@@ -262,6 +269,27 @@ const RoundWaySearchResult = () => {
   const token = secureLocalStorage.getItem("access_token");
   const [sortedBy, setSortedBy] = useState(null);
 
+  // Round-trip mode: Combinable ("combinable") vs Leg-Based / Next Leg ("leg_based")
+  const [roundTripMode, setRoundTripMode] = useState(() =>
+    resolvedSearchContext?.searchFilters?.roundTripSearchMode === "leg_based"
+      ? "leg_based"
+      : "combinable"
+  );
+  const isLegBasedMode = roundTripMode === "leg_based";
+  const [legStep, setLegStep] = useState("outbound"); // "outbound" | "return"
+  const [outboundOffersCache, setOutboundOffersCache] = useState([]);
+  const [selectedOutbound, setSelectedOutbound] = useState(null);
+  const [nextLegLoading, setNextLegLoading] = useState(false);
+  const [nextLegError, setNextLegError] = useState("");
+
+  useEffect(() => {
+    setRoundTripMode(
+      resolvedSearchContext?.searchFilters?.roundTripSearchMode === "leg_based"
+        ? "leg_based"
+        : "combinable"
+    );
+  }, [resolvedSearchContext?.searchFilters?.roundTripSearchMode]);
+
   // State for pagination
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -307,44 +335,74 @@ const RoundWaySearchResult = () => {
   const [minPrice, setMinPrice] = useState(0);
   const [maxPrice, setMaxPrice] = useState(100000);
 
+  const updatePriceBounds = useCallback((offerList) => {
+    const prices = (Array.isArray(offerList) ? offerList : [])
+      .map((item) => Number(item?.NetFare))
+      .filter((price) => Number.isFinite(price) && price >= 0);
+    if (prices.length > 0) {
+      const minVal = Math.min(...prices);
+      const maxVal = Math.max(...prices);
+      setMinPrice(minVal);
+      setMaxPrice(maxVal);
+      setPriceRange([minVal, maxVal]);
+    } else {
+      setMinPrice(0);
+      setMaxPrice(100000);
+      setPriceRange([0, 100000]);
+    }
+  }, []);
+
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
+      setLegStep("outbound");
+      setSelectedOutbound(null);
+      setOutboundOffersCache([]);
+      setNextLegError("");
+      setNextLegLoading(false);
+      setCurrentPage(1);
+
       try {
         if (!resolvedSearchContext.valid) {
           setFlights([]);
           setFilteredFlights([]);
           setInitialFetchData([]);
-          setMinPrice(0);
-          setMaxPrice(100000);
-          setPriceRange([0, 100000]);
+          updatePriceBounds([]);
           return;
         }
 
-        const data = await searchTravelportFlights(resolvedSearchContext.payload, token);
+        const effectivePayload = {
+          ...resolvedSearchContext.payload,
+          ...(isLegBasedMode
+            ? { searchRepresentation: "Leg" }
+            : { searchRepresentation: "" }),
+          searchFilters: {
+            ...(resolvedSearchContext.payload?.searchFilters || {}),
+            roundTripSearchMode: roundTripMode,
+            searchRepresentation: isLegBasedMode ? "Leg" : "",
+          },
+        };
+
+        const data = await searchTravelportFlights(effectivePayload, token);
         const normalizedData = Array.isArray(data) ? data : [];
-        const roundTripOnlyData = normalizedData.filter((item) => {
-          const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
-          return legs.length > 1;
-        });
+        const usableData = isLegBasedMode
+          ? normalizedData.filter((item) => {
+              const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
+              return legs.length >= 1;
+            })
+          : normalizedData.filter((item) => {
+              const legs = Array.isArray(item?.AllLegsInfo) ? item.AllLegsInfo : [];
+              return legs.length > 1;
+            });
 
-        setFlights(roundTripOnlyData);
-        setFilteredFlights(roundTripOnlyData);
-        setInitialFetchData(roundTripOnlyData);
-
-        // Calculate min and max price
-        const prices = roundTripOnlyData
-          .map((item) => Number(item?.NetFare))
-          .filter((price) => Number.isFinite(price));
-        if (prices.length > 0) {
-          setMinPrice(Math.min(...prices));
-          setMaxPrice(Math.max(...prices));
-          setPriceRange([Math.min(...prices), Math.max(...prices)]);
-        } else {
-          setMinPrice(0);
-          setMaxPrice(100000);
-          setPriceRange([0, 100000]);
+        if (isLegBasedMode) {
+          setOutboundOffersCache(usableData);
         }
+
+        setFlights(usableData);
+        setFilteredFlights(usableData);
+        setInitialFetchData(usableData);
+        updatePriceBounds(usableData);
       } catch (error) {
         if (
           error?.requiresLogin ||
@@ -377,9 +435,207 @@ const RoundWaySearchResult = () => {
     fetchData();
   }, [
     resolvedSearchContext,
+    roundTripMode,
+    isLegBasedMode,
     token,
     navigate,
+    updatePriceBounds,
   ]);
+
+  const mergeOutboundWithReturnOffer = useCallback((outboundOffer, returnOffer) => {
+    const returnLegs = Array.isArray(returnOffer?.AllLegsInfo)
+      ? returnOffer.AllLegsInfo
+      : [];
+    if (returnLegs.length >= 2) {
+      return {
+        ...returnOffer,
+        TripType: "Return",
+      };
+    }
+
+    const outboundLeg = Array.isArray(outboundOffer?.AllLegsInfo)
+      ? outboundOffer.AllLegsInfo[0]
+      : null;
+    const returnLeg = returnLegs[0] || null;
+    const mergedLegs = [outboundLeg, returnLeg].filter(Boolean);
+
+    const combinedProductIds = Array.from(
+      new Set([
+        ...(Array.isArray(outboundOffer?.productIdentifiers)
+          ? outboundOffer.productIdentifiers
+          : []),
+        ...(Array.isArray(returnOffer?.productIdentifiers)
+          ? returnOffer.productIdentifiers
+          : []),
+      ])
+    ).filter(Boolean);
+
+    const offerListId =
+      returnOffer?.offerListIdentifier ||
+      outboundOffer?.offerListIdentifier ||
+      "";
+    const primaryOfferId =
+      returnOffer?.OfferIdentifier ||
+      returnOffer?.offerIdentifier ||
+      outboundOffer?.OfferIdentifier ||
+      outboundOffer?.offerIdentifier ||
+      "";
+
+    return {
+      ...returnOffer,
+      ResultId: [outboundOffer?.ResultId, returnOffer?.ResultId]
+        .filter(Boolean)
+        .join("_"),
+      TripType: "Return",
+      offerListIdentifier: offerListId,
+      offerIdentifier: primaryOfferId,
+      OfferIdentifier: primaryOfferId,
+      productIdentifiers: combinedProductIds,
+      farePolicyRequest: primaryOfferId
+        ? {
+            offerIdentifier: primaryOfferId,
+            offerListIdentifier: offerListId,
+            productIdentifiers: combinedProductIds,
+          }
+        : returnOffer?.farePolicyRequest || null,
+      AllLegsInfo: mergedLegs,
+      catalogProductOfferingSelections: [
+        {
+          sequence: 1,
+          offerIdentifier:
+            outboundOffer?.OfferIdentifier || outboundOffer?.offerIdentifier || "",
+          productIdentifiers: Array.isArray(outboundOffer?.productIdentifiers)
+            ? outboundOffer.productIdentifiers
+            : [],
+        },
+        {
+          sequence: 2,
+          offerIdentifier:
+            returnOffer?.OfferIdentifier || returnOffer?.offerIdentifier || "",
+          productIdentifiers: Array.isArray(returnOffer?.productIdentifiers)
+            ? returnOffer.productIdentifiers
+            : [],
+        },
+      ].filter((sel) => sel.offerIdentifier),
+    };
+  }, []);
+
+  const handleSelectOutbound = useCallback(
+    async (outboundOffer) => {
+      if (!outboundOffer) return;
+
+      const cposId =
+        outboundOffer?.offerListIdentifier ||
+        outboundOffer?.farePolicyRequest?.offerListIdentifier ||
+        outboundOffer?.sourceUnified?.offerListIdentifier ||
+        "";
+      const selectedCpoId =
+        outboundOffer?.OfferIdentifier ||
+        outboundOffer?.offerIdentifier ||
+        outboundOffer?.ResultId ||
+        "";
+      const selectedProductRef =
+        (Array.isArray(outboundOffer?.productIdentifiers) &&
+          outboundOffer.productIdentifiers[0]) ||
+        (Array.isArray(outboundOffer?.farePolicyRequest?.productIdentifiers) &&
+          outboundOffer.farePolicyRequest.productIdentifiers[0]) ||
+        "p0";
+
+      setSelectedOutbound(outboundOffer);
+      setLegStep("return");
+      setNextLegLoading(true);
+      setNextLegError("");
+      setCurrentPage(1);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+
+      try {
+        const nextLegResponse = await fetchTravelportNextLeg(
+          {
+            cposId,
+            selectedCpoId,
+            selectedProductRef,
+            segments: resolvedSearchContext?.payload?.segments || [],
+            contentSourceList:
+              resolvedSearchContext?.payload?.contentSourceList || ["GDS", "NDC"],
+          },
+          token
+        );
+
+        const rawReturnOffers = Array.isArray(nextLegResponse?.offers)
+          ? nextLegResponse.offers
+          : [];
+        const mergedReturnOffers = rawReturnOffers.map((item) =>
+          mergeOutboundWithReturnOffer(outboundOffer, item)
+        );
+
+        setFlights(mergedReturnOffers);
+        setFilteredFlights(mergedReturnOffers);
+        setInitialFetchData(mergedReturnOffers);
+        updatePriceBounds(mergedReturnOffers);
+
+        if (mergedReturnOffers.length === 0) {
+          setNextLegError(
+            "No combinable return flights were returned for this outbound selection. Try selecting another outbound flight."
+          );
+        }
+      } catch (error) {
+        setFlights([]);
+        setFilteredFlights([]);
+        setInitialFetchData([]);
+        updatePriceBounds([]);
+        setNextLegError(
+          error?.message || "Failed to fetch return flights from Travelport Next Leg API."
+        );
+      } finally {
+        setNextLegLoading(false);
+      }
+    },
+    [
+      mergeOutboundWithReturnOffer,
+      resolvedSearchContext?.payload?.contentSourceList,
+      resolvedSearchContext?.payload?.segments,
+      token,
+      updatePriceBounds,
+    ]
+  );
+
+  const handleChangeOutbound = useCallback(() => {
+    setLegStep("outbound");
+    setSelectedOutbound(null);
+    setNextLegError("");
+    setNextLegLoading(false);
+    setCurrentPage(1);
+    setFlights(outboundOffersCache);
+    setFilteredFlights(outboundOffersCache);
+    setInitialFetchData(outboundOffersCache);
+    updatePriceBounds(outboundOffersCache);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [outboundOffersCache, updatePriceBounds]);
+
+  const handleSelectReturnAndBook = useCallback(
+    (returnOffer) => {
+      const completeOffer = selectedOutbound
+        ? mergeOutboundWithReturnOffer(selectedOutbound, returnOffer)
+        : returnOffer;
+      const bookingState = {
+        selectedOffer: completeOffer || {},
+        source: "search-results-leg-based",
+        selectedAt: new Date().toISOString(),
+      };
+      try {
+        if (typeof window !== "undefined") {
+          window.sessionStorage.setItem(
+            "flyjatt:selected_offer",
+            JSON.stringify(bookingState)
+          );
+        }
+      } catch (storageError) {
+        console.warn("Unable to cache selected offer for booking flow", storageError);
+      }
+      navigate("/selectedOffer", { state: bookingState });
+    },
+    [mergeOutboundWithReturnOffer, navigate, selectedOutbound]
+  );
 
   // const handleAirlineClick = (career) => {
   //   setSelectedAirline(career);
@@ -1239,8 +1495,161 @@ const RoundWaySearchResult = () => {
             </Box>
           </Grid>
           <Grid item xs={12} sm={12} md={9.6} lg={9.5}>
+            {/* Round-Trip Search Mode Control Bar (Combinable Fare vs Leg-Based / Next Leg) */}
+            <Box
+              sx={{
+                mb: 2,
+                p: { xs: 1.4, md: 1.8 },
+                borderRadius: "14px",
+                border: isLegBasedMode
+                  ? "1px solid rgba(0, 123, 176, 0.45)"
+                  : "1px solid #d7e6f5",
+                background: isLegBasedMode
+                  ? "linear-gradient(120deg, #f0f8ff 0%, #ffffff 100%)"
+                  : "#ffffff",
+                boxShadow: "0 6px 18px rgba(8, 49, 85, 0.06)",
+              }}
+            >
+              <Box
+                sx={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  gap: 1.2,
+                }}
+              >
+                <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1 }}>
+                  <label
+                    htmlFor="roundway-results-leg-mode"
+                    className="flyjatt-check-label"
+                    style={{
+                      paddingInline: "0.45rem",
+                      minBlockSize: "40px",
+                      background: isLegBasedMode ? "rgba(0,123,176,0.1)" : "#f6fafd",
+                      border: "1px solid rgba(11,74,130,0.18)",
+                    }}
+                  >
+                    <input
+                      id="roundway-results-leg-mode"
+                      type="checkbox"
+                      className="flyjatt-check-input"
+                      checked={isLegBasedMode}
+                      onChange={(event) =>
+                        setRoundTripMode(
+                          event.target.checked ? "leg_based" : "combinable"
+                        )
+                      }
+                    />
+                    <span>Leg-Based / Next Leg System</span>
+                  </label>
+                  <Chip
+                    size="small"
+                    label={
+                      isLegBasedMode
+                        ? legStep === "outbound"
+                          ? `Step 1 of 2: Select Outbound (${displayContext.fromCode} → ${displayContext.toCode})`
+                          : `Step 2 of 2: Select Return (${displayContext.toCode} → ${displayContext.fromCode}) — Combined Fare`
+                        : "Combinable Fare Mode (Joint Round-Trip Pricing)"
+                    }
+                    sx={{
+                      fontWeight: 700,
+                      fontSize: "12px",
+                      bgcolor: isLegBasedMode ? "#0b4a82" : "rgba(0, 123, 176, 0.12)",
+                      color: isLegBasedMode ? "#ffffff" : "#0b4a82",
+                    }}
+                  />
+                </Box>
+
+                {isLegBasedMode && (
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Chip
+                      size="small"
+                      label={`1. Outbound (${displayContext.fromCode}→${displayContext.toCode})`}
+                      aria-current={legStep === "outbound" ? "step" : undefined}
+                      sx={{
+                        fontWeight: 700,
+                        bgcolor:
+                          legStep === "outbound"
+                            ? "#007bb0"
+                            : "rgba(16, 185, 129, 0.16)",
+                        color: legStep === "outbound" ? "#ffffff" : "#047857",
+                      }}
+                    />
+                    <Typography sx={{ color: "#64748b", fontWeight: 700 }}>→</Typography>
+                    <Chip
+                      size="small"
+                      label={`2. Return (${displayContext.toCode}→${displayContext.fromCode})`}
+                      aria-current={legStep === "return" ? "step" : undefined}
+                      sx={{
+                        fontWeight: 700,
+                        bgcolor:
+                          legStep === "return" ? "#007bb0" : "rgba(100, 116, 139, 0.14)",
+                        color: legStep === "return" ? "#ffffff" : "#475569",
+                      }}
+                    />
+                  </Stack>
+                )}
+              </Box>
+
+              {isLegBasedMode && selectedOutbound && (
+                <Box
+                  sx={{
+                    mt: 1.4,
+                    pt: 1.4,
+                    borderTop: "1px dashed #bdd7ee",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 1.2,
+                  }}
+                >
+                  <Box>
+                    <Typography
+                      sx={{
+                        fontSize: "11px",
+                        fontWeight: 800,
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        color: "#047857",
+                      }}
+                    >
+                      Selected Outbound Flight (Locked for Next Leg)
+                    </Typography>
+                    <Typography sx={{ fontSize: "14px", fontWeight: 700, color: "#0f2942", mt: 0.2 }}>
+                      {selectedOutbound?.CarrierName || selectedOutbound?.Carrier || "Airline"} •{" "}
+                      {selectedOutbound?.AllLegsInfo?.[0]?.DepFrom || displayContext.fromCode} →{" "}
+                      {selectedOutbound?.AllLegsInfo?.[0]?.ArrTo || displayContext.toCode}
+                      {selectedOutbound?.AllLegsInfo?.[0]?.Segments?.[0]?.DepTime
+                        ? ` (${moment(selectedOutbound.AllLegsInfo[0].Segments[0].DepTime).format("DD MMM, HH:mm")})`
+                        : ""}
+                      {selectedOutbound?.AllLegsInfo?.[0]?.BrandName
+                        ? ` • ${selectedOutbound.AllLegsInfo[0].BrandName}`
+                        : ""}
+                    </Typography>
+                  </Box>
+                  <Button
+                    type="button"
+                    variant="outlined"
+                    size="small"
+                    onClick={handleChangeOutbound}
+                    sx={{
+                      textTransform: "none",
+                      fontWeight: 700,
+                      borderRadius: "9px",
+                      borderColor: "#007bb0",
+                      color: "#007bb0",
+                    }}
+                  >
+                    Change Outbound Flight
+                  </Button>
+                </Box>
+              )}
+            </Box>
+
             <Grid container spacing={2}>
-              {loading ? (
+              {loading || nextLegLoading ? (
                 <Grid item xs={12} sm={12} md={12} lg={12}>
                   <AirlinesSliderSlikton
                     flights={flights}
@@ -1256,12 +1665,67 @@ const RoundWaySearchResult = () => {
                   />
                 </Grid>
               )}
-              {loading ? (
-                [...Array(8)].map((_, index) => (
-                  <Grid item xs={12} sm={12} md={12} lg={12} key={index}>
-                    <SingleRoundWayFlightsSilkton />
-                  </Grid>
-                ))
+              {nextLegError && (
+                <Grid item xs={12}>
+                  <Alert
+                    severity="warning"
+                    action={
+                      <Stack direction="row" spacing={1}>
+                        <Button
+                          type="button"
+                          size="small"
+                          color="inherit"
+                          onClick={handleChangeOutbound}
+                        >
+                          Change Outbound
+                        </Button>
+                        {selectedOutbound && (
+                          <Button
+                            type="button"
+                            size="small"
+                            color="inherit"
+                            onClick={() => handleSelectOutbound(selectedOutbound)}
+                          >
+                            Retry
+                          </Button>
+                        )}
+                      </Stack>
+                    }
+                  >
+                    {nextLegError}
+                  </Alert>
+                </Grid>
+              )}
+              {loading || nextLegLoading ? (
+                <>
+                  {nextLegLoading && (
+                    <Grid item xs={12}>
+                      <Box
+                        role="status"
+                        aria-live="polite"
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 1.5,
+                          p: 1.6,
+                          borderRadius: "12px",
+                          bgcolor: "#f0f8ff",
+                          border: "1px solid #bae6fd",
+                        }}
+                      >
+                        <CircularProgress size={20} />
+                        <Typography sx={{ fontWeight: 700, fontSize: "13px", color: "#0b4a82" }}>
+                          Loading combinable return flights via Travelport Next Leg (/buildnext)...
+                        </Typography>
+                      </Box>
+                    </Grid>
+                  )}
+                  {[...Array(6)].map((_, index) => (
+                    <Grid item xs={12} sm={12} md={12} lg={12} key={index}>
+                      <SingleRoundWayFlightsSilkton />
+                    </Grid>
+                  ))}
+                </>
               ) : paginatedFlightGroups.length > 0 ? (
                 paginatedFlightGroups.map((group, index) => {
                   const groupRenderKey =
@@ -1277,6 +1741,20 @@ const RoundWaySearchResult = () => {
                       <SingleFlight
                         data={group?.primary || {}}
                         groupedFlights={group?.options || []}
+                        onSelectFlight={
+                          isLegBasedMode
+                            ? legStep === "outbound"
+                              ? handleSelectOutbound
+                              : handleSelectReturnAndBook
+                            : undefined
+                        }
+                        selectButtonLabel={
+                          isLegBasedMode
+                            ? legStep === "outbound"
+                              ? "Select Outbound"
+                              : "Book Combined Fare"
+                            : "Book Now"
+                        }
                       />
                     </Grid>
                   );
@@ -1286,12 +1764,28 @@ const RoundWaySearchResult = () => {
                   <Box
                     sx={{
                       display: "flex",
+                      flexDirection: "column",
                       justifyContent: "center",
                       alignItems: "center",
-                      height: "100vh",
+                      gap: 1.5,
+                      py: 8,
                     }}
                   >
-                    <p style={{ color: "red" }}>No flights available</p>
+                    <Typography sx={{ color: "#b91c1c", fontWeight: 700 }}>
+                      {isLegBasedMode && legStep === "return"
+                        ? "No combinable return flights available for this outbound leg."
+                        : "No flights available"}
+                    </Typography>
+                    {isLegBasedMode && legStep === "return" && (
+                      <Button
+                        type="button"
+                        variant="contained"
+                        onClick={handleChangeOutbound}
+                        sx={{ textTransform: "none", fontWeight: 700 }}
+                      >
+                        Choose Another Outbound Flight
+                      </Button>
+                    )}
                   </Box>
                 </Grid>
               )}

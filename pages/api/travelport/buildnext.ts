@@ -164,20 +164,58 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
       ? body.contentSourceList
       : ["GDS", "NDC"];
 
-    const unifiedResults = toUnifiedSearchResult(
-      segments,
+    const normalizedSegments =
+      segments.length >= 2
+        ? segments
+        : [
+            { depfrom: "OUT", arrto: "RET", depdate: "" },
+            { depfrom: "RET", arrto: "OUT", depdate: "" },
+          ];
+
+    let unifiedResults = toUnifiedSearchResult(
+      normalizedSegments,
       responsePayload,
-      contentSources
+      contentSources,
+      { preferLastPricedLeg: true }
     );
+
+    let legOnlyFallback = false;
+    if (unifiedResults.length === 0) {
+      // Fallback if Travelport returns only leg-2 offerings without echoing leg-1
+      const legOnlyResults = toUnifiedSearchResult(
+        normalizedSegments.slice(1, 2),
+        responsePayload,
+        contentSources,
+        { searchRepresentation: "Leg", preferLastPricedLeg: true }
+      );
+      if (legOnlyResults.length > 0) {
+        legOnlyFallback = true;
+        unifiedResults = legOnlyResults;
+      }
+    }
+
+    const responseCposId = String(
+      (responsePayload as any)?.CatalogProductOfferingsResponse?.CatalogProductOfferings
+        ?.Identifier?.value ?? cposId
+    ).trim();
+
+    const annotatedOffers = unifiedResults.map((item) => ({
+      ...item,
+      isBuildNextOffer: true,
+      isLegOnlyFallback: legOnlyFallback,
+      buildNextCposId: responseCposId,
+      outboundOfferIdentifier: selectedCpoId,
+      outboundProductRef: selectedProductRef,
+    }));
 
     return res.status(200).json({
       success: true,
-      cposId,
+      cposId: responseCposId,
       selectedCpoId,
       selectedProductRef,
-      count: unifiedResults.length,
-      offers: unifiedResults,
-      raw: responsePayload,
+      legOnlyFallback,
+      count: annotatedOffers.length,
+      offers: annotatedOffers,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal error";
@@ -188,4 +226,4 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withApiHandler(handler);
+export default withApiHandler(handler, { methods: ["POST"] });

@@ -32,6 +32,8 @@ import TermsConditions from "./Pages/TermsConditions/TermsConditions"
 import Blog from "./Pages/Blog/Blog"
 import Contact from "./Pages/Contact/Contact"
 import Hotel from "./Pages/Hotel/Hotel"
+import HotelSearchResult from "./Pages/Hotel/HotelSearchResult"
+import HotelBooking from "./Pages/Hotel/HotelBooking"
 import TourSearchResultNew from "./Pages/Tour/TourSearchResult/TourSearchResultNew"
 import TourDetails from "./Pages/Tour/TourDetails/TourDetails"
 import Footer from "./Shared/Footer/Footer"
@@ -103,6 +105,10 @@ const App: FC = () => {
               <Route path="/tourdetails" element={<TourDetails />} />
               <Route path="/tour" element={<TourHome />} />
               <Route path="/hotel" element={<Hotel />} />
+              <Route path="/stays" element={<Hotel />} />
+              <Route path="/hotels" element={<HotelSearchResult />} />
+              <Route path="/hotelresults" element={<HotelSearchResult />} />
+              <Route path="/hotelbooking" element={<HotelBooking />} />
               <Route path="/signUp" element={<SignUp />} />
               {/* <Route path="/test" element={<FlightForm />} /> */}
               <Route path="*" element={<PageNotFound />} /> {/* Not Found route */}

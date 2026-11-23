@@ -411,7 +411,12 @@ const getLayoverDetails = (segments = []) => {
   });
 };
 
-const SingleFlight = ({ data, groupedFlights = [] }) => {
+const SingleFlight = ({
+  data,
+  groupedFlights = [],
+  onSelectFlight,
+  selectButtonLabel,
+}) => {
   const [flightDetails, setFlightDetails] = useState(false);
   const token = secureLocalStorage.getItem("access_token");
   const navigate = useNavigate();
@@ -499,8 +504,14 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
   };
 
   const handleBooking = (selectedOffer) => {
+    const resolvedOffer = selectedOffer || data || {};
+    if (typeof onSelectFlight === "function") {
+      onSelectFlight(resolvedOffer);
+      return;
+    }
+
     const bookingState = {
-      selectedOffer: selectedOffer || data || {},
+      selectedOffer: resolvedOffer,
       source: "search-results",
       selectedAt: new Date().toISOString(),
     };
@@ -1077,7 +1088,7 @@ const SingleFlight = ({ data, groupedFlights = [] }) => {
                 boxShadow: "0 8px 18px rgba(0,154,214,0.24)",
               }}
             >
-              <Box component="span">Book Now</Box>
+              <Box component="span">{selectButtonLabel || "Book Now"}</Box>
               <Box component="span" aria-hidden>
                 •
               </Box>
