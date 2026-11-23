@@ -1,5 +1,10 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
+import { withCustomerSession } from "@/server/with-customer-session";
+import { requireBookingAccess } from "@/server/booking-access";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 
 type AncillaryAddBody = {
   pnr?: unknown;
@@ -338,7 +343,7 @@ async function buildWorkbenchFromLocator(params: {
     toText(process.env.TRAVELPORT_ISSUE_TICKET_BUILD_FROM_LOCATOR_METHOD) || "POST";
 
   const url = `${params.bookingBaseUrl}${buildFromLocatorPath.replace("{pnr}", encodeURIComponent(params.pnr))}`;
-  const response = await fetch(url, {
+  const response = await fetchUpstream(url, {
     method: buildFromLocatorMethod,
     headers: params.headers,
   });
@@ -363,7 +368,7 @@ async function commitReservation(params: {
   const commitUrl = `${params.bookingBaseUrl}/reservation/reservations/${encodeURIComponent(
     params.reservationId
   )}`;
-  const commitResponse = await fetch(commitUrl, {
+  const commitResponse = await fetchUpstream(commitUrl, {
     method: "POST",
     headers: params.headers,
     body: JSON.stringify({ "@type": "ReservationQueryCommitReservation" }),
@@ -381,7 +386,7 @@ async function commitReservation(params: {
   };
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -413,6 +418,8 @@ export default async function handler(
         message: "offerListIdentifier, offerIdentifier, and productIdentifier are required",
       });
     }
+
+    if (!(await requireBookingAccess(req, res, pnr || reservationId))) return;
 
     const version = process.env.TRAVELPORT_VERSION || "11";
     const bookingBaseUrl = resolveBookingBaseUrl(version);
@@ -447,7 +454,7 @@ export default async function handler(
       const wbUrl = `${bookingBaseUrl}/session/reservationworkbench/${encodeURIComponent(
         reservationId
       )}`;
-      const wbResponse = await fetch(wbUrl, { method: "GET", headers });
+      const wbResponse = await fetchUpstream(wbUrl, { method: "GET", headers });
       const wbPayload = (await parseJsonSafe(wbResponse)) as Record<string, unknown>;
       if (!wbResponse.ok || hasTravelportErrors(wbPayload)) {
         return res.status(502).json({
@@ -517,7 +524,7 @@ export default async function handler(
       ],
     };
 
-    const addAncillaryResponse = await fetch(addAncillaryOfferUrl, {
+    const addAncillaryResponse = await fetchUpstream(addAncillaryOfferUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(addAncillaryPayload),
@@ -575,7 +582,11 @@ export default async function handler(
     });
   } catch (error) {
     return res.status(500).json({
-      message: error instanceof Error ? error.message : "Ancillary add failed",
+      message: publicErrorMessage(error, "Ancillary add failed"),
     });
   }
 }
+
+export default withApiHandler(withCustomerSession(handler), { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

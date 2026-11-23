@@ -1,5 +1,10 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
+import { withCustomerSession } from "@/server/with-customer-session";
+import { requireBookingAccess } from "@/server/booking-access";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 import { getSessionUser } from "@/server/auth-session";
 import { prisma } from "@/server/prisma";
 import { sendTicketIssuedEmail } from "@/server/auth-email";
@@ -487,7 +492,7 @@ async function runIssueTicketPaymentStep(params: {
     }
 
 
-    const response = await fetch(url, requestInit);
+    const response = await fetchUpstream(url, requestInit);
     const payload = (await parseJsonSafe(response)) as Record<string, unknown>;
 
     // Log raw request and response
@@ -657,7 +662,7 @@ async function enrichWorkbenchTravelers(params: {
     };
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchUpstream(url, {
             method,
             headers: params.headers,
             body: JSON.stringify(body),
@@ -712,7 +717,7 @@ async function buildWorkbenchFromLocator(params: {
         template: buildFromLocatorPath,
     });
 
-    const response = await fetch(url, {
+    const response = await fetchUpstream(url, {
         method: buildFromLocatorMethod,
         headers: params.headers,
     });
@@ -750,7 +755,7 @@ async function commitReservation(params: {
     const commitUrl = `${params.bookingBaseUrl}/reservation/reservations/${encodeURIComponent(
         params.reservationId
     )}`;
-    const commitResponse = await fetch(commitUrl, {
+    const commitResponse = await fetchUpstream(commitUrl, {
         method: "POST",
         headers: params.headers,
         body: JSON.stringify({ "@type": "ReservationQueryCommitReservation" }),
@@ -782,12 +787,12 @@ async function commitReservation(params: {
     };
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
-    if (!["GET", "POST"].includes(req.method || "")) {
-        res.setHeader("Allow", "GET, POST");
+    if (req.method !== "POST") {
+        res.setHeader("Allow", "POST");
         return res.status(405).json({ message: "Method not allowed" });
     }
 
@@ -803,7 +808,7 @@ export default async function handler(
 
         const apiFlowLogs: ApiFlowLog[] = [];
 
-        const queryOrBody = req.method === "GET" ? req.query : (req.body ?? {});
+        const queryOrBody = req.body ?? {};
         const pnr =
             toText((queryOrBody as Record<string, unknown>)?.pnr) ||
             toText((queryOrBody as Record<string, unknown>)?.locator) ||
@@ -815,6 +820,8 @@ export default async function handler(
                 apiFlowLogs,
             });
         }
+
+    if (!(await requireBookingAccess(req, res, pnr))) return;
 
         const version = process.env.TRAVELPORT_VERSION || "11";
         const bookingBaseUrl = resolveBookingBaseUrl(version);
@@ -1118,8 +1125,12 @@ export default async function handler(
         });
     } catch (error) {
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unexpected server error",
+            message: publicErrorMessage(error, "Unexpected server error"),
             apiFlowLogs: [],
         });
     }
 }
+
+export default withApiHandler(withCustomerSession(handler), { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

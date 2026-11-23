@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
@@ -46,7 +47,7 @@ function toIso(value: Date | null | undefined): string | null {
     return value ? value.toISOString() : null;
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<ProfileResponse | ErrorResponse>
 ) {
@@ -129,3 +130,7 @@ export default async function handler(
         return res.status(500).json({ message: "Internal server error" });
     }
 }
+
+export default withApiHandler(handler, { methods: ["GET"] });
+
+export const config = { api: { bodyParser: false } };

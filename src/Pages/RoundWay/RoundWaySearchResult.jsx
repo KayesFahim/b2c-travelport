@@ -32,6 +32,11 @@ import {
 import { resolveAirportInfo } from "../../utils/travelLookup";
 import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
 import Swal from "sweetalert2";
+import {
+  buildTravelportSearchRequestModifiers,
+  createDefaultTravelportSearchFilters,
+  normalizeTravelportSearchFilters,
+} from "../../utils/travelportSearchCriteria";
 
 const toUpperText = (value) => String(value ?? "").trim().toUpperCase();
 const toText = (value) => String(value ?? "").trim();
@@ -90,6 +95,7 @@ const RoundWaySearchResult = () => {
     segments,
     searchData,
     value,
+    searchFilters,
   } = location?.state || {};
 
   const resolvedSearchContext = useMemo(() => {
@@ -196,14 +202,22 @@ const RoundWaySearchResult = () => {
         ? moment(resolvedSegments[1]?.depdate).format("DD MMM YY")
         : "");
 
+    const effectiveSearchFilters = normalizeTravelportSearchFilters(
+      searchFilters ||
+      recoveredFromRecent?.searchFilters ||
+      createDefaultTravelportSearchFilters()
+    );
+
     return {
       valid: resolvedSegments.length >= 2,
+      searchFilters: effectiveSearchFilters,
       payload: {
         adultcount: safeAdultCount,
         childcount: safeChildCount,
         infantcount: safeInfantCount,
         cabinclass: safeCabinClass,
         segments: resolvedSegments.slice(0, 2),
+        ...buildTravelportSearchRequestModifiers(effectiveSearchFilters),
       },
       display: {
         fromCode: displayFromCode,
@@ -232,6 +246,7 @@ const RoundWaySearchResult = () => {
     fromSendData,
     infant,
     searchData?.segments,
+    searchFilters,
     segments,
     toAddress,
     toSearchText,
@@ -965,6 +980,7 @@ const RoundWaySearchResult = () => {
             valueBoxs={displayContext.valueBox}
             segments={bannerSegments}
             searchDatas={bannerSearchData}
+            searchFilters={resolvedSearchContext.searchFilters}
             value={value}
             toggleBanner={toggleBanner}
           />
@@ -990,6 +1006,7 @@ const RoundWaySearchResult = () => {
           valueBoxs={displayContext.valueBox}
           segments={bannerSegments}
           searchDatas={bannerSearchData}
+          searchFilters={resolvedSearchContext.searchFilters}
           value={value}
         />
       </Box>
@@ -1248,8 +1265,13 @@ const RoundWaySearchResult = () => {
               ) : paginatedFlightGroups.length > 0 ? (
                 paginatedFlightGroups.map((group, index) => {
                   const groupRenderKey =
-                    String(group?.key || group?.primary?.ResultId || "") ||
-                    `group-${index}`;
+                    [
+                      String(group?.key || "").trim(),
+                      String(group?.primary?.ResultId || "").trim(),
+                      String(index),
+                    ]
+                      .filter(Boolean)
+                      .join("::");
                   return (
                     <Grid item xs={12} sm={12} md={12} lg={12} key={groupRenderKey}>
                       <SingleFlight

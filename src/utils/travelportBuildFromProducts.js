@@ -1,3 +1,4 @@
+import { fetchWithTimeout, readApiResponse } from "./apiClient";
 const TRAVELPORT_PRICE_CHECK_PATH = "/api/travelport/price-check";
 const DEFAULT_BUILD_FROM_PRODUCTS_CURRENCY = "USD";
 
@@ -27,49 +28,25 @@ function getConfiguredBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || "";
 }
 
-function getLocalFallbackBuildFromProductsUrl() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const { protocol, hostname, port } = window.location;
-  if (port === "3001") {
-    return `${protocol}//${hostname}:3000${TRAVELPORT_PRICE_CHECK_PATH}`;
-  }
-  if (port === "3000") {
-    return `${protocol}//${hostname}:3001${TRAVELPORT_PRICE_CHECK_PATH}`;
-  }
-  return "";
-}
 
 function getCandidateBuildFromProductsUrls() {
   const configuredUrl = getConfiguredBuildFromProductsUrl();
-  const localFallbackUrl = getLocalFallbackBuildFromProductsUrl();
   const configuredBaseUrl = getConfiguredBaseUrl();
 
   const urls = [
     TRAVELPORT_PRICE_CHECK_PATH,
     configuredUrl,
     joinBaseAndPath(configuredBaseUrl, TRAVELPORT_PRICE_CHECK_PATH),
-    localFallbackUrl,
+
   ].filter(Boolean);
 
   return Array.from(new Set(urls));
 }
 
 async function getResponseErrorMessage(response) {
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const payload = await response.json().catch(() => ({}));
-    return (
-      payload?.message ||
-      payload?.details ||
-      `Travelport build-from-products failed (${response.status})`
-    );
-  }
-
-  const text = await response.text().catch(() => "");
-  return text || `Travelport build-from-products failed (${response.status})`;
+  try { await readApiResponse(response); }
+  catch (error) { return error.message; }
+  return "The request could not be completed.";
 }
 
 export async function fetchTravelportBuildFromProducts({
@@ -102,7 +79,7 @@ export async function fetchTravelportBuildFromProducts({
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         cache: "no-store",
         headers: {
@@ -113,11 +90,12 @@ export async function fetchTravelportBuildFromProducts({
       });
 
       if (response.ok) {
-        return response.json();
+        return readApiResponse(response);
       }
 
       const message = await getResponseErrorMessage(response);
       const currentError = new Error(message);
+      currentError.status = response.status;
 
       if (response.status === 404) {
         lastError = currentError;
@@ -126,6 +104,7 @@ export async function fetchTravelportBuildFromProducts({
 
       throw currentError;
     } catch (error) {
+      if (Number(error?.status) !== 404) throw error;
       lastError =
         error instanceof Error
           ? error
@@ -134,10 +113,5 @@ export async function fetchTravelportBuildFromProducts({
     }
   }
 
-  if (lastError) {
-    console.warn("Build-from-products unavailable, using selected offer fallback", {
-      message: lastError.message,
-    });
-  }
-  return null;
+  throw lastError || new Error("The fare could not be verified. Please search again.");
 }

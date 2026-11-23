@@ -1,4 +1,6 @@
+import { fetchWithTimeout, readApiResponse } from "./apiClient";
 const TRAVELPORT_FARE_POLICY_PATH = "/api/travelport/fare-policy";
+const inFlightFarePolicyRequests = new Map();
 const LEGACY_PREBOOKING_PATHS = [
   "/flights/api2/preBookingFares",
   "/flights/api2/preBookingFareRules",
@@ -59,7 +61,7 @@ function getConfiguredBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || "";
 }
 
-function useLegacyFallbackRoutes() {
+function shouldUseLegacyFallbackRoutes() {
   if (typeof process === "undefined") {
     return false;
   }
@@ -70,24 +72,11 @@ function useLegacyFallbackRoutes() {
   );
 }
 
-function getLocalFallbackFarePolicyUrl() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const { protocol, hostname, port } = window.location;
-  if (port !== "3001") {
-    return "";
-  }
-
-  return `${protocol}//${hostname}:3000${TRAVELPORT_FARE_POLICY_PATH}`;
-}
 
 function getCandidateFarePolicyUrls() {
   const configuredUrl = getConfiguredFarePolicyUrl();
-  const localFallbackUrl = getLocalFallbackFarePolicyUrl();
   const configuredBaseUrl = getConfiguredBaseUrl();
-  const legacyEnabled = useLegacyFallbackRoutes();
+  const legacyEnabled = shouldUseLegacyFallbackRoutes();
   const legacyUrls = legacyEnabled
     ? LEGACY_PREBOOKING_PATHS.flatMap((path) => [
         joinBaseAndPath(configuredBaseUrl, path),
@@ -99,7 +88,7 @@ function getCandidateFarePolicyUrls() {
     configuredUrl,
     TRAVELPORT_FARE_POLICY_PATH,
     joinBaseAndPath(configuredBaseUrl, TRAVELPORT_FARE_POLICY_PATH),
-    localFallbackUrl,
+
     ...legacyUrls,
   ].filter(Boolean);
 
@@ -107,18 +96,9 @@ function getCandidateFarePolicyUrls() {
 }
 
 async function getResponseErrorMessage(response) {
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const payload = await response.json().catch(() => ({}));
-    return (
-      payload?.message ||
-      payload?.details ||
-      `Travelport fare policy failed (${response.status})`
-    );
-  }
-
-  const text = await response.text().catch(() => "");
-  return text || `Travelport fare policy failed (${response.status})`;
+  try { await readApiResponse(response); }
+  catch (error) { return error.message; }
+  return "The request could not be completed.";
 }
 
 export async function fetchTravelportFarePolicy({
@@ -151,39 +131,56 @@ export async function fetchTravelportFarePolicy({
     fareRuleType,
   };
 
-  for (const url of urls) {
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify(payload),
-      });
-
-      if (response.ok) {
-        return response.json();
-      }
-
-      const message = await getResponseErrorMessage(response);
-      const currentError = new Error(message);
-
-      if (response.status === 404) {
-        lastError = currentError;
-        continue;
-      }
-
-      throw currentError;
-    } catch (error) {
-      lastError =
-        error instanceof Error
-          ? error
-          : new Error("Travelport fare policy request failed");
-    }
+  const requestKey = JSON.stringify(payload);
+  if (inFlightFarePolicyRequests.has(requestKey)) {
+    return inFlightFarePolicyRequests.get(requestKey);
   }
 
-  throw lastError;
+  const executeRequest = (async () => {
+    for (const url of urls) {
+      try {
+        const response = await fetchWithTimeout(url, {
+          method: "POST",
+          cache: "no-store",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token && { Authorization: `Bearer ${token}` }),
+          },
+          body: requestKey,
+        });
+
+        if (response.ok) {
+          return readApiResponse(response);
+        }
+
+        const message = await getResponseErrorMessage(response);
+        const currentError = new Error(message);
+        currentError.status = response.status;
+
+        if (response.status === 404) {
+          lastError = currentError;
+          continue;
+        }
+
+        throw currentError;
+      } catch (error) {
+        if (Number(error?.status) !== 404) throw error;
+        lastError =
+          error instanceof Error
+            ? error
+            : new Error("Travelport fare policy request failed");
+      }
+    }
+
+    throw lastError;
+  })();
+
+  inFlightFarePolicyRequests.set(requestKey, executeRequest);
+  try {
+    return await executeRequest;
+  } finally {
+    inFlightFarePolicyRequests.delete(requestKey);
+  }
 }
 
 function hasMeaningfulFarePolicy(payload) {
@@ -224,6 +221,8 @@ export async function fetchTravelportFarePolicyWithFallback({
         return payload;
       }
     } catch (error) {
+      if (Number(error?.status) !== 404) throw error;
+      if ([401, 403, 429].includes(error?.status) || error?.status >= 500 || !error?.status) throw error;
       lastError = error instanceof Error ? error : new Error("Fare policy request failed");
     }
   }

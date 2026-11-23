@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import sliderData from "../../src/data/sliderData.json";
 import { prisma } from "../../src/server/prisma";
@@ -37,7 +38,7 @@ function buildHomepagePayload(settings: Record<string, string>): HomepagePayload
   return response;
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Record<string, unknown>>
 ) {
@@ -68,3 +69,7 @@ export default async function handler(
     return res.status(200).json(fallback);
   }
 }
+
+export default withApiHandler(handler, { methods: ["GET"] });
+
+export const config = { api: { bodyParser: false } };

@@ -1,3 +1,4 @@
+import { parseCookies } from "./request-cookies";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomBytes } from "crypto";
 import { cacheDelete, cacheGetJson, cacheSetJson } from "./redis-cache";
@@ -22,19 +23,29 @@ type SessionPayload = {
   token?: string;
 };
 
-function parseCookies(req: NextApiRequest): Record<string, string> {
-  const raw = req.headers.cookie || "";
-  return raw.split(";").reduce<Record<string, string>>((acc, part) => {
-    const [key, ...rest] = part.split("=");
-    const cookieKey = decodeURIComponent(String(key || "").trim());
-    if (!cookieKey) return acc;
-    acc[cookieKey] = decodeURIComponent(rest.join("=").trim());
-    return acc;
-  }, {});
+
+function isHttpsRequest(req?: NextApiRequest): boolean {
+  if (!req) {
+    return process.env.NODE_ENV === "production";
+  }
+  const forwardedProto = String(req.headers["x-forwarded-proto"] || "")
+    .split(",")[0]
+    .trim()
+    .toLowerCase();
+  if (forwardedProto) {
+    return forwardedProto === "https";
+  }
+  const socket = req.socket as { encrypted?: boolean } | undefined;
+  return Boolean(socket?.encrypted);
 }
 
-function buildSetCookie(name: string, value: string, maxAgeSec: number): string {
-  const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
+function buildSetCookie(
+  name: string,
+  value: string,
+  maxAgeSec: number,
+  req?: NextApiRequest
+): string {
+  const secure = isHttpsRequest(req) ? "; Secure" : "";
   return `${encodeURIComponent(name)}=${encodeURIComponent(
     value
   )}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSec}${secure}`;
@@ -87,12 +98,7 @@ export async function getSessionUser(req: NextApiRequest): Promise<SessionUser |
       }
     }
 
-    // Backward compatibility for older non-JWT tokens still present in cache.
-    const tokenPayload = await cacheGetJson<SessionPayload>(getTokenCacheKey(bearerToken));
-    if (tokenPayload?.user?.id) {
-      await refreshSessionTtl(tokenPayload);
-      return tokenPayload.user;
-    }
+
   }
 
   const sessionId = getSessionIdFromRequest(req);
@@ -146,7 +152,7 @@ export async function createSession(
 
   res.setHeader(
     "Set-Cookie",
-    buildSetCookie(BOOKING_SESSION_COOKIE, sessionId, BOOKING_SESSION_TTL_SEC)
+    buildSetCookie(BOOKING_SESSION_COOKIE, sessionId, BOOKING_SESSION_TTL_SEC, req)
   );
 
   return { token };
@@ -179,5 +185,5 @@ export async function clearSession(
     }
     await cacheDelete(getSessionCacheKey(sessionId));
   }
-  res.setHeader("Set-Cookie", buildSetCookie(BOOKING_SESSION_COOKIE, "", 0));
+  res.setHeader("Set-Cookie", buildSetCookie(BOOKING_SESSION_COOKIE, "", 0, req));
 }

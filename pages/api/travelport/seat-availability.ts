@@ -1,7 +1,10 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import fs from "fs/promises";
 import path from "path";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 
 type SeatAvailabilityBody = {
   seatAvailabilityRequest?: {
@@ -166,7 +169,7 @@ async function createToken(): Promise<string> {
   return getTravelportAccessToken();
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Record<string, unknown> | ErrorResponse>
 ) {
@@ -218,7 +221,7 @@ export default async function handler(
       "Content-Version": version,
       Authorization: `Bearer ${accessToken}`,
     };
-    const response = await fetch(seatAvailabilityUrl, {
+    const response = await fetchUpstream(seatAvailabilityUrl, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(requestPayload),
@@ -251,7 +254,11 @@ export default async function handler(
     return res.status(200).json(responsePayload);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unexpected server error";
+      publicErrorMessage(error, "Unexpected server error");
     return res.status(500).json({ message });
   }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

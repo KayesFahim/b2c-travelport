@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { BookingStatus } from "@prisma/client";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
@@ -25,7 +26,7 @@ function toNumber(value: unknown): number | null {
     return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -116,3 +117,7 @@ export default async function handler(
         });
     }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

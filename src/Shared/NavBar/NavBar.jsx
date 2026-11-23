@@ -1,3 +1,4 @@
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from "@/utils/passwordPolicy";
 import React, { useEffect, useState, useRef } from "react";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -361,10 +362,10 @@ const NavBar = () => {
         }
         break;
       case "userPass":
-        if (!value.match(/^(?=.*[A-Za-z])[A-Za-z\d]{6,}$/)) {
-          // Updated regex for 6 characters
+        if (!isValidPassword(value)) {
+          // Shared password requirements
           errorMessage =
-            "Password must be at least 6 characters long, and contain at least one letter.";
+            PASSWORD_POLICY_MESSAGE;
         }
         break;
       case "userPhone":
@@ -1158,6 +1159,19 @@ const NavBar = () => {
                 </Button>
               )}
             </Box>
+          </Box>
+          <Box
+            component="nav"
+            aria-label="Primary navigation"
+            sx={{ display: { xs: "flex", md: "none" }, justifyContent: "center", gap: 0.5, pb: 1.25 }}
+          >
+            {primaryNavItems.map((item) => (
+              <Link key={item.to} to={item.to} className="flyjatt-nav-link"
+                aria-current={isNavItemActive(item.to) ? "page" : undefined}
+                style={{ color: isDarkHeader ? "#eaf2ff" : "#0f2745", background: isNavItemActive(item.to) ? "rgba(0,154,214,0.22)" : "transparent" }}>
+                {item.label}
+              </Link>
+            ))}
           </Box>
         </Container>
       </Box>

@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import { AccessRole } from "@prisma/client";
@@ -65,7 +66,7 @@ async function getSuperAdminCount(): Promise<number> {
     return prisma.adminUser.count({ where: { role: AccessRole.SUPER_ADMIN } });
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -270,3 +271,7 @@ export default async function handler(
     res.setHeader("Allow", ["GET", "POST", "PATCH", "DELETE"]);
     return res.status(405).json({ message: "Method not allowed" });
 }
+
+export default withApiHandler(handler, { methods: ["GET", "POST", "PATCH", "DELETE"] });
+
+export const config = { api: { bodyParser: false } };

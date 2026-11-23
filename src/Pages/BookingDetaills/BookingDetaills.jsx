@@ -1,4 +1,5 @@
 import {
+  Alert,
   Box,
   Button,
   Checkbox,
@@ -902,6 +903,8 @@ const BookingDetaills = () => {
   const [selectedBrandKey, setSelectedBrandKey] = useState("");
   const [loading, setLoading] = useState(true);
   const [buildProductsReady, setBuildProductsReady] = useState(false);
+  const [priceError, setPriceError] = useState("");
+  const [priceAttempt, setPriceAttempt] = useState(0);
   const [seatAvailabilityData, setSeatAvailabilityData] = useState(null);
   const [seatAvailabilityLoading, setSeatAvailabilityLoading] = useState(false);
   const [seatAvailabilityError, setSeatAvailabilityError] = useState("");
@@ -962,6 +965,7 @@ const BookingDetaills = () => {
   }, [location?.state]);
 
   useEffect(() => {
+    let cancelled = false;
     const fetchAirPriceData = async () => {
       if (
         !selectedOffer ||
@@ -996,6 +1000,7 @@ const BookingDetaills = () => {
       const infantCount = getPaxCount(["INF", "INFANT"]);
 
       try {
+        setPriceError("");
         setLoading(true);
         setBuildProductsReady(false);
         const response = await fetchTravelportBuildFromProducts({
@@ -1013,18 +1018,24 @@ const BookingDetaills = () => {
               ? [response]
               : [];
 
-        setAirPriceData(normalized.length ? normalized : [selectedOffer]);
+        if (!normalized.length) throw new Error("This fare could not be verified. Please search again.");
+        if (!cancelled) setAirPriceData(normalized);
       } catch (error) {
-        console.warn("Build-from-products failed, using selected offer fallback");
-        setAirPriceData([selectedOffer]);
+        if (!cancelled) {
+          setPriceError(error?.message || "This fare could not be verified. Please try again.");
+          setAirPriceData([]);
+        }
       } finally {
-        setLoading(false);
-        setBuildProductsReady(true);
+        if (!cancelled) {
+          setLoading(false);
+          setBuildProductsReady(true);
+        }
       }
     };
 
     fetchAirPriceData();
-  }, [selectedOffer, token]);
+    return () => { cancelled = true; };
+  }, [selectedOffer, token, priceAttempt]);
 
   const airPriceOptions = useMemo(
     () => (Array.isArray(airPriceData) ? airPriceData.filter(Boolean) : []),
@@ -1122,6 +1133,7 @@ const BookingDetaills = () => {
     [postBuildOfferForAncillaries]
   );
   const isSelectedFareBookable = useMemo(() => {
+    if (priceError || loading) return false;
     if (!selectedAirPrice || typeof selectedAirPrice !== "object") return true;
     const isBookableRaw = selectedAirPrice?.IsBookable ?? selectedAirPrice?.isBookable;
     if (typeof isBookableRaw === "boolean") return isBookableRaw;
@@ -1134,7 +1146,7 @@ const BookingDetaills = () => {
       return false;
     }
     return true;
-  }, [selectedAirPrice]);
+  }, [selectedAirPrice, priceError, loading]);
 
   useEffect(() => {
     setSeatSelections([]);
@@ -1374,6 +1386,7 @@ const BookingDetaills = () => {
     <Box className="travelport-page" sx={{ backgroundColor: "#EBF0F4", minHeight: "100vh" }}>
       <NavBar />
       <Container maxWidth="xl">
+        {priceError && <Alert severity="error" sx={{ mt: 3, borderRadius: 2 }} action={<Button color="inherit" onClick={() => setPriceAttempt((value) => value + 1)}>Try again</Button>}>{priceError} Your booking has not been submitted.</Alert>}
         <Grid container sx={{ pt: "50px" }} spacing={2}>
           <Grid
             item
@@ -1606,6 +1619,7 @@ const BookingDetaills = () => {
                     ) : (
                       <FlightForm
                         data={activeBookingData}
+                        disabledReason={priceError}
                         airPriceData={airPriceData}
                         selectedAirPrice={selectedAirPrice}
                         seatSelections={seatSelections}

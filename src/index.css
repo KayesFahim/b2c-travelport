@@ -1,8 +1,7 @@
 /* Manrope webfont is loaded via <link> in pages/_document.tsx to avoid CSS @import request chains */
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+@config "../tailwind.config.cjs";
 
 :root {
   --radius: 0.9rem;
@@ -37,10 +36,10 @@
   --primary-button: var(--primary-color);
   --icons-color: #a7c4db;
   --black: #0d1f33;
-  --text-color: #7f95aa;
+  --text-color: #536b82;
   --flight-color: #17324f;
   --meta-black: #10233c;
-  --flight-text-color: #6a8197;
+  --flight-text-color: #536b82;
   --depature-color: #0f2d4b;
   --airport-color: #0b3c6e;
   --refundable-color: #0f8b58;
@@ -104,7 +103,7 @@
 .travelport-shell .MuiAccordion-root {
   border-radius: 16px;
   border: 1px solid rgba(8, 55, 98, 0.12);
-  box-shadow: 0 14px 34px rgba(6, 42, 78, 0.08);
+  box-shadow: var(--surface-shadow);
 }
 
 .travelport-shell .MuiButton-root {
@@ -113,13 +112,11 @@
   border-radius: 12px;
 }
 
-.travelport-shell .MuiButton-containedPrimary,
-.travelport-shell .MuiButton-contained {
+.travelport-shell .MuiButton-containedPrimary {
   background: linear-gradient(120deg, #009ad6 0%, #0077aa 100%);
 }
 
-.travelport-shell .MuiButton-containedPrimary:hover,
-.travelport-shell .MuiButton-contained:hover {
+.travelport-shell .MuiButton-containedPrimary:hover {
   background: linear-gradient(120deg, #007eaf 0%, #00618b 100%);
 }
 
@@ -234,7 +231,7 @@
   container-type: inline-size;
 }
 
-.flyjatt-section-title {
+.travelport-shell .flyjatt-section-title {
   font-size: clamp(1.35rem, 1.1rem + 1vw, 2rem);
   font-weight: 800;
   letter-spacing: -0.02em;
@@ -399,5 +396,192 @@
   }
   .flyjatt-touch-btn:hover:not(:disabled) {
     transform: none;
+  }
+}
+
+/* --- Travelport Search Criteria Filter Popover (modern-web-guidance) --- */
+.flyjatt-filter-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-block-size: 44px;
+  padding-block: 0.4rem;
+  padding-inline: 0.85rem;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 123, 176, 0.32);
+  background: #ffffff;
+  color: #0b335c;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: box-shadow 150ms ease-out, scale 150ms ease-out, border-color 150ms ease-out, background-color 150ms ease-out;
+}
+
+.flyjatt-filter-trigger:hover {
+  border-color: #007bb0;
+  background-color: #f4fafe;
+  box-shadow: 0 6px 16px rgba(0, 123, 176, 0.16);
+}
+
+.flyjatt-filter-trigger:active {
+  scale: 0.98;
+}
+
+.flyjatt-filter-trigger:focus-visible,
+.flyjatt-filter-popover :where(button, input, select):focus-visible {
+  outline: 3px solid #007bb0;
+  outline-offset: 2px;
+}
+
+[popover].flyjatt-filter-popover:not(:popover-open):not(.\:popover-open):not(.flyjatt-popover-fallback-open),
+.flyjatt-filter-popover[hidden] {
+  display: none;
+}
+
+[popover].flyjatt-filter-popover {
+  inline-size: min(94vw, 760px);
+  max-block-size: min(82vh, 720px);
+  padding: 0;
+  border-radius: 18px;
+  border: 1px solid rgba(0, 123, 176, 0.25);
+  background: #ffffff;
+  color: #0f2942;
+  box-shadow: 0 26px 60px rgba(6, 36, 66, 0.28);
+  overflow: hidden;
+  transform-origin: top left;
+}
+
+[popover].flyjatt-filter-popover::backdrop {
+  background: rgba(6, 28, 57, 0.26);
+}
+
+[popover].flyjatt-filter-popover:is(:popover-open, .\:popover-open) {
+  display: flex;
+  flex-direction: column;
+  animation: flyjattFilterFadeIn 150ms ease-out both;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  [popover].flyjatt-filter-popover:is(:popover-open, .\:popover-open) {
+    animation:
+      flyjattFilterGrow 260ms ease-out both,
+      flyjattFilterFadeIn 150ms ease-out both;
+    animation-timing-function: linear(0, 0.45 15%, 1.06 38%, 0.98 60%, 1.01 80%, 1), ease-out;
+  }
+}
+
+@keyframes flyjattFilterGrow {
+  from {
+    scale: 0.94;
+  }
+}
+
+@keyframes flyjattFilterFadeIn {
+  from {
+    opacity: 0;
+  }
+}
+
+@supports (position-area: block-end) {
+  [popover].flyjatt-filter-popover:not(:popover-open):not(.\:popover-open):not(.flyjatt-popover-fallback-open),
+.flyjatt-filter-popover[hidden] {
+  display: none;
+}
+
+[popover].flyjatt-filter-popover {
+    inset: auto;
+    margin: 0;
+    margin-block-start: 0.45rem;
+    position-area: block-end span-inline-end;
+    position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  }
+}
+
+@supports not (position-area: block-end) {
+  [popover].flyjatt-filter-popover.flyjatt-popover-fallback-open {
+    position: fixed;
+    display: flex;
+    flex-direction: column;
+    z-index: 1500;
+  }
+}
+
+.flyjatt-filter-fieldset {
+  margin: 0;
+  padding: 0.85rem 0.95rem;
+  border-radius: 12px;
+  border: 1px solid #d7e6f5;
+  background: #f9fcff;
+}
+
+.flyjatt-filter-fieldset > legend {
+  padding-inline: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #0b4a82;
+}
+
+.flyjatt-check-label,
+.flyjatt-radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-block-size: 44px;
+  padding-inline: 0.55rem;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: #13314f;
+  transition: background-color 120ms ease;
+}
+
+.flyjatt-check-label:hover,
+.flyjatt-radio-label:hover {
+  background-color: rgba(0, 123, 176, 0.08);
+}
+
+.flyjatt-check-input,
+.flyjatt-radio-input {
+  accent-color: #007bb0;
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  flex-shrink: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.flyjatt-native-input,
+.flyjatt-native-select {
+  font: inherit;
+  font-size: max(0.88rem, 1em);
+  min-block-size: 44px;
+  padding-block: 0.45rem;
+  padding-inline: 0.7rem;
+  border-radius: 10px;
+  border: 1px solid #767676;
+  background-color: #ffffff;
+  color: #0f2942;
+  inline-size: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 640px) {
+  [popover].flyjatt-filter-popover:not(:popover-open):not(.\:popover-open):not(.flyjatt-popover-fallback-open),
+.flyjatt-filter-popover[hidden] {
+  display: none;
+}
+
+[popover].flyjatt-filter-popover {
+    inline-size: 96vw;
+    max-block-size: 86vh;
+  }
+  .flyjatt-native-input,
+  .flyjatt-native-select {
+    font-size: max(1rem, 1em);
+    min-block-size: 48px;
   }
 }

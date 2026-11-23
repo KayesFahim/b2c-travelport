@@ -1,1 +1,1 @@
-export { default } from "./build-from-products";
+export { default, config } from "./build-from-products";

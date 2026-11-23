@@ -33,6 +33,10 @@ const defaultPaths = [
   "/bookingconfirmation",
   "/onewaysearchresult",
   "/selectedOffer",
+  "/about",
+  "/contact",
+  "/privacypolicy",
+  "/terms",
 ];
 
 function parsePaths() {
@@ -46,7 +50,11 @@ async function fetchSmoke(baseUrl, pathname) {
   const res = await fetch(url, {
     redirect: "follow",
     headers: { Accept: "text/html" },
+    signal: AbortSignal.timeout(15_000),
   });
+  if (res.headers.get("x-powered-by")) throw new Error(`${pathname}: framework header exposed`);
+  if (res.headers.get("x-content-type-options") !== "nosniff") throw new Error(`${pathname}: missing nosniff header`);
+  if (!res.headers.get("content-security-policy")?.includes("object-src 'none'")) throw new Error(`${pathname}: missing CSP`);
   const ct = res.headers.get("content-type") || "";
   const buf = await res.arrayBuffer();
   const text = new TextDecoder().decode(buf);
@@ -79,7 +87,7 @@ function sleep(ms) {
 async function waitForServer(baseUrl, attempts = 90, delayMs = 1000) {
   for (let i = 0; i < attempts; i++) {
     try {
-      const res = await fetch(`${baseUrl}/`, { redirect: "follow" });
+      const res = await fetch(`${baseUrl}/`, { redirect: "follow", signal: AbortSignal.timeout(2000) });
       if (res.ok) return;
     } catch {
       /* still starting */
@@ -99,6 +107,10 @@ async function withLocalServer() {
     stdio: "inherit",
   });
 
+  let exited = false;
+  child.on("exit", () => { exited = true; });
+  child.on("error", (error) => console.error("Smoke server:", error.message));
+
   const kill = () => {
     try {
       child.kill("SIGTERM");
@@ -117,7 +129,9 @@ async function withLocalServer() {
   } finally {
     kill();
     await sleep(500);
-    if (!child.killed) {
+    process.off("SIGINT", kill);
+    process.off("SIGTERM", kill);
+    if (!exited) {
       try {
         child.kill("SIGKILL");
       } catch {

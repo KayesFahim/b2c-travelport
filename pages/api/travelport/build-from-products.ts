@@ -1,8 +1,11 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import {
   type LegacySegment,
 } from "./search-flight";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 import { logTravelportApi } from "@/utils/travelportLogger";
 
 type BuildFromProductsBody = {
@@ -334,9 +337,17 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
           ? { AvailabilitySourceCode: availSourceCode }
           : {}),
         ContentSource:
-          String(process.env.TRAVELPORT_GDS_ONLY || "true").toLowerCase() !== "false"
-            ? "GDS"
-            : toText(getValueByKeys(segment, ["ContentSource", "contentSource"])) || "GDS",
+          ["GDS", "NDC"].includes(
+            toText(
+              getValueByKeys(segment, ["ContentSource", "contentSource"]) ||
+              getValueByKeys(offer, ["ContentSource", "contentSource"])
+            ).toUpperCase()
+          )
+            ? toText(
+                getValueByKeys(segment, ["ContentSource", "contentSource"]) ||
+                getValueByKeys(offer, ["ContentSource", "contentSource"])
+              ).toUpperCase()
+            : "GDS",
       };
 
       return criteria;
@@ -1445,7 +1456,7 @@ async function createToken(): Promise<string> {
   return getTravelportAccessToken();
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<unknown[] | ErrorResponse>
 ) {
@@ -1499,7 +1510,7 @@ export default async function handler(
       },
       body: JSON.stringify(requestPayload),
     };
-    const response = await fetch(buildFromProductsUrl, fetchOptions);
+    const response = await fetchUpstream(buildFromProductsUrl, fetchOptions);
     const responsePayload = await response.json().catch(() => ({}));
     // Log raw request and response
     logTravelportApi({
@@ -1569,7 +1580,11 @@ export default async function handler(
     ]);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Unexpected server error";
+      publicErrorMessage(error, "Unexpected server error");
     return res.status(500).json({ message });
   }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

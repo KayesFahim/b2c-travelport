@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { clearSession } from "@/server/auth-session";
 
@@ -6,7 +8,7 @@ type ResponseBody = {
   message: string;
 };
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResponseBody>
 ) {
@@ -21,7 +23,11 @@ export default async function handler(
   } catch (error) {
     return res.status(500).json({
       success: false,
-      message: error instanceof Error ? error.message : "Logout failed",
+      message: publicErrorMessage(error, "Logout failed"),
     });
   }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

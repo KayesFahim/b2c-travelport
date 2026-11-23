@@ -1,106 +1,68 @@
+import { apiErrorBody } from "@/server/api-handler";
+import { timingSafeEqual, createHash } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { verifySessionJwt } from "@/server/jwt-session";
+import { cacheIncr } from "@/server/redis-cache";
 
-const PUBLIC_API_PATHS = new Set([
-    "/api/auth/login",
-    "/api/auth/register",
-    "/api/admin/login",
-    "/api/contact",
-    "/api/homepage",
-    "/api/cms/blog",
-]);
+const SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const RATE_LIMITED = /\/api\/(auth\/(login|register|forgot-?password|reset-?password|send-verification-email)|admin\/login|contact|passport\/extract-local)$/i;
 
-const PROTECTED_PREFIXES = [
-    "/api/admin",
-    "/api/user",
-    "/api/travel-buddy",
-    "/api/auth/logout",
-    "/api/cms/settings",
-];
-
-const BOOKING_SESSION_COOKIE = "flyjatt_booking_session";
-const ADMIN_SESSION_COOKIE = "flyjatt_admin_session";
-
-function configuredApiKey(): string {
-    return String(process.env.API_KEY || "").trim();
+function hasServerKey(req: NextRequest): boolean {
+  const expected = process.env.API_KEY?.trim();
+  const supplied = req.headers.get("x-api-key")?.trim() ||
+    req.headers.get("authorization")?.replace(/^ApiKey\s+/i, "");
+  if (!expected || !supplied) return false;
+  const a = Buffer.from(expected);
+  const b = Buffer.from(supplied);
+  return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function getApiKeyFromRequest(req: NextRequest): string {
-    const headerApiKey = String(req.headers.get("x-api-key") || "").trim();
-    if (headerApiKey) return headerApiKey;
-
-    const queryApiKey = String(req.nextUrl.searchParams.get("api_key") || "").trim();
-    if (queryApiKey) return queryApiKey;
-
-    const authHeader = String(req.headers.get("authorization") || "").trim();
-    if (authHeader.toLowerCase().startsWith("apikey ")) {
-        return authHeader.slice(7).trim();
-    }
-
-    return "";
-}
-
-function getBearerToken(req: NextRequest): string {
-    const authHeader = String(req.headers.get("authorization") || "").trim();
-    if (!authHeader.toLowerCase().startsWith("bearer ")) {
-        return "";
-    }
-    return authHeader.slice(7).trim();
-}
-
-function hasSessionCookie(req: NextRequest): boolean {
-    const bookingCookie = String(req.cookies.get(BOOKING_SESSION_COOKIE)?.value || "").trim();
-    if (bookingCookie) return true;
-
-    const adminCookie = String(req.cookies.get(ADMIN_SESSION_COOKIE)?.value || "").trim();
-    return Boolean(adminCookie);
-}
-
-function isProtectedPath(pathname: string): boolean {
-    if (PUBLIC_API_PATHS.has(pathname)) return false;
-    return PROTECTED_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
+function isSameOrigin(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin || origin === "null") return false;
+  const allowed = new Set([req.nextUrl.origin]);
+  // Next may normalize nextUrl to localhost behind a local/reverse proxy.
+  const host = req.headers.get("host");
+  if (host) {
+    try { allowed.add(new URL(`${req.nextUrl.protocol}//${host}`).origin); } catch { /* invalid host */ }
+  }
+  const configured = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL;
+  if (configured) {
+    try { allowed.add(new URL(configured).origin); } catch { /* fail closed */ }
+  }
+  return allowed.has(origin);
 }
 
 export async function proxy(req: NextRequest) {
-    const { pathname } = req.nextUrl;
-    if (!pathname.startsWith("/api/")) {
-        return NextResponse.next();
+  const serverClient = hasServerKey(req);
+  // Browser clients use HttpOnly sessions. A service key never grants user access.
+  if (!SAFE_METHODS.has(req.method) && !serverClient && !isSameOrigin(req)) {
+    return NextResponse.json(apiErrorBody(403, "Request origin is not allowed.", "ORIGIN_NOT_ALLOWED"), { status: 403 });
+  }
+  if (req.method === "POST" && req.nextUrl.pathname === "/api/passport/extract-local" &&
+      !req.cookies.get("flyjatt_booking_session")?.value &&
+      !req.headers.get("authorization")?.startsWith("Bearer ")) {
+    return NextResponse.json(apiErrorBody(401, "Please sign in to scan a passport."), { status: 401 });
+  }
+  if (RATE_LIMITED.test(req.nextUrl.pathname) && req.method === "POST") {
+    // Only trust forwarded addresses when the ingress overwrites these headers.
+    const address = process.env.TRUST_PROXY === "true"
+      ? (req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown")
+      : "untrusted-ingress";
+    const fingerprint = createHash("sha256").update(address).digest("hex");
+    const window = Math.floor(Date.now() / 60_000);
+    try {
+      const count = await cacheIncr(`http:rate:${req.nextUrl.pathname}:${fingerprint}:${window}`, 120);
+      if (count > 10) {
+        return NextResponse.json(apiErrorBody(429, "Too many requests. Please try again shortly."), {
+          status: 429, headers: { "Retry-After": "60" },
+        });
+      }
+    } catch {
+      return NextResponse.json(apiErrorBody(503, "Service temporarily unavailable."), { status: 503 });
     }
-
-    const apiKey = configuredApiKey();
-    if (!apiKey) {
-        return NextResponse.json({ message: "Server API key is not configured" }, { status: 500 });
-    }
-
-    const requestApiKey = getApiKeyFromRequest(req);
-    if (!requestApiKey || requestApiKey !== apiKey) {
-        return NextResponse.json({ message: "Valid API key is required" }, { status: 401 });
-    }
-
-    if (!isProtectedPath(pathname)) {
-        return NextResponse.next();
-    }
-
-    const token = getBearerToken(req);
-    const sessionCookiePresent = hasSessionCookie(req);
-
-    if (!token && !sessionCookiePresent) {
-        return NextResponse.json({ message: "Authorization token is required" }, { status: 401 });
-    }
-
-    if (!token && sessionCookiePresent) {
-        return NextResponse.next();
-    }
-
-    const claims = await verifySessionJwt(token);
-    if ((!claims?.sub || !claims?.sid) && !sessionCookiePresent) {
-        return NextResponse.json({ message: "Invalid or expired authorization token" }, { status: 401 });
-    }
-
-    return NextResponse.next();
+  }
+  return NextResponse.next();
 }
 
-export const config = {
-    matcher: ["/api/:path*"],
-};
+export const config = { matcher: ["/api/:path*"] };

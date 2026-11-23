@@ -1,5 +1,7 @@
+import { scanPassportImage } from "@/utils/passportScanner";
 import React, { useEffect, useState } from "react";
 import {
+  CircularProgress,
   TextField,
   Grid,
   Button,
@@ -525,6 +527,7 @@ const parseStoredUserData = (value) => {
 
 const FlightForm = ({
   data,
+  disabledReason = "",
   airPriceData,
   selectedAirPrice,
   seatSelections = [],
@@ -849,6 +852,7 @@ const FlightForm = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (disabledReason) return;
 
     if (validateForm()) {
       // Validate that we have flight data
@@ -1015,41 +1019,6 @@ const FlightForm = ({
     }
   };
 
-  const fileToDataUrl = (file) =>
-    new Promise((resolve, reject) => {
-      try {
-        const reader = new FileReader();
-        reader.onload = () => resolve(String(reader.result || ""));
-        reader.onerror = () => reject(new Error("Could not read image file."));
-        reader.readAsDataURL(file);
-      } catch (error) {
-        reject(error);
-      }
-    });
-
-  const requestTesseractMrzExtraction = async (file, uploadedPassportUrl = "") => {
-    try {
-      const imageBase64 = await fileToDataUrl(file);
-      const response = await fetch("/api/passport/extract-local", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          imageBase64,
-          fileUrl: uploadedPassportUrl || "",
-        }),
-      });
-
-      if (!response.ok) return null;
-      const payload = await response.json();
-      const parsed = parsePassportExtractionPayload(payload);
-      return hasExtractedPassportFields(parsed) ? parsed : null;
-    } catch (error) {
-      return null;
-    }
-  };
-
   const applyExtractedPassportData = (
     category,
     index,
@@ -1103,7 +1072,7 @@ const FlightForm = ({
     const file = event?.target?.files?.[0];
     if (!file) return;
 
-    const key = getScanKey(category, index);
+    if (passportScanState[getScanKey(category, index)]?.loading) return;
     setScanStatus(category, index, {
       loading: true,
       error: "",
@@ -1111,67 +1080,38 @@ const FlightForm = ({
     });
 
     try {
-      const uploadResult = await handleAutoPassVisaCopy(
-        file,
-        index,
-        "passport",
-        category
-      );
-      const uploadedPassportUrl =
-        (typeof uploadResult === "string"
-          ? uploadResult
-          : uploadResult?.link) || "";
-
-      // Prefer local Tesseract MRZ extraction first for consistent passport parsing.
-      let extractedData = await requestTesseractMrzExtraction(
-        file,
-        uploadedPassportUrl || ""
-      );
-      if (!hasExtractedPassportFields(extractedData)) {
-        extractedData = parsePassportExtractionPayload(
-          uploadResult?.payload || uploadResult || {}
-        );
-      }
-
+      const payload = await scanPassportImage(file);
+      const extractedData = parsePassportExtractionPayload(payload);
       if (hasExtractedPassportFields(extractedData || {})) {
         applyExtractedPassportData(
           category,
           index,
           extractedData,
-          uploadedPassportUrl || ""
+          ""
         );
         setScanStatus(category, index, {
           loading: false,
           error: "",
-          success: "Passport scanned and fields auto-filled.",
+          success: "Details filled in. Please check every field against your passport before continuing.",
         });
       } else {
         setScanStatus(category, index, {
           loading: false,
-          error: "",
-          success: "Passport uploaded. Tesseract MRZ could not extract fields.",
+          error: "We could not read the passport details. Try a clearer photo or enter the fields manually.",
+          success: "",
         });
       }
     } catch (error) {
       setScanStatus(category, index, {
         loading: false,
         success: "",
-        error:
-          "Could not extract passport fields. You can still fill details manually.",
+        error: error?.message || "Could not extract passport fields. You can still fill details manually.",
       });
     } finally {
       if (event?.target) {
         event.target.value = "";
       }
-      setTimeout(() => {
-        setPassportScanState((prevState) => ({
-          ...prevState,
-          [key]: {
-            ...(prevState[key] || {}),
-            success: "",
-          },
-        }));
-      }, 4000);
+
     }
   };
 
@@ -1179,17 +1119,17 @@ const FlightForm = ({
     <Box
       sx={{
         "& .MuiTypography-subtitle1": {
-          fontSize: "12px",
+          fontSize: "14px",
           color: "#5a6b85",
           fontWeight: 600,
         },
         "& .MuiInputBase-root": {
-          minHeight: 36,
+          minHeight: 44,
           borderRadius: "10px",
         },
         "& .MuiInputBase-input": {
-          fontSize: "12px",
-          py: "8px",
+          fontSize: "16px",
+          py: "10px",
         },
         "& .MuiFormHelperText-root": {
           fontSize: "11px",
@@ -1380,16 +1320,19 @@ const FlightForm = ({
                           component="label"
                           variant="outlined"
                           size="small"
-                          startIcon={<FaCamera />}
+                          startIcon={passportScanState[getScanKey(category, index)]?.loading ? <CircularProgress size={16} color="inherit" /> : <FaCamera />}
+                          disabled={Boolean(passportScanState[getScanKey(category, index)]?.loading)}
+                          aria-busy={Boolean(passportScanState[getScanKey(category, index)]?.loading)}
                           sx={{
                             borderColor: "var(--primary-button)",
                             color: "var(--primary-button)",
                             textTransform: "none",
                             borderRadius: "9px",
                             fontWeight: 600,
-                            fontSize: "11px",
-                            px: 1.2,
-                            py: 0.2,
+                            fontSize: "14px",
+                            minHeight: 44,
+                            px: 1.5,
+                            py: 0.5,
                             ":hover": {
                               borderColor: "var(--primary-button)",
                               backgroundColor: "rgba(0,0,0,0.03)",
@@ -1402,7 +1345,8 @@ const FlightForm = ({
                           <input
                             type="file"
                             hidden
-                            accept="image/*"
+                            aria-label={`Scan passport for ${category} ${index + 1}`}
+                            accept="image/jpeg,image/png,image/webp"
                             capture="environment"
                             onChange={(event) =>
                               handlePassportScanAndAutofill(event, category, index)
@@ -1428,15 +1372,22 @@ const FlightForm = ({
                           color: "var(--primary-button)",
                         }}
                       >
-                        As Mentioned on Your Passport or government Approved IDs
+                        Enter each traveler’s details exactly as shown on their passport or government-issued ID.
                       </Typography>
                     </Box>
+                    <Typography sx={{ mb: 1.5, fontSize: 13, color: "text.secondary" }}>
+                      Use a clear JPEG, PNG or WebP photo up to 8 MB. Include both lines at the bottom of the details page.
+                    </Typography>
+                    <Box aria-live="polite" aria-atomic="true">
                     {passportScanState[getScanKey(category, index)]?.error ? (
                       <Typography
                         sx={{
                           mb: 1,
-                          fontSize: 11,
-                          color: "#d32f2f",
+                          fontSize: 14,
+                          p: 1.5,
+                          borderRadius: 2,
+                          bgcolor: "#fff1f0",
+                          color: "#b42318",
                           fontWeight: 500,
                         }}
                       >
@@ -1447,14 +1398,18 @@ const FlightForm = ({
                       <Typography
                         sx={{
                           mb: 1,
-                          fontSize: 11,
-                          color: "#2e7d32",
+                          fontSize: 14,
+                          p: 1.5,
+                          borderRadius: 2,
+                          bgcolor: "#eef8f3",
+                          color: "#16603d",
                           fontWeight: 500,
                         }}
                       >
                         {passportScanState[getScanKey(category, index)]?.success}
                       </Typography>
                     ) : null}
+                    </Box>
                     <FormControl fullWidth>
                       <Typography
                         variant="subtitle1"
@@ -1516,6 +1471,7 @@ const FlightForm = ({
                         First Name *
                       </Typography>
                       <TextField
+                        inputProps={{ "aria-label": `First name for ${category} ${index + 1}` }}
                         value={passenger.fName}
                         onChange={(e) =>
                           handleInputChange(e, category, index, "fName")
@@ -1548,6 +1504,7 @@ const FlightForm = ({
                         Last Name *
                       </Typography>
                       <TextField
+                        inputProps={{ "aria-label": `Last name for ${category} ${index + 1}` }}
                         value={passenger.lName}
                         onChange={(e) =>
                           handleInputChange(e, category, index, "lName")
@@ -2247,6 +2204,7 @@ const FlightForm = ({
         <Button
           variant="contained"
           type="submit"
+          disabled={Boolean(disabledReason)}
           sx={{
             bgcolor: "var(--primary-button)",
             display: "flex",

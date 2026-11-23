@@ -66,11 +66,11 @@ const Home = () => {
     <Box className="travelport-page travelport-home-page relative">
       <div className="pointer-events-none absolute left-1/2 top-0 h-[420px] w-[920px] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,_rgba(0,163,224,0.20),_rgba(0,59,113,0)_70%)]" />
       <NavBar />
-      <Box component="main" id="main-content" sx={{ bgcolor: "#f5f8fc" }}>
+      <Box component="div" sx={{ bgcolor: "#f5f8fc" }}>
         <Banner onTabChange={handleTabChange} data={data} />
 
         {selectedTab === "flight" && (
-          <div className="relative space-y-1 pb-4 md:pb-6">
+          <div className="flyjatt-home-sections relative">
             <DiscountSlider data={data} />
             <TopDestination />
             <HotDeals />

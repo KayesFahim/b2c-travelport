@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { Booking, BookingPassenger, BookingStatus } from "@prisma/client";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
@@ -153,7 +155,7 @@ function toBookingRow(
     };
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -196,7 +198,11 @@ export default async function handler(
         });
     } catch (error) {
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unable to load booking history",
+            message: publicErrorMessage(error, "Unable to load booking history"),
         });
     }
 }
+
+export default withApiHandler(handler, { methods: ["GET"] });
+
+export const config = { api: { bodyParser: false } };

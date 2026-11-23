@@ -12,7 +12,7 @@ function loadEnvFile(filePath) {
     const i = t.indexOf("=");
     if (i <= 0) continue;
     const key = t.slice(0, i).trim();
-    const value = t.slice(i + 1).trim().replace(/^['\"]|['\"]$/g, "");
+    const value = t.slice(i + 1).trim().replace(/^['"]|['"]$/g, "");
     out[key] = value;
   }
   return out;

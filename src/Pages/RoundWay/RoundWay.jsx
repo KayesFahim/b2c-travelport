@@ -150,6 +150,7 @@ const RoundWay = ({
   toggleBanner,
   modifySearch,
   onSearchCommitted,
+  searchFilters,
 }) => {
   const data = flightData;
   const initialData = [
@@ -631,6 +632,7 @@ const RoundWay = ({
       childCount,
       infantCount: infant,
       cabinClass: className,
+      searchFilters: searchFilters || null,
       segments: [
         {
           depfrom: fromSendData,
@@ -698,6 +700,7 @@ const RoundWay = ({
         searchData: nextSearchData,
         segments: nextSegments,
         value,
+        searchFilters: searchFilters || null,
       },
     });
     if (modifySearch && window.innerWidth <= 768) {

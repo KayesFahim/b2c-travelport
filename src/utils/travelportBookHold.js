@@ -1,3 +1,6 @@
+import { fetchWithTimeout, readApiResponse } from "./apiClient";
+import { getBookingAuthToken } from "./bookingAuth";
+
 const TRAVELPORT_BOOK_HOLD_PATH = "/api/travelport/book-hold";
 
 function joinBaseAndPath(baseUrl, path) {
@@ -16,22 +19,10 @@ function getConfiguredBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || "";
 }
 
-function getLocalFallbackBookHoldUrl() {
-  if (typeof window === "undefined") return "";
-  const { protocol, hostname, port } = window.location;
-  if (port === "3001") {
-    return `${protocol}//${hostname}:3000${TRAVELPORT_BOOK_HOLD_PATH}`;
-  }
-  if (port === "3000") {
-    return `${protocol}//${hostname}:3001${TRAVELPORT_BOOK_HOLD_PATH}`;
-  }
-  return "";
-}
 
 function getCandidateBookHoldUrls() {
   const configuredUrl = getConfiguredBookHoldUrl();
   const configuredBaseUrl = getConfiguredBaseUrl();
-  const localFallbackUrl = getLocalFallbackBookHoldUrl();
 
   return Array.from(
     new Set(
@@ -39,7 +30,7 @@ function getCandidateBookHoldUrls() {
         configuredUrl,
         TRAVELPORT_BOOK_HOLD_PATH,
         joinBaseAndPath(configuredBaseUrl, TRAVELPORT_BOOK_HOLD_PATH),
-        localFallbackUrl,
+
       ].filter(Boolean)
     )
   );
@@ -104,20 +95,22 @@ export async function createTravelportBookHold({
     commitOnly,
   };
 
+  const effectiveToken = String(token || getBookingAuthToken() || "").trim();
+
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          ...(effectiveToken ? { Authorization: `Bearer ${effectiveToken}` } : {}),
         },
         body: JSON.stringify(payload),
       });
 
       if (response.ok) {
-        return response.json();
+        return readApiResponse(response);
       }
 
       const errorPayload = await getResponseErrorPayload(response);

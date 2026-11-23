@@ -1,3 +1,4 @@
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from "@/utils/passwordPolicy";
 import {
   Box,
   Grid,
@@ -329,10 +330,10 @@ const SingleMulticityFlight = ({ data }) => {
         }
         break;
       case "userPass":
-        if (!value.match(/^(?=.*[A-Za-z])[A-Za-z\d]{6,}$/)) {
-          // Updated regex for 6 characters
+        if (!isValidPassword(value)) {
+          // Shared password requirements
           errorMessage =
-            "Password must be at least 6 characters long, and contain at least one letter.";
+            PASSWORD_POLICY_MESSAGE;
         }
         break;
       case "userPhone":

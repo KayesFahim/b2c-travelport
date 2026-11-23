@@ -10,7 +10,7 @@ import { convertMinutesToHoursAndMinutes } from "../../Pages/common/funcation";
 const isMobile = typeof window !== "undefined" ? window.innerWidth <= 768 : false;
 
 const RoundwayFlightDetails = ({ data }) => {
-  const [value, setValue] = useState("0" || []);
+  const [value, setValue] = useState("0");
   const handleChange = (event, newValue) => {
     setValue(newValue);
   };

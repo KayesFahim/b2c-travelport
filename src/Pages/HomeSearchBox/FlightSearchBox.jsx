@@ -10,16 +10,21 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import FlightTakeoffRoundedIcon from "@mui/icons-material/FlightTakeoffRounded";
 import PublishedWithChangesRoundedIcon from "@mui/icons-material/PublishedWithChangesRounded";
 import HubRoundedIcon from "@mui/icons-material/HubRounded";
 import PersonRoundedIcon from "@mui/icons-material/PersonRounded";
 import ManageSearchRoundedIcon from "@mui/icons-material/ManageSearchRounded";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import OneWay from "../OneWay/OneWay";
 import RoundWay from "../RoundWay/RoundWay";
 import MultiCity from "../MultiCity/MultiCity";
+import SearchCriteriaFilter from "./SearchCriteriaFilter";
+import {
+  createDefaultTravelportSearchFilters,
+  normalizeTravelportSearchFilters,
+} from "../../utils/travelportSearchCriteria";
 const FlightSearchBox = ({
   segments,
   type,
@@ -72,6 +77,8 @@ const FlightSearchBox = ({
   toggleBanner,
   modifySearch,
   onSearchCommitted,
+  searchFilters,
+  onSearchFiltersChange,
 }) => {
   const totalPassengers =
     Number(adultCount || 0) + Number(childCount || 0) + Number(infant || 0);
@@ -79,6 +86,40 @@ const FlightSearchBox = ({
   const [manageBookingError, setManageBookingError] = useState("");
   const [openManageBookingDialog, setOpenManageBookingDialog] = useState(false);
   const navigate = useNavigate();
+  const location = useLocation();
+  const [internalSearchFilters, setInternalSearchFilters] = useState(() =>
+    createDefaultTravelportSearchFilters(
+      searchFilters || location?.state?.searchFilters || {}
+    )
+  );
+
+  useEffect(() => {
+    if (searchFilters && typeof searchFilters === "object") {
+      setInternalSearchFilters(normalizeTravelportSearchFilters(searchFilters));
+    }
+  }, [searchFilters]);
+
+  useEffect(() => {
+    if (!searchFilters && location?.state?.searchFilters) {
+      setInternalSearchFilters(
+        normalizeTravelportSearchFilters(location.state.searchFilters)
+      );
+    }
+  }, [location?.state?.searchFilters, searchFilters]);
+
+  const effectiveSearchFilters =
+    searchFilters && typeof searchFilters === "object"
+      ? normalizeTravelportSearchFilters(searchFilters)
+      : internalSearchFilters;
+
+  const handleSearchFiltersChange = (nextFilters) => {
+    const normalized = normalizeTravelportSearchFilters(nextFilters);
+    if (typeof onSearchFiltersChange === "function") {
+      onSearchFiltersChange(normalized);
+    } else {
+      setInternalSearchFilters(normalized);
+    }
+  };
 
   const handleOpenManageBookingDialog = () => {
     setManageBookingError("");
@@ -176,6 +217,7 @@ const FlightSearchBox = ({
           toggleBanner={toggleBanner}
           modifySearch={modifySearch}
           onSearchCommitted={onSearchCommitted}
+          searchFilters={effectiveSearchFilters}
         />
       );
     }
@@ -234,6 +276,7 @@ const FlightSearchBox = ({
           toggleBanner={toggleBanner}
           modifySearch={modifySearch}
           onSearchCommitted={onSearchCommitted}
+          searchFilters={effectiveSearchFilters}
         />
       );
     }
@@ -289,6 +332,7 @@ const FlightSearchBox = ({
         toggleBanner={toggleBanner}
         modifySearch={modifySearch}
         onSearchCommitted={onSearchCommitted}
+        searchFilters={effectiveSearchFilters}
       />
     );
   };
@@ -429,6 +473,22 @@ const FlightSearchBox = ({
             </Button>
           );
         })}
+      </Box>
+
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 1.1,
+          mb: 1.5,
+        }}
+      >
+        <SearchCriteriaFilter
+          filters={effectiveSearchFilters}
+          onChange={handleSearchFiltersChange}
+        />
       </Box>
 
       <Box

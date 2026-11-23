@@ -42,16 +42,6 @@ export async function ensureSuperAdminBootstrap(): Promise<void> {
     });
 
     if (existingByEmail) {
-        if (existingByEmail.role !== AccessRole.SUPER_ADMIN || !existingByEmail.isActive) {
-            await prisma.adminUser.update({
-                where: { id: existingByEmail.id },
-                data: {
-                    role: AccessRole.SUPER_ADMIN,
-                    isActive: true,
-                    name: configured.name,
-                },
-            });
-        }
         return;
     }
 

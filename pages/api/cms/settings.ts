@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../src/server/prisma";
 import { canManageCms, deny, getActor } from "@/server/rbac";
@@ -5,7 +6,7 @@ import { canManageCms, deny, getActor } from "@/server/rbac";
 // GET  /api/cms/settings?section=contact|about|homepage
 // PUT  /api/cms/settings  body: { section, settings: { key: value, ... } }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === "GET") {
         try {
             const section = String(req.query.section ?? "");
@@ -52,3 +53,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", ["GET", "PUT"]);
     return res.status(405).json({ message: "Method not allowed" });
 }
+
+export default withApiHandler(handler, { methods: ["GET", "PUT"] });
+
+export const config = { api: { bodyParser: false } };

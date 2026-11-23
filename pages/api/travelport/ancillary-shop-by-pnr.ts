@@ -1,5 +1,10 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
+import { withCustomerSession } from "@/server/with-customer-session";
+import { requireBookingAccess } from "@/server/booking-access";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 import { getSessionUser } from "@/server/auth-session";
 
 type ErrorResponse = {
@@ -120,7 +125,7 @@ function resolveAncillaryShopUrl(version: string): string {
     return `${baseUrl.replace(/\/+$/, "")}/${version}/air/ancillaryshop/catalogofferingsancillaries`;
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<Record<string, unknown> | ErrorResponse>
 ) {
@@ -149,6 +154,8 @@ export default async function handler(
             return res.status(400).json({ message: "pnr is required" });
         }
 
+    if (!(await requireBookingAccess(req, res, pnr))) return;
+
         const version = process.env.TRAVELPORT_VERSION || "11";
         const bookingBaseUrl = resolveBookingBaseUrl(version);
         const accessGroup = getRequiredEnv("TRAVELPORT_ACCESS_GROUP");
@@ -170,7 +177,7 @@ export default async function handler(
         const buildUrl =
             `${bookingBaseUrl}${buildFromLocatorPath.replace("{pnr}", encodeURIComponent(pnr))}`;
 
-        const buildResponse = await fetch(buildUrl, {
+        const buildResponse = await fetchUpstream(buildUrl, {
             method: "POST",
             headers: commonHeaders,
         });
@@ -208,7 +215,7 @@ export default async function handler(
             },
         };
 
-        const ancillaryResponse = await fetch(ancillaryShopUrl, {
+        const ancillaryResponse = await fetchUpstream(ancillaryShopUrl, {
             method: "POST",
             headers: commonHeaders,
             body: JSON.stringify(ancillaryRequestPayload),
@@ -244,7 +251,11 @@ export default async function handler(
         });
     } catch (error) {
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unexpected server error",
+            message: publicErrorMessage(error, "Unexpected server error"),
         });
     }
 }
+
+export default withApiHandler(withCustomerSession(handler), { methods: ["GET", "POST"] });
+
+export const config = { api: { bodyParser: false } };

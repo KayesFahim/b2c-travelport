@@ -10,6 +10,6 @@ const viteGoogleClientId =
   typeof process !== "undefined" ? process.env.VITE_GOOGLE_CLIENT_ID : undefined;
 
 export const config = {
-  baseUrl: nextPublicApiUrl || viteApiUrl || "http://localhost:3001",
+  baseUrl: nextPublicApiUrl || viteApiUrl || "",
   googleClientId: nextPublicGoogleClientId || viteGoogleClientId || "",
 };

@@ -1,3 +1,4 @@
+import { fetchWithTimeout, readApiResponse } from "./apiClient";
 const TRAVELPORT_SEAT_AVAILABILITY_PATH = "/api/travelport/seat-availability";
 
 function normalizeIdentifier(value) {
@@ -59,49 +60,25 @@ function getConfiguredBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || "";
 }
 
-function getLocalFallbackSeatAvailabilityUrl() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const { protocol, hostname, port } = window.location;
-  if (port === "3001") {
-    return `${protocol}//${hostname}:3000${TRAVELPORT_SEAT_AVAILABILITY_PATH}`;
-  }
-  if (port === "3000") {
-    return `${protocol}//${hostname}:3001${TRAVELPORT_SEAT_AVAILABILITY_PATH}`;
-  }
-  return "";
-}
 
 function getCandidateSeatAvailabilityUrls() {
   const configuredUrl = getConfiguredSeatAvailabilityUrl();
-  const localFallbackUrl = getLocalFallbackSeatAvailabilityUrl();
   const configuredBaseUrl = getConfiguredBaseUrl();
 
   const urls = [
     configuredUrl,
     TRAVELPORT_SEAT_AVAILABILITY_PATH,
     joinBaseAndPath(configuredBaseUrl, TRAVELPORT_SEAT_AVAILABILITY_PATH),
-    localFallbackUrl,
+
   ].filter(Boolean);
 
   return Array.from(new Set(urls));
 }
 
 async function getResponseErrorMessage(response) {
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const payload = await response.json().catch(() => ({}));
-    return (
-      payload?.message ||
-      payload?.details ||
-      `Travelport seat availability failed (${response.status})`
-    );
-  }
-
-  const text = await response.text().catch(() => "");
-  return text || `Travelport seat availability failed (${response.status})`;
+  try { await readApiResponse(response); }
+  catch (error) { return error.message; }
+  return "The request could not be completed.";
 }
 
 export async function fetchTravelportSeatAvailability({
@@ -147,7 +124,7 @@ export async function fetchTravelportSeatAvailability({
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         cache: "no-store",
         headers: {
@@ -158,11 +135,12 @@ export async function fetchTravelportSeatAvailability({
       });
 
       if (response.ok) {
-        return response.json();
+        return readApiResponse(response);
       }
 
       const message = await getResponseErrorMessage(response);
       const currentError = new Error(message);
+      currentError.status = response.status;
 
       if (response.status === 404) {
         lastError = currentError;
@@ -171,6 +149,7 @@ export async function fetchTravelportSeatAvailability({
 
       throw currentError;
     } catch (error) {
+      if (Number(error?.status) !== 404) throw error;
       lastError =
         error instanceof Error
           ? error

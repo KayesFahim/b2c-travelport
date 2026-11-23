@@ -14,6 +14,10 @@ import NavBar from "../../Shared/NavBar/NavBar";
 import { useLocation, useNavigate } from "react-router-dom";
 import secureLocalStorage from "react-secure-storage";
 import CloseIcon from "@mui/icons-material/Close";
+import {
+  createDefaultTravelportSearchFilters,
+  normalizeTravelportSearchFilters,
+} from "../../utils/travelportSearchCriteria";
 
 const toSafeNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -44,6 +48,7 @@ const AfterSearchBanner = ({
   paxResult,
   typeValue,
   valueBoxs,
+  searchFilters: incomingSearchFilters,
   toggleBanner,
 }) => {
   const userData = secureLocalStorage.getItem("userData");
@@ -97,6 +102,11 @@ const AfterSearchBanner = ({
   const [result, setResult] = useState(Math.max(1, toSafeNumber(paxResult, 1)));
   const [className, setClassName] = useState(classNa || "1");
   const [showBanner, setShowBanner] = useState(true);
+  const [searchFilters, setSearchFilters] = useState(() =>
+    createDefaultTravelportSearchFilters(
+      incomingSearchFilters || location?.state?.searchFilters || {}
+    )
+  );
 
   const handleTypeChange = (event, newValue) => {
     setType(newValue);
@@ -161,6 +171,11 @@ const AfterSearchBanner = ({
       ...incoming,
       segments: incomingSegments,
     });
+    if (incomingSearchFilters && typeof incomingSearchFilters === "object") {
+      setSearchFilters(normalizeTravelportSearchFilters(incomingSearchFilters));
+    } else if (location?.state?.searchFilters && typeof location.state.searchFilters === "object") {
+      setSearchFilters(normalizeTravelportSearchFilters(location.state.searchFilters));
+    }
   }, [
     adult,
     arrDate,
@@ -170,7 +185,9 @@ const AfterSearchBanner = ({
     faddressText,
     fromSearch,
     fromSend,
+    incomingSearchFilters,
     infantCount,
+    location?.state?.searchFilters,
     searchDatas,
     segments,
     toAddressText,
@@ -284,6 +301,8 @@ const AfterSearchBanner = ({
                   searchData={searchData}
                   setSearchData={setSearchData}
                   segments={segments}
+                  searchFilters={searchFilters}
+                  onSearchFiltersChange={setSearchFilters}
                   toggleBanner={toggleBanner}
                   modifySearch="modifySearch"
                 />

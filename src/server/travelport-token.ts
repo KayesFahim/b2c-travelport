@@ -1,3 +1,4 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
 import { logTravelportApi } from "@/utils/travelportLogger";
 
 type TokenCacheEntry = {
@@ -69,7 +70,8 @@ async function requestNewToken(): Promise<{ token: string; expiresInSec: number 
     body.append("client_secret", clientSecret);
   }
 
-  const response = await fetch(authUrl, {
+  const response = await fetchUpstream(authUrl, {
+    signal: AbortSignal.timeout(20_000),
     method: "POST",
     headers,
     body: body.toString(),

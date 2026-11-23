@@ -10,10 +10,15 @@ const REDACTED_KEYS = new Set([
   "refresh_token",
   "x-api-key",
   "api_key",
+  "cookie", "set-cookie", "token", "passportnumber", "documentnumber",
+  "birthdate", "dateofbirth", "email", "emailaddress", "telephone",
+  "phonenumber", "cardnumber", "cvv", "securitycode", "personname",
+  "given", "surname", "number",
 ]);
 
 function sanitizeValue(value: unknown, depth = 0): unknown {
-  if (depth > 8 || value === null || value === undefined) return value;
+  if (depth > 12) return "[TRUNCATED]";
+  if (value === null || value === undefined) return value;
 
   if (typeof value === "string") {
     const trimmed = value.trim();
@@ -66,6 +71,7 @@ export function logTravelportApi({
   status: number;
   meta?: Record<string, any>;
 }) {
+  if (process.env.NODE_ENV === "production") return;
   const dateStamp = new Date().toISOString().slice(0, 10);
   const entryLine = `${JSON.stringify({
     timestamp: new Date().toISOString(),

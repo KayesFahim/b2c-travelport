@@ -1,3 +1,4 @@
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from "@/utils/passwordPolicy";
 import {
   Box,
   Button,
@@ -29,9 +30,9 @@ const ChangePassword = () => {
   const navigate = useNavigate();
 
   const validatePassword = (password) => {
-    const passwordRegex = /^(?=.*[a-zA-Z]).{6,}$/;
-    if (!passwordRegex.test(password)) {
-      return "Password must be at least 6 characters long, and contain at least one letter.";
+
+    if (!isValidPassword(password)) {
+      return PASSWORD_POLICY_MESSAGE;
     }
     return "";
   };

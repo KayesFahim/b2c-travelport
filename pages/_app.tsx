@@ -15,67 +15,8 @@ import "react-date-range/dist/theme/default.css";
 import "react-phone-input-2/lib/style.css";
 import "react-datepicker/dist/react-datepicker.css";
 
-declare global {
-  interface Window {
-    __flyjattApiFetchPatched?: boolean;
-  }
-}
-
-function shouldAttachApiKey(url: string): boolean {
-  if (!url) return false;
-  if (url.startsWith("/api/")) return true;
-  if (url.startsWith("http://") || url.startsWith("https://")) {
-    try {
-      const parsed = new URL(url);
-      return parsed.pathname.startsWith("/api/");
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
-function patchFetchWithApiKey(apiKey: string) {
-  if (typeof window === "undefined") return;
-  if (!apiKey) return;
-  if (window.__flyjattApiFetchPatched) return;
-
-  const originalFetch = window.fetch.bind(window);
-  window.fetch = async (input: RequestInfo | URL, init?: RequestInit) => {
-    const inputUrl =
-      typeof input === "string"
-        ? input
-        : input instanceof URL
-          ? input.toString()
-          : String((input as Request).url || "");
-
-    if (!shouldAttachApiKey(inputUrl)) {
-      return originalFetch(input, init);
-    }
-
-    const headers = new Headers(
-      init?.headers || (input instanceof Request ? input.headers : undefined)
-    );
-    if (!headers.has("x-api-key")) {
-      headers.set("x-api-key", apiKey);
-    }
-
-    if (input instanceof Request) {
-      const nextRequest = new Request(input, { ...init, headers });
-      return originalFetch(nextRequest);
-    }
-    return originalFetch(input, { ...init, headers });
-  };
-
-  window.__flyjattApiFetchPatched = true;
-}
-
 export default function NextApp({ Component, pageProps }: AppProps) {
   const router = useRouter();
-  const apiKey = useMemo(
-    () => String(process.env.NEXT_PUBLIC_API_KEY || "").trim(),
-    []
-  );
   const siteUrl = useMemo(
     () =>
       String(process.env.NEXT_PUBLIC_APP_URL || "https://www.flyjatt.com")
@@ -93,7 +34,6 @@ export default function NextApp({ Component, pageProps }: AppProps) {
   const defaultDescription =
     "Search flights, compare fares, and book tickets quickly with FlyJatt.";
 
-  patchFetchWithApiKey(apiKey);
 
   return (
     <>

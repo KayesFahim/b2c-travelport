@@ -23,7 +23,7 @@ type SessionUserLike = {
 
 function getJwtSecret(): Uint8Array | null {
     const raw = String(process.env.JWT_SESSION_SECRET || "").trim();
-    if (!raw) return null;
+    if (raw.length < 32) return null;
     return new TextEncoder().encode(raw);
 }
 

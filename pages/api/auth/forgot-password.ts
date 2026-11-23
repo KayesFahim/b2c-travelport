@@ -1,7 +1,8 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { issueForgotPassword } from "@/server/auth-email";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "POST") {
         res.setHeader("Allow", "POST");
         return res.status(405).json({ message: "Method not allowed" });
@@ -18,3 +19,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         message: "If this email exists, a password reset link has been sent.",
     });
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

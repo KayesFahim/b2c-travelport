@@ -2,7 +2,7 @@
   "@type": "CatalogProductOfferingsQueryRequest",
   "CatalogProductOfferingsRequest": {
     "@type": "CatalogProductOfferingsRequestAir",
-    "maxNumberOfUpsellsToReturn": 20,
+    "maxNumberOfUpsellsToReturn": 4,
     "offersPerPage": 20,
     "contentSourceList": [
       "GDS"
@@ -18,12 +18,12 @@
     "SearchCriteriaFlight": [
       {
         "@type": "SearchCriteriaFlight",
-        "departureDate": "2026-06-11",
+        "departureDate": "2026-12-18",
         "From": {
           "value": "DXB"
         },
         "To": {
-          "value": "ADD"
+          "value": "JFK"
         }
       }
     ],

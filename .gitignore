@@ -46,3 +46,12 @@ yarn-error.log*
 sample data/
 sample-data/
 sample_data/
+
+# Secrets, private certification exports and test artifacts
+.env.*
+!.env.example
+/cert/
+/round*.txt
+/playwright-report/
+/test-results/
+/artifacts/

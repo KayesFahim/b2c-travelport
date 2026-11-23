@@ -28,9 +28,7 @@ import PrivacyPolicy from "./Pages/Policy/PrivacyPolicy/PrivacyPolicy"
 import NoBookingsFound from "./Shared/AnimationError/NoBookingsFound/NoBookingsFound"
 import PageNotFound from "./Shared/AnimationError/NoBookingsFound/PageNotFound"
 import AboutUs from "./Pages/Policy/AboutUs/AboutUs"
-import FlightLoading from "./Pages/OneWay/FlightLoading"
 import TermsConditions from "./Pages/TermsConditions/TermsConditions"
-import Test from "./Test"
 import Blog from "./Pages/Blog/Blog"
 import Contact from "./Pages/Contact/Contact"
 import Hotel from "./Pages/Hotel/Hotel"
@@ -52,14 +50,9 @@ const App: FC = () => {
       <div className="travelport-shell relative min-h-screen overflow-x-clip">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-96 bg-[radial-gradient(circle_at_10%_0%,rgba(0,154,214,0.24),transparent_58%)]" />
         <div className="pointer-events-none absolute right-[-120px] top-[120px] h-80 w-80 rounded-full bg-[radial-gradient(circle,rgba(20,184,166,0.2),transparent_70%)]" />
-        <BrowserRouter
-          future={{
-            v7_startTransition: true,
-            v7_relativeSplatPath: true,
-          }}
-        >
+        <BrowserRouter>
           <ScrollToTop />
-          <main id="main-content" className="relative z-10 travelport-route-frame">
+          <main id="main-content" tabIndex={-1} className="relative z-10 travelport-route-frame">
             <Routes>
               <Route path="/" element={<Home />} />
               {/* Next.js serves /homepage as a dedicated route; keep Router in sync */}
@@ -112,8 +105,6 @@ const App: FC = () => {
               <Route path="/hotel" element={<Hotel />} />
               <Route path="/signUp" element={<SignUp />} />
               {/* <Route path="/test" element={<FlightForm />} /> */}
-              <Route path="/test1" element={<FlightLoading />} />
-              <Route path="/test" element={<Test />} />
               <Route path="*" element={<PageNotFound />} /> {/* Not Found route */}
             </Routes>
           </main>

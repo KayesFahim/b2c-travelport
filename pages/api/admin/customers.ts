@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "@/server/prisma";
 import { getActor } from "@/server/rbac";
@@ -25,7 +27,7 @@ type SuccessResponse = {
     totalPages: number;
 };
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -120,7 +122,11 @@ export default async function handler(
         });
     } catch (error) {
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unable to load customers",
+            message: publicErrorMessage(error, "Unable to load customers"),
         });
     }
 }
+
+export default withApiHandler(handler, { methods: ["GET"] });
+
+export const config = { api: { bodyParser: false } };

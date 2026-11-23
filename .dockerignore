@@ -1,0 +1,16 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+cert
+sample data
+log
+travelport-api-logs
+*.txt
+*.zip
+playwright-report
+test-results
+artifacts
+.DS_Store

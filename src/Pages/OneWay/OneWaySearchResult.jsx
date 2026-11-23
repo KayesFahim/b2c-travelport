@@ -28,6 +28,11 @@ import {
 } from "../../utils/flightPolicyUtils";
 import { resolveAirportInfo } from "../../utils/travelLookup";
 import { readRecentSearches } from "../../utils/recentSearches";
+import {
+  buildTravelportSearchRequestModifiers,
+  createDefaultTravelportSearchFilters,
+  normalizeTravelportSearchFilters,
+} from "../../utils/travelportSearchCriteria";
 import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
 import TuneRoundedIcon from "@mui/icons-material/TuneRounded";
 import CompareArrowsRoundedIcon from "@mui/icons-material/CompareArrowsRounded";
@@ -96,6 +101,7 @@ const OneWaySearchResult = () => {
     changeState,
     searchData,
     segments,
+    searchFilters,
   } = location?.state || {};
 
   const resolvedSearchContext = useMemo(() => {
@@ -186,8 +192,15 @@ const OneWaySearchResult = () => {
         ? moment(resolvedSegment.depdate).format("DD MMM YY")
         : "");
 
+    const effectiveSearchFilters = normalizeTravelportSearchFilters(
+      searchFilters ||
+      recoveredFromRecent?.searchFilters ||
+      createDefaultTravelportSearchFilters()
+    );
+
     return {
       valid: Boolean(resolvedSegment),
+      searchFilters: effectiveSearchFilters,
       payload: resolvedSegment
         ? {
           adultcount: safeAdultCount,
@@ -195,6 +208,7 @@ const OneWaySearchResult = () => {
           infantcount: safeInfantCount,
           cabinclass: safeCabinClass,
           segments: [resolvedSegment],
+          ...buildTravelportSearchRequestModifiers(effectiveSearchFilters),
         }
         : null,
       display: {
@@ -225,6 +239,7 @@ const OneWaySearchResult = () => {
     fromSendData,
     infant,
     searchData?.segments,
+    searchFilters,
     segments,
     toAddress,
     toSearchText,
@@ -1019,6 +1034,7 @@ const OneWaySearchResult = () => {
             valueBoxs={displayContext.valueBox}
             segments={bannerSegments}
             searchDatas={bannerSearchData}
+            searchFilters={resolvedSearchContext.searchFilters}
             toggleBanner={toggleBanner}
           />
         </Box>
@@ -1043,6 +1059,7 @@ const OneWaySearchResult = () => {
           valueBoxs={displayContext.valueBox}
           segments={bannerSegments}
           searchDatas={bannerSearchData}
+          searchFilters={resolvedSearchContext.searchFilters}
         />
       </Box>
 
@@ -1359,8 +1376,16 @@ const OneWaySearchResult = () => {
                     >
                       {paginatedFlightGroups?.map((group, index) => {
                         const primaryFlight = group?.primary || {};
+                        const groupRenderKey =
+                          [
+                            String(group?.key || "").trim(),
+                            String(primaryFlight?.ResultId || "").trim(),
+                            String(index),
+                          ]
+                            .filter(Boolean)
+                            .join("::");
                         return (
-                          <Box key={primaryFlight?.ResultId || index}>
+                          <Box key={groupRenderKey}>
                             <SingleFlight
                               className={className}
                               data={primaryFlight}

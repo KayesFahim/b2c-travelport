@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
@@ -17,7 +19,7 @@ type ErrorResponse = {
     message: string;
 };
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -72,7 +74,11 @@ export default async function handler(
         });
     } catch (error) {
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unable to save travel buddy",
+            message: publicErrorMessage(error, "Unable to save travel buddy"),
         });
     }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

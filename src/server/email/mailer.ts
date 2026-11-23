@@ -1,10 +1,10 @@
-import nodemailer from "nodemailer";
+import nodemailer, { type Transporter } from "nodemailer";
 import { cacheGetJson, cacheSetJson } from "@/server/redis-cache";
 
 // Each named sender uses its own SMTP account and cached transporter.
 export type SenderType = "noreply" | "booking" | "ticket" | "contact";
 
-const transporterCache = new Map<string, nodemailer.Transporter>();
+const transporterCache = new Map<string, Transporter>();
 const EMAIL_QUEUE_KEY = "email:queue:v1";
 const EMAIL_QUEUE_FAILED_KEY = "email:queue:failed:v1";
 const EMAIL_QUEUE_MAX_RETRIES = 3;
@@ -66,7 +66,7 @@ function getSenderCredentials(senderType: SenderType): SenderCredentials | null 
     }
 }
 
-function getTransporter(senderType: SenderType): nodemailer.Transporter | null {
+function getTransporter(senderType: SenderType): Transporter | null {
     const cached = transporterCache.get(senderType);
     if (cached) return cached;
 
@@ -80,6 +80,12 @@ function getTransporter(senderType: SenderType): nodemailer.Transporter | null {
         host: base.host,
         port: base.port,
         secure: base.secure,
+        requireTLS: !base.secure,
+        disableFileAccess: true,
+        disableUrlAccess: true,
+        connectionTimeout: 10_000,
+        greetingTimeout: 10_000,
+        socketTimeout: 30_000,
         auth: { user: creds.user, pass: creds.pass },
     });
     transporterCache.set(senderType, transporter);
@@ -329,5 +335,5 @@ export async function sendEmail(params: {
         nextAttemptAt: Date.now(),
     });
 
-    void processEmailQueue();
+    void processEmailQueue().catch(() => console.error("Email queue processing failed"));
 }

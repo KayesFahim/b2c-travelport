@@ -1,5 +1,10 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { bindWorkbenchOwner, requireWorkbenchAccess } from "@/server/booking-access";
+import { publicErrorMessage } from "@/server/public-error";
+import { withCustomerSession } from "@/server/with-customer-session";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 import { logTravelportApi } from "@/utils/travelportLogger";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
@@ -848,10 +853,17 @@ function buildProductCriteriaAir(offer: Record<string, unknown>) {
                 ])
               ) || "A",
             ContentSource:
-              String(process.env.TRAVELPORT_GDS_ONLY || "true").toLowerCase() !== "false"
-                ? "GDS"
-                : toText(getValueByKeys(segment, ["ContentSource", "contentSource"])) ||
-                  "GDS",
+              ["GDS", "NDC"].includes(
+                toText(
+                  getValueByKeys(segment, ["ContentSource", "contentSource"]) ||
+                  getValueByKeys(offer, ["ContentSource", "contentSource"])
+                ).toUpperCase()
+              )
+                ? toText(
+                    getValueByKeys(segment, ["ContentSource", "contentSource"]) ||
+                    getValueByKeys(offer, ["ContentSource", "contentSource"])
+                  ).toUpperCase()
+                : "GDS",
           };
 
           const boundFlightsInd = getValueByKeys(segment, [
@@ -2562,7 +2574,7 @@ async function commitReservation(params: {
   const commitUrl = `${params.bookingBaseUrl}/reservation/reservations/${encodeURIComponent(
     params.reservationId
   )}`;
-  const commitResponse = await fetch(commitUrl, {
+  const commitResponse = await fetchUpstream(commitUrl, {
     method: "POST",
     headers: params.headers,
     body: JSON.stringify({ "@type": "ReservationQueryCommitReservation" }),
@@ -2647,7 +2659,7 @@ async function runIssueTicketPaymentStep(params: {
     parseJsonEnvObject(params.payloadEnvName) || params.defaultPayload;
   const httpMethod = toText(params.method).toUpperCase() || "POST";
 
-  const response = await fetch(url, {
+  const response = await fetchUpstream(url, {
     method: httpMethod,
     headers: params.headers,
     body: JSON.stringify(payloadBody),
@@ -2710,7 +2722,7 @@ async function applyDocumentOverrides(params: {
     Commissions: [commissionStructure],
   };
 
-  const overrideResponse = await fetch(overrideUrl, {
+  const overrideResponse = await fetchUpstream(overrideUrl, {
     method: "POST",
     headers: params.headers,
     body: JSON.stringify(overrideBody),
@@ -2799,7 +2811,7 @@ async function applySpecialServices(params: {
     })),
   };
 
-  const response = await fetch(specialUrl, {
+  const response = await fetchUpstream(specialUrl, {
     method: "POST",
     headers: params.headers,
     body: JSON.stringify(specialBody),
@@ -3024,7 +3036,7 @@ async function persistCommittedBooking(params: {
   return booking;
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -3185,6 +3197,8 @@ export default async function handler(
           stage: "commit_only",
         });
       }
+
+      if (!(await requireWorkbenchAccess(req, res, commitReservationId))) return;
 
       const commitOnlySelectedOffer = resolveSelectedOffer(body);
       const hasCommitOnlyOffer = Object.keys(commitOnlySelectedOffer).length > 0;
@@ -3544,7 +3558,7 @@ export default async function handler(
     });
     const catalogOfferingsRequest = resolveCatalogOfferingsRequest(selectedOffer);
 
-    const sessionResponse = await fetch(sessionUrl, {
+    const sessionResponse = await fetchUpstream(sessionUrl, {
       method: "POST",
       headers: commonHeaders,
       body: JSON.stringify({ "@type": "ReservationID" }),
@@ -3590,6 +3604,7 @@ export default async function handler(
         destroyFlowKey: true,
       });
     }
+    await bindWorkbenchOwner(reservationId, sessionUser.id);
     activeReservationId = reservationId;
 
     const travelers = buildTravelersPayload(selectedOffer, body);
@@ -3615,7 +3630,7 @@ export default async function handler(
     let travelerPayloadResponse: Record<string, unknown> = {};
     let travelerIdentifiers: string[] = [];
 
-    const travelerListResponse = await fetch(travelerListUrl, {
+    const travelerListResponse = await fetchUpstream(travelerListUrl, {
       method: "POST",
       headers: commonHeaders,
       body: JSON.stringify(travelerListPayload),
@@ -3689,7 +3704,7 @@ export default async function handler(
       const addCatalogOfferingsPayload =
         buildCatalogOfferingsPayload(catalogOfferingsRequest);
 
-      const addCatalogOfferingsResponse = await fetch(addCatalogOfferingsUrl, {
+      const addCatalogOfferingsResponse = await fetchUpstream(addCatalogOfferingsUrl, {
         method: "POST",
         headers: commonHeaders,
         body: JSON.stringify(addCatalogOfferingsPayload),
@@ -3733,7 +3748,7 @@ export default async function handler(
 
     let productsFailureMessage = "";
     if (!addOfferResponse) {
-      addOfferResponse = await fetch(addOfferUrl, {
+      addOfferResponse = await fetchUpstream(addOfferUrl, {
         method: "POST",
         headers: commonHeaders,
         body: JSON.stringify(addOfferPayload),
@@ -3779,7 +3794,7 @@ export default async function handler(
           "Initial add-offer inventory/class check failed. Retrying with relaxed criteria."
         );
 
-        const relaxedAddOfferResponse = await fetch(addOfferUrl, {
+        const relaxedAddOfferResponse = await fetchUpstream(addOfferUrl, {
           method: "POST",
           headers: commonHeaders,
           body: JSON.stringify(relaxedAddOfferPayload),
@@ -3875,7 +3890,7 @@ export default async function handler(
         const addAncillaryOfferUrl = `${bookingBaseUrl}/airoffer/reservationworkbench/${encodeURIComponent(
           reservationId
         )}/offers/buildancillaryoffersfromcatalogofferings`;
-        const addAncillaryOfferResponse = await fetch(addAncillaryOfferUrl, {
+        const addAncillaryOfferResponse = await fetchUpstream(addAncillaryOfferUrl, {
           method: "POST",
           headers: commonHeaders,
           body: JSON.stringify(ancillaryOfferPayload),
@@ -3928,7 +3943,7 @@ export default async function handler(
         const addSeatOfferUrl = `${bookingBaseUrl}/airoffer/reservationworkbench/${encodeURIComponent(
           reservationId
         )}/offers/buildancillaryoffersfromcatalogofferings`;
-        const addSeatOfferResponse = await fetch(addSeatOfferUrl, {
+        const addSeatOfferResponse = await fetchUpstream(addSeatOfferUrl, {
           method: "POST",
           headers: commonHeaders,
           body: JSON.stringify(seatAncillaryPayload),
@@ -3982,7 +3997,7 @@ export default async function handler(
         travelerIdentifier: travelerIdentifiers[0],
       });
 
-      const primaryContactResponse = await fetch(primaryContactUrl, {
+      const primaryContactResponse = await fetchUpstream(primaryContactUrl, {
         method: "POST",
         headers: commonHeaders,
         body: JSON.stringify(primaryContactPayload),
@@ -4273,9 +4288,13 @@ export default async function handler(
   } catch (error) {
     return respondWithLoggedError(res, {
       status: 500,
-      message: error instanceof Error ? error.message : "Unexpected server error",
+      message: publicErrorMessage(error, "Unexpected server error"),
       stage: "unexpected",
       apiFlowLogs,
     });
   }
 }
+
+export default withApiHandler(withCustomerSession(handler), { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

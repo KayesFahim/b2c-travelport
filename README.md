@@ -1,70 +1,59 @@
-# Getting Started with Create React App
+# FlyJatt
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+Flight search, booking and customer/admin portal built with Next.js Pages Router, React, Material UI, Travelport JSON Air, MySQL/Prisma and Redis. The existing client routes run through React Router.
 
-## Available Scripts
+## Local setup
 
-In the project directory, you can run:
+Use Node 22 LTS (`nvm use`, or install Node 22), then:
 
-### `npm start`
+```sh
+npm ci
+cp .env.example .env
+# Fill in local credentials; keep .env private.
+docker compose up -d
+npm run prisma:generate
+npm run prisma:migrate
+npm run dev
+```
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+The Compose services are for development and bind to loopback. Set `DATABASE_URL` to match the local MySQL credentials. Existing populated databases need a migration baseline; see [deployment instructions](docs/DEPLOYMENT.md). Do not run the initial migration against tables that already exist.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+## Validation
 
-### `npm test`
+```sh
+npm run check                 # ESLint and TypeScript
+npm run smoke:build           # production build + HTTP checks, port 4310
+npx playwright install chromium
+npm run test:browser          # desktop/mobile UI and API security checks, port 4311
+npm audit --audit-level=high
+npm run check:production      # configuration readiness; intentionally fails for PP URLs
+```
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+For installed Google Chrome, use `PLAYWRIGHT_CHROME=1 npm run test:browser`. Browser tests save homepage screenshots under `artifacts/`; failures save traces in `test-results/`. Tests do not create reservations, issue tickets or send email. Live supplier flows require a separately approved staging test with test credentials.
 
-### `npm run build`
+To smoke-test a deployed environment:
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+```sh
+SMOKE_BASE_URL=https://your-domain.example npm run smoke:production
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+See the [validation record](docs/VALIDATION.md) for completed checks and verification limits.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+## Configuration and security
 
-### `npm run eject`
+Only public configuration belongs in `NEXT_PUBLIC_*`. Browser requests use HttpOnly session cookies; `API_KEY` is an optional server-to-server credential and never grants booking ownership or administrator access. Cross-origin writes are denied, and sensitive API responses are not cached. Shared Redis is required for production sessions and throttling; production refuses an in-memory fallback.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+`/api/health` is a liveness check and does not prove database, Redis, SMTP or Travelport connectivity. See [deployment instructions](docs/DEPLOYMENT.md) for release requirements and [security notes](docs/SECURITY.md) for remaining operational work.
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+## Project layout
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+- `pages/`: Next.js page entry points and API handlers.
+- `src/Pages/`, `src/Shared/`: existing feature screens and shared components.
+- `src/theme/`, `src/index.css`, `src/App.css`: brand theme and shared presentation.
+- `src/server/`: authentication, access checks, persistence, email and supplier token handling.
+- `src/utils/`: client utilities and supplier response adapters.
+- `prisma/`: schema and migrations.
+- `tests/browser/`, `scripts/smoke.mjs`: repeatable smoke checks.
+- `sample/`, `tessdata/`: existing supplier search fixtures and OCR runtime assets.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
-
-## Learn More
-
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
-
-To learn React, check out the [React documentation](https://reactjs.org/).
-
-### Code Splitting
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
-
-### Analyzing the Bundle Size
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
-
-### Making a Progressive Web App
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
-
-### Advanced Configuration
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+Private certification exports, booking logs, environment files, generated builds, test reports and local caches must stay outside published artifacts. Existing local and user-edited files are preserved.

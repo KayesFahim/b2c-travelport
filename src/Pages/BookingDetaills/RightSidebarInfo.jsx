@@ -885,7 +885,7 @@ const formatPitchLabel = (value) => {
   if (/mm|millimeter|millimetre/.test(normalizedLower)) {
     return `${numeric.toFixed(numeric % 1 ? 1 : 0)} mm`;
   }
-  if (/in|inch|\"/.test(compact)) {
+  if (/in|inch|"/.test(compact)) {
     return `${numeric.toFixed(numeric % 1 ? 1 : 0)}"`;
   }
   return `${numeric.toFixed(numeric % 1 ? 1 : 0)}"`;
@@ -2367,6 +2367,10 @@ const RightSidebarInfo = ({
       ),
     [data, farePolicyRequest, seatAvailabilityRequest]
   );
+  const fareRequestProductIdentifiersKey = useMemo(
+    () => fareRequestProductIdentifiers.join("|"),
+    [fareRequestProductIdentifiers]
+  );
   const dateChangeRows = useMemo(
     () => buildPolicyRows(data, "dateChange"),
     [data]
@@ -2579,7 +2583,7 @@ const RightSidebarInfo = ({
     enablePostBuildFetch,
     fareRequestOfferIdentifier,
     fareRequestOfferListIdentifier,
-    fareRequestProductIdentifiers,
+    fareRequestProductIdentifiersKey,
     searchId,
     token,
   ]);

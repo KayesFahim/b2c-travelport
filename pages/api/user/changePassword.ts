@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from "@/utils/passwordPolicy";
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
@@ -19,7 +21,7 @@ function toText(value: unknown): string {
     return "";
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -64,6 +66,8 @@ export default async function handler(
             return res.status(400).json({ message: "Password confirmation is required" });
         }
 
+        if (!isValidPassword(newPassword)) return res.status(400).json({ message: PASSWORD_POLICY_MESSAGE });
+
         if (newPassword !== confirmPassword) {
             return res.status(400).json({ message: "New password and confirm password do not match" });
         }
@@ -107,3 +111,7 @@ export default async function handler(
         return res.status(500).json({ message: "Internal server error" });
     }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

@@ -51,6 +51,10 @@ function buildFingerprint(entry) {
   const segmentKey = segments
     .map((segment) => `${segment.depfrom}-${segment.arrto}-${segment.depdate}`)
     .join("|");
+  const filterKey =
+    entry?.searchFilters && typeof entry.searchFilters === "object"
+      ? JSON.stringify(entry.searchFilters)
+      : "";
 
   return [
     entry?.tripType || "",
@@ -59,6 +63,7 @@ function buildFingerprint(entry) {
     Number(entry?.childCount || 0),
     Number(entry?.infantCount || 0),
     toText(entry?.cabinClass),
+    filterKey,
   ].join("::");
 }
 
@@ -120,6 +125,10 @@ export function saveRecentSearch(entryInput) {
     childCount: Number(entryInput.childCount || 0),
     infantCount: Number(entryInput.infantCount || 0),
     cabinClass: toText(entryInput.cabinClass || "1"),
+    searchFilters:
+      entryInput.searchFilters && typeof entryInput.searchFilters === "object"
+        ? entryInput.searchFilters
+        : null,
     segments: normalizedSegments,
     searchedAt: new Date().toISOString(),
   };

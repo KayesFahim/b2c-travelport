@@ -1,5 +1,8 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 
 type SeatEligibilityBody = {
   pnr?: unknown;
@@ -515,7 +518,7 @@ async function buildWorkbenchFromLocator(params: {
     toText(process.env.TRAVELPORT_ISSUE_TICKET_BUILD_FROM_LOCATOR_METHOD) || "POST";
 
   const url = `${params.bookingBaseUrl}${buildFromLocatorPath.replace("{pnr}", encodeURIComponent(params.pnr))}`;
-  const response = await fetch(url, {
+  const response = await fetchUpstream(url, {
     method: buildFromLocatorMethod,
     headers: params.headers,
   });
@@ -800,7 +803,7 @@ function extractSeatMapRows(params: {
     .sort((a, b) => a.rowNumber - b.rowNumber);
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -856,7 +859,7 @@ export default async function handler(
       const wbUrl = `${bookingBaseUrl}/session/reservationworkbench/${encodeURIComponent(
         reservationId
       )}`;
-      const wbResponse = await fetch(wbUrl, { method: "GET", headers });
+      const wbResponse = await fetchUpstream(wbUrl, { method: "GET", headers });
       const wbPayload = (await parseJsonSafe(wbResponse)) as Record<string, unknown>;
       if (!wbResponse.ok || hasTravelportErrors(wbPayload)) {
         return res.status(502).json({
@@ -943,7 +946,7 @@ export default async function handler(
       },
     };
 
-    const seatAvailabilityResponse = await fetch(seatAvailabilityUrl, {
+    const seatAvailabilityResponse = await fetchUpstream(seatAvailabilityUrl, {
       method: "POST",
       headers,
       body: JSON.stringify(requestPayload),
@@ -994,7 +997,11 @@ export default async function handler(
       seatAvailabilityResponse: seatAvailabilityPayload,
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unexpected server error";
+    const message = publicErrorMessage(error, "Unexpected server error");
     return res.status(500).json({ message });
   }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

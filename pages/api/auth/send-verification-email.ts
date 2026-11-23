@@ -1,8 +1,9 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { issueEmailVerification } from "@/server/auth-email";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "POST") {
         res.setHeader("Allow", "POST");
         return res.status(405).json({ message: "Method not allowed" });
@@ -23,3 +24,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     await issueEmailVerification({ id: user.id, email: user.email, name: user.name });
     return res.status(200).json({ success: true, message: "Verification email sent" });
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

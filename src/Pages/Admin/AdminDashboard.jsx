@@ -53,11 +53,8 @@ const menuItems = [
 export default function AdminDashboard() {
     const navigate = useNavigate();
     const getAuthHeaders = () => {
-        const token = String(
-            secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) ||
-            ""
-        ).trim();
-        return token ? { Authorization: `Bearer ${token}` } : {};
+        secureLocalStorage.removeItem(ADMIN_AUTH_TOKEN_KEY);
+        return {};
     };
 
     const [activeTab, setActiveTab] = useState("dashboard");

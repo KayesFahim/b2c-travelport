@@ -1,5 +1,10 @@
+import { fetchUpstream } from "@/server/upstream-fetch";
+import { withApiHandler } from "@/server/api-handler";
+import { requireWorkbenchAccess } from "@/server/booking-access";
+import { publicErrorMessage } from "@/server/public-error";
+import { withCustomerSession } from "@/server/with-customer-session";
 import type { NextApiRequest, NextApiResponse } from "next";
-import { getTravelportAccessToken } from "./_token-cache";
+import { getTravelportAccessToken } from "@/server/travelport-token";
 
 type SpecialServiceRequestBody = {
   reservationId?: unknown;
@@ -164,7 +169,7 @@ async function createToken(): Promise<string> {
   return getTravelportAccessToken();
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Record<string, unknown> | ErrorResponse>
 ) {
@@ -183,6 +188,8 @@ export default async function handler(
         message: "reservationId is required",
       });
     }
+
+    if (!(await requireWorkbenchAccess(req, res, reservationId))) return;
 
     const normalizedRequests = resolveSpecialRequests(body);
     if (!normalizedRequests.length) {
@@ -239,7 +246,7 @@ export default async function handler(
       "Accept-Version": version,
       Authorization: `Bearer ${token}`,
     };
-    const response = await fetch(url, {
+    const response = await fetchUpstream(url, {
       method: "POST",
       headers: requestHeaders,
       body: JSON.stringify(specialServicePayload),
@@ -281,7 +288,11 @@ export default async function handler(
     });
   } catch (error) {
     return res.status(500).json({
-      message: error instanceof Error ? error.message : "Unexpected server error",
+      message: publicErrorMessage(error, "Unexpected server error"),
     });
   }
 }
+
+export default withApiHandler(withCustomerSession(handler), { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

@@ -1,3 +1,4 @@
+import { readApiResponse } from "@/utils/apiClient";
 import React, { useState, useEffect, useCallback } from "react";
 import {
     Box,
@@ -140,7 +141,7 @@ function BlogTab() {
     const handleDelete = async () => {
         if (!deleteConfirm) return;
         try {
-            await fetch(`/api/cms/blog?id=${deleteConfirm.id}`, { method: "DELETE" });
+            await readApiResponse(await fetch(`/api/cms/blog?id=${deleteConfirm.id}`, { method: "DELETE" }));
             setAlert({ type: "success", msg: "Post deleted." });
             setDeleteConfirm(null);
             fetchPosts();

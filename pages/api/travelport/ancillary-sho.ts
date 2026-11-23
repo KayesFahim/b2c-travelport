@@ -1,3 +1,1 @@
-import handler from "./ancillary-shop";
-
-export default handler;
+export { default, config } from "./ancillary-shop";

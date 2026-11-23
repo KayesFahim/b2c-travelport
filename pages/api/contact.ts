@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../src/server/prisma";
 import { sendEmail } from "../../src/server/email/mailer";
@@ -36,7 +37,7 @@ function isValidPhone(value: string): boolean {
   return /^\d{7,15}$/.test(cleaned);
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ContactResponse>
 ) {
@@ -136,16 +137,9 @@ async function handlePost(
     return res.status(400).json({ message: "Please provide a valid phone number." });
   }
 
-  // Keep contact submissions in server logs for now.
-  // If needed later, this can be forwarded to email/CRM from here.
-  console.info("[contact] submission received", {
-    name,
-    email,
-    phone: phone || null,
-    subject,
-    message,
-    receivedAt: new Date().toISOString(),
-  });
+  if (name.length > 120 || email.length > 254 || subject.length > 200 || message.length > 5000) {
+    return res.status(400).json({ message: "Contact details exceed the allowed length." });
+  }
 
   const template = buildContactSubmissionTemplate({
     name,
@@ -155,17 +149,25 @@ async function handlePost(
     message,
   });
 
-  await sendEmail({
+  try {
+    await sendEmail({
     to: contact.email,
     sender: "contact",
     replyTo: email,
     subject: template.subject,
     html: template.html,
     text: template.text,
-  });
+    });
+  } catch {
+    return res.status(503).json({ message: "Unable to send your message. Please try again later." });
+  }
 
   return res.status(200).json({
     message: "Thanks for contacting Fly Jatt. Our team will reply shortly.",
     receivedAt: new Date().toISOString(),
   });
 }
+
+export default withApiHandler(handler, { methods: ["GET", "POST"] });
+
+export const config = { api: { bodyParser: false } };

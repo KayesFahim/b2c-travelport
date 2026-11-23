@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { prisma } from "../../../src/server/prisma";
 import { canManageCms, deny, getActor } from "@/server/rbac";
@@ -70,7 +71,7 @@ async function seedDemoPosts() {
     return { inserted: rowsToCreate.length };
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method === "GET") {
         try {
             const adminMode = req.query.admin === "true";
@@ -178,3 +179,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     res.setHeader("Allow", ["GET", "POST", "PUT", "DELETE"]);
     return res.status(405).json({ message: "Method not allowed" });
 }
+
+export default withApiHandler(handler, { methods: ["GET", "POST", "PUT", "DELETE"] });
+
+export const config = { api: { bodyParser: false } };

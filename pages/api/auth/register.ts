@@ -1,3 +1,6 @@
+import { withApiHandler } from "@/server/api-handler";
+import { isValidPassword, PASSWORD_POLICY_MESSAGE } from "@/utils/passwordPolicy";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import {
@@ -7,7 +10,7 @@ import {
   prisma,
 } from "@/server/prisma";
 import { createSession } from "@/server/auth-session";
-import { issueEmailVerification } from "@/server/auth-email";
+import { emailVerificationRequired, issueEmailVerification } from "@/server/auth-email";
 
 type ErrorResponse = {
   message: string;
@@ -15,6 +18,7 @@ type ErrorResponse = {
 
 type SuccessResponse = {
   success: true;
+  verificationRequired: boolean;
   token: string;
   user: {
     id: number;
@@ -29,11 +33,8 @@ function normalizeEmail(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
-function isValidSignupPassword(password: string): boolean {
-  return /^(?=.*[a-zA-Z]).{6,}$/.test(password);
-}
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -49,14 +50,16 @@ export default async function handler(
     const password = String(req.body?.password || "");
     const name = String(req.body?.name || "").trim() || "Traveler";
 
-    if (!email || !email.includes("@")) {
+    if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ message: "Valid email is required." });
     }
-    if (!isValidSignupPassword(password)) {
+    if (!isValidPassword(password)) {
       return res.status(400).json({
-        message: "Password must be at least 6 characters long, and contain at least one letter.",
+        message: PASSWORD_POLICY_MESSAGE,
       });
     }
+
+    if (name.length > 120) return res.status(400).json({ message: "Name must be 120 characters or fewer." });
 
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
@@ -80,7 +83,7 @@ export default async function handler(
       // Do not fail registration when SMTP is unavailable.
     }
 
-    const session = await createSession(req, res, {
+    const session = emailVerificationRequired() ? { token: "" } : await createSession(req, res, {
       id: user.id,
       email: user.email,
       name: user.name || "Traveler",
@@ -90,6 +93,7 @@ export default async function handler(
 
     return res.status(201).json({
       success: true,
+      verificationRequired: emailVerificationRequired(),
       token: session.token,
       user: {
         id: user.id,
@@ -106,7 +110,11 @@ export default async function handler(
       });
     }
     return res.status(500).json({
-      message: error instanceof Error ? error.message : "Registration failed",
+      message: publicErrorMessage(error, "Registration failed"),
     });
   }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

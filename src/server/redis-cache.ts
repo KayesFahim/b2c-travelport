@@ -5,7 +5,15 @@ type MemoryValue = {
   expiresAt: number | null;
 };
 
-const memoryStore = new Map<string, MemoryValue>();
+const memoryStore: Map<string, MemoryValue> =
+  ((globalThis as { __flyjattMemoryStore?: Map<string, MemoryValue> })
+    .__flyjattMemoryStore ??= new Map<string, MemoryValue>());
+
+function assertLocalFallbackAllowed() {
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("Shared Redis is unavailable. Refusing an inconsistent production session or rate limit.");
+  }
+}
 
 function cleanupExpiredMemory(now = Date.now()) {
   for (const [key, row] of memoryStore.entries()) {
@@ -16,6 +24,7 @@ function cleanupExpiredMemory(now = Date.now()) {
 }
 
 function getMemoryValue(key: string): string | null {
+  assertLocalFallbackAllowed();
   cleanupExpiredMemory();
   const row = memoryStore.get(key);
   if (!row) return null;
@@ -23,6 +32,7 @@ function getMemoryValue(key: string): string | null {
 }
 
 function setMemoryValue(key: string, value: string, ttlSec?: number) {
+  assertLocalFallbackAllowed();
   const expiresAt =
     Number.isFinite(Number(ttlSec)) && Number(ttlSec) > 0
       ? Date.now() + Number(ttlSec) * 1000
@@ -31,6 +41,7 @@ function setMemoryValue(key: string, value: string, ttlSec?: number) {
 }
 
 function deleteMemoryValue(key: string) {
+  assertLocalFallbackAllowed();
   memoryStore.delete(key);
 }
 
@@ -45,6 +56,7 @@ type RedisHost = typeof globalThis & {
   __flyjattRedisClient?: Redis | null;
   __flyjattRedisUnavailable?: boolean;
   __flyjattRedisRetryAt?: number;
+  __flyjattRedisConnecting?: Promise<Redis | null>;
 };
 
 async function getRedisClient(): Promise<Redis | null> {
@@ -58,6 +70,7 @@ async function getRedisClient(): Promise<Redis | null> {
   }
 
   const host = globalThis as RedisHost;
+  if (host.__flyjattRedisConnecting) return host.__flyjattRedisConnecting;
   const retryAt = Number(host.__flyjattRedisRetryAt || 0);
   if (retryAt > Date.now()) return null;
   if (host.__flyjattRedisClient && host.__flyjattRedisClient.status === "ready") {
@@ -77,6 +90,7 @@ async function getRedisClient(): Promise<Redis | null> {
     });
   }
 
+  host.__flyjattRedisConnecting = (async () => {
   try {
     if (host.__flyjattRedisClient.status !== "ready") {
       await host.__flyjattRedisClient.connect();
@@ -88,6 +102,12 @@ async function getRedisClient(): Promise<Redis | null> {
     host.__flyjattRedisUnavailable = true;
     host.__flyjattRedisRetryAt = Date.now() + 30_000;
     return null;
+  }
+  })();
+  try {
+    return await host.__flyjattRedisConnecting;
+  } finally {
+    host.__flyjattRedisConnecting = undefined;
   }
 }
 

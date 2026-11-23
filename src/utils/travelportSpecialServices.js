@@ -1,3 +1,4 @@
+import { fetchWithTimeout, readApiResponse } from "./apiClient";
 const TRAVELPORT_SPECIAL_SERVICES_PATH = "/api/travelport/special-services";
 
 function joinBaseAndPath(baseUrl, path) {
@@ -16,22 +17,10 @@ function getConfiguredBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || "";
 }
 
-function getLocalFallbackSpecialServicesUrl() {
-  if (typeof window === "undefined") return "";
-  const { protocol, hostname, port } = window.location;
-  if (port === "3001") {
-    return `${protocol}//${hostname}:3000${TRAVELPORT_SPECIAL_SERVICES_PATH}`;
-  }
-  if (port === "3000") {
-    return `${protocol}//${hostname}:3001${TRAVELPORT_SPECIAL_SERVICES_PATH}`;
-  }
-  return "";
-}
 
 function getCandidateSpecialServicesUrls() {
   const configuredUrl = getConfiguredSpecialServicesUrl();
   const configuredBaseUrl = getConfiguredBaseUrl();
-  const localFallbackUrl = getLocalFallbackSpecialServicesUrl();
 
   return Array.from(
     new Set(
@@ -39,25 +28,16 @@ function getCandidateSpecialServicesUrls() {
         configuredUrl,
         TRAVELPORT_SPECIAL_SERVICES_PATH,
         joinBaseAndPath(configuredBaseUrl, TRAVELPORT_SPECIAL_SERVICES_PATH),
-        localFallbackUrl,
+
       ].filter(Boolean)
     )
   );
 }
 
 async function getResponseErrorMessage(response) {
-  const contentType = response.headers.get("content-type") || "";
-  if (contentType.includes("application/json")) {
-    const payload = await response.json().catch(() => ({}));
-    return (
-      payload?.message ||
-      payload?.details ||
-      `Travelport special services failed (${response.status})`
-    );
-  }
-
-  const text = await response.text().catch(() => "");
-  return text || `Travelport special services failed (${response.status})`;
+  try { await readApiResponse(response); }
+  catch (error) { return error.message; }
+  return "The request could not be completed.";
 }
 
 export async function addTravelportSpecialServices({
@@ -77,7 +57,7 @@ export async function addTravelportSpecialServices({
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -87,17 +67,19 @@ export async function addTravelportSpecialServices({
       });
 
       if (response.ok) {
-        return response.json();
+        return readApiResponse(response);
       }
 
       const message = await getResponseErrorMessage(response);
       const currentError = new Error(message);
+      currentError.status = response.status;
       if (response.status === 404) {
         lastError = currentError;
         continue;
       }
       throw currentError;
     } catch (error) {
+      if (Number(error?.status) !== 404) throw error;
       lastError =
         error instanceof Error
           ? error

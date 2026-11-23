@@ -1,3 +1,4 @@
+import { parseCookies } from "./request-cookies";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { randomBytes } from "crypto";
 import { cacheDelete, cacheGetJson, cacheSetJson } from "./redis-cache";
@@ -22,16 +23,6 @@ type SessionPayload = {
     token?: string;
 };
 
-function parseCookies(req: NextApiRequest): Record<string, string> {
-    const raw = req.headers.cookie || "";
-    return raw.split(";").reduce<Record<string, string>>((acc, part) => {
-        const [key, ...rest] = part.split("=");
-        const cookieKey = decodeURIComponent(String(key || "").trim());
-        if (!cookieKey) return acc;
-        acc[cookieKey] = decodeURIComponent(rest.join("=").trim());
-        return acc;
-    }, {});
-}
 
 function buildSetCookie(name: string, value: string, maxAgeSec: number): string {
     const secure = process.env.NODE_ENV === "production" ? "; Secure" : "";
@@ -87,11 +78,7 @@ export async function getAdminSessionUser(req: NextApiRequest): Promise<AdminSes
             }
         }
 
-        const tokenPayload = await cacheGetJson<SessionPayload>(getTokenCacheKey(bearerToken));
-        if (tokenPayload?.user?.id) {
-            await refreshSessionTtl(tokenPayload);
-            return tokenPayload.user;
-        }
+
     }
 
     const sessionId = getSessionIdFromRequest(req);

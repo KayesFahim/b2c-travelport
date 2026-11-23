@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import bcrypt from "bcryptjs";
 import {
@@ -33,7 +35,7 @@ function normalizeEmail(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -103,7 +105,11 @@ export default async function handler(
       });
     }
     return res.status(500).json({
-      message: error instanceof Error ? error.message : "Login failed",
+      message: publicErrorMessage(error, "Login failed"),
     });
   }
 }
+
+export default withApiHandler(handler, { methods: ["POST"] });
+
+export const config = { api: { bodyParser: false } };

@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
 import { getSessionUser } from "@/server/auth-session";
@@ -11,7 +13,7 @@ type ErrorResponse = {
     message: string;
 };
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -38,7 +40,11 @@ export default async function handler(
         });
     } catch (error) {
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unable to load travel buddies",
+            message: publicErrorMessage(error, "Unable to load travel buddies"),
         });
     }
 }
+
+export default withApiHandler(handler, { methods: ["GET"] });
+
+export const config = { api: { bodyParser: false } };

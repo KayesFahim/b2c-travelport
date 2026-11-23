@@ -1,3 +1,5 @@
+import { withApiHandler } from "@/server/api-handler";
+import { publicErrorMessage } from "@/server/public-error";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import { assertDatabaseConfigured, prisma } from "@/server/prisma";
@@ -67,7 +69,7 @@ function toIsoDateString(value: Date | null): string | null {
     return value.toISOString();
 }
 
-export default async function handler(
+async function handler(
     req: NextApiRequest,
     res: NextApiResponse<SuccessResponse | ErrorResponse>
 ) {
@@ -184,7 +186,11 @@ export default async function handler(
         }
 
         return res.status(500).json({
-            message: error instanceof Error ? error.message : "Unable to update profile",
+            message: publicErrorMessage(error, "Unable to update profile"),
         });
     }
 }
+
+export default withApiHandler(handler, { methods: ["PATCH"] });
+
+export const config = { api: { bodyParser: false } };

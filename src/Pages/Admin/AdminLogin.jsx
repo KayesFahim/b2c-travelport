@@ -16,8 +16,8 @@ import secureLocalStorage from "react-secure-storage";
 const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
 
 function getAuthHeaders() {
-    const token = String(secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) || "").trim();
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    secureLocalStorage.removeItem(ADMIN_AUTH_TOKEN_KEY);
+    return {};
 }
 
 export default function AdminLogin() {
@@ -87,7 +87,7 @@ export default function AdminLogin() {
             }
 
             if (payload?.token) {
-                secureLocalStorage.setItem(ADMIN_AUTH_TOKEN_KEY, payload.token);
+                secureLocalStorage.removeItem(ADMIN_AUTH_TOKEN_KEY);
             }
 
             navigate("/admin/dashboard", { replace: true });

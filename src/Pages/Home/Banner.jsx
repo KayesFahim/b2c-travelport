@@ -14,15 +14,15 @@ import ArrowBackRoundedIcon from "@mui/icons-material/ArrowBackRounded";
 import ArrowForwardRoundedIcon from "@mui/icons-material/ArrowForwardRounded";
 import Slider from "react-slick";
 import { readRecentSearches } from "../../utils/recentSearches";
+import {
+  createDefaultTravelportSearchFilters,
+  normalizeTravelportSearchFilters,
+} from "../../utils/travelportSearchCriteria";
 
 const FLIGHT_BANNER_IMAGE_URL =
   "https://www.savethestudent.org/uploads/flights.jpg";
 
 const Banner = ({ data, onTabChange }) => {
-  if (!data) {
-    return <Box sx={{ height: "330px", background: "#f0f0f0" }} />;
-  }
-
   const heroImage =
     data?.bannerimage?.imageUrl ||
     data?.bannerimageMobile?.imageUrl ||
@@ -50,7 +50,7 @@ const Banner = ({ data, onTabChange }) => {
     format(addDays(new Date(), 1), "dd MMM yy")
   );
   const [returningDate, setReturningDate] = useState(
-    format(addDays(new Date(departureDate), 3), "dd MMM yy")
+    format(addDays(new Date(), 4), "dd MMM yy")
   );
   const [travelDate, setTravelDate] = useState([
     {
@@ -118,6 +118,9 @@ const Banner = ({ data, onTabChange }) => {
 
   const [value, setValue] = useState("flight");
   const [recentSearches, setRecentSearches] = useState([]);
+  const [searchFilters, setSearchFilters] = useState(() =>
+    createDefaultTravelportSearchFilters()
+  );
 
   useEffect(() => {
     setRecentSearches(readRecentSearches());
@@ -221,6 +224,12 @@ const Banner = ({ data, onTabChange }) => {
         segments: mappedSegments,
       }));
     }
+
+    if (item.searchFilters && typeof item.searchFilters === "object") {
+      setSearchFilters(normalizeTravelportSearchFilters(item.searchFilters));
+    } else {
+      setSearchFilters(createDefaultTravelportSearchFilters());
+    }
   };
 
   const handleChange = (event, newValue) => {
@@ -272,19 +281,21 @@ const Banner = ({ data, onTabChange }) => {
   };
 
   const heroHighlights = [
-    "Live search from Travelport inventory",
-    "Instant fare updates",
-    "Clear baggage and fare visibility",
+    "Compare flights in one place",
+    "Up-to-date flight options",
+    "Baggage and fare details",
   ];
 
   const heroStatCards = [
-    { label: "Airline Network", value: "100+", note: "Carriers connected" },
-    { label: "Fare Refresh", value: "<5s", note: "Average response time" },
-    { label: "Support Window", value: "24/7", note: "Agent assistance" },
+    { label: "Explore", value: "More choice", note: "Compare airlines and routes" },
+    { label: "Plan with confidence", value: "Clear fares", note: "Review details before you book" },
+    { label: "Travel together", value: "Here to help", note: "Contact our support team" },
   ];
 
+  if (!data) return null;
+
   return (
-    <Box>
+    <Box className="flyjatt-home-banner">
       <TabContext value={value}>
         <Box
           sx={{
@@ -347,7 +358,7 @@ const Banner = ({ data, onTabChange }) => {
                   <TabList
                     onChange={handleChange}
                     aria-label="home product tabs"
-                    indicatorColor="none"
+                    TabIndicatorProps={{ sx: { display: "none" } }}
                     sx={{
                       minHeight: 0,
                       "& .MuiTabs-flexContainer": { gap: 0.4 },
@@ -364,7 +375,7 @@ const Banner = ({ data, onTabChange }) => {
                         minWidth: { xs: "96px", md: "120px" },
                         py: 0.75,
                         px: 2,
-                        fontSize: { xs: "12px", md: "13px" },
+                        fontSize: "14px",
                         fontWeight: 700,
                         borderRadius: "999px",
                         transition: "all 0.25s ease",
@@ -380,7 +391,7 @@ const Banner = ({ data, onTabChange }) => {
 
                 <Typography
                   sx={{
-                    fontSize: "12px",
+                    fontSize: "14px",
                     fontWeight: 600,
                     color: "rgba(255,255,255,0.88)",
                     border: "1px solid rgba(255,255,255,0.3)",
@@ -406,12 +417,13 @@ const Banner = ({ data, onTabChange }) => {
               >
                 <Box sx={{ maxWidth: "680px" }}>
                   <Typography
+                    component="h1"
                     sx={{
                       color: "var(--white)",
                       fontWeight: 800,
-                      fontSize: { xs: "31px", sm: "36px", md: "46px" },
-                      lineHeight: 1.08,
-                      letterSpacing: "-0.01em",
+                      fontSize: { xs: "32px", sm: "40px", md: "52px" },
+                      lineHeight: 1.12,
+                      letterSpacing: "-0.035em",
                     }}
                   >
                     {data.mainTitle}
@@ -446,7 +458,7 @@ const Banner = ({ data, onTabChange }) => {
                           border: "1px solid rgba(255,255,255,0.28)",
                           bgcolor: "rgba(255,255,255,0.09)",
                           color: "#fff",
-                          fontSize: { xs: "11px", md: "12px" },
+                          fontSize: { xs: "13px", md: "14px" },
                           fontWeight: 600,
                           backdropFilter: "blur(8px)",
                         }}
@@ -478,7 +490,7 @@ const Banner = ({ data, onTabChange }) => {
                     >
                       <Typography
                         sx={{
-                          fontSize: "11px",
+                          fontSize: "13px",
                           letterSpacing: "0.06em",
                           textTransform: "uppercase",
                           fontWeight: 700,
@@ -500,7 +512,7 @@ const Banner = ({ data, onTabChange }) => {
                       </Typography>
                       <Typography
                         sx={{
-                          fontSize: "12px",
+                          fontSize: "14px",
                           color: "rgba(255,255,255,0.86)",
                           fontWeight: 500,
                         }}
@@ -582,6 +594,8 @@ const Banner = ({ data, onTabChange }) => {
                 setChangeTo={setChangeTo}
                 searchData={searchData}
                 setSearchData={setSearchData}
+                searchFilters={searchFilters}
+                onSearchFiltersChange={setSearchFilters}
                 onSearchCommitted={handleRecentSearchesUpdated}
               />
             </TabPanel>
@@ -625,7 +639,7 @@ const Banner = ({ data, onTabChange }) => {
                   </Typography>
                 </Box>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                  <Typography sx={{ fontSize: "12px", color: "var(--text-color)" }}>
+                  <Typography sx={{ fontSize: "14px", color: "var(--text-color)" }}>
                     Click to apply
                   </Typography>
                   {recentSearches.length > 1 ? (
@@ -736,7 +750,7 @@ const Banner = ({ data, onTabChange }) => {
                         >
                           <Typography
                             sx={{
-                              fontSize: "11px",
+                              fontSize: "13px",
                               fontWeight: 700,
                               color: "var(--primary-color)",
                               textTransform: "uppercase",
@@ -771,7 +785,7 @@ const Banner = ({ data, onTabChange }) => {
                             }}
                           >
                             <CalendarMonthRoundedIcon sx={{ fontSize: "14px" }} />
-                            <Typography sx={{ fontSize: "12px", fontWeight: 600 }}>
+                            <Typography sx={{ fontSize: "14px", fontWeight: 600 }}>
                               {formatRecentDate(item?.departureDate)}
                               {item?.returnDate
                                 ? ` - ${formatRecentDate(item?.returnDate)}`
@@ -781,7 +795,7 @@ const Banner = ({ data, onTabChange }) => {
                           <Typography
                             sx={{
                               mt: 0.5,
-                              fontSize: "12px",
+                              fontSize: "14px",
                               color: "var(--text-color)",
                               fontWeight: 500,
                             }}

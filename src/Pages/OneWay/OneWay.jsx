@@ -147,6 +147,7 @@ const OneWay = ({
   toggleBanner,
   modifySearch,
   onSearchCommitted,
+  searchFilters,
 }) => {
   const data = flightData; // json data from flight Data
 
@@ -633,6 +634,7 @@ const OneWay = ({
       childCount,
       infantCount: infant,
       cabinClass: className,
+      searchFilters: searchFilters || null,
       segments: [
         {
           depfrom: fromSendData,
@@ -669,6 +671,7 @@ const OneWay = ({
         changeState,
         searchData: nextSearchData,
         segments: nextSegments,
+        searchFilters: searchFilters || null,
       },
     });
     if (modifySearch && window.innerWidth <= 768) {

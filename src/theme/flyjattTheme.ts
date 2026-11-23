@@ -39,6 +39,8 @@ export const flyjattTheme = createTheme({
   typography: {
     fontFamily:
       '"Manrope", "Plus Jakarta Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif',
+    body1: { fontSize: "1rem", lineHeight: 1.65 },
+    body2: { fontSize: "0.875rem", lineHeight: 1.6 },
     h1: {
       fontWeight: 800,
       letterSpacing: "-0.02em",
@@ -91,7 +93,7 @@ export const flyjattTheme = createTheme({
         root: {
           borderRadius: 16,
           border: "1px solid rgba(7, 54, 98, 0.12)",
-          boxShadow: "0 16px 34px rgba(6, 43, 79, 0.08)",
+          boxShadow: "0 6px 24px rgba(6, 43, 79, 0.055)",
         },
       },
     },
@@ -100,7 +102,7 @@ export const flyjattTheme = createTheme({
         root: {
           borderRadius: 16,
           border: "1px solid rgba(7, 54, 98, 0.12)",
-          boxShadow: "0 16px 34px rgba(6, 43, 79, 0.08)",
+          boxShadow: "0 6px 24px rgba(6, 43, 79, 0.055)",
         },
       },
     },
@@ -119,10 +121,10 @@ export const flyjattTheme = createTheme({
         root: {
           borderRadius: 12,
           fontWeight: 700,
-          minHeight: 40,
+          minHeight: 44,
         },
         contained: {
-          boxShadow: "0 10px 24px rgba(0, 121, 170, 0.22)",
+          boxShadow: "0 4px 12px rgba(0, 121, 170, 0.16)",
           background: "linear-gradient(120deg, #009AD6 0%, #0079AA 100%)",
         },
         containedPrimary: {

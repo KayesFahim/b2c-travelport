@@ -1,3 +1,4 @@
+import { fetchWithTimeout, readApiResponse } from "./apiClient";
 const TRAVELPORT_SEARCH_PATH = "/api/travelport/search-flight";
 const LEGACY_SEARCH_PATH = "/flights/api2";
 const LAST_SEARCH_REQUEST_KEY = "flyjatt:last_search_request";
@@ -26,7 +27,7 @@ function getConfiguredBaseUrl() {
   return process.env.NEXT_PUBLIC_API_URL || process.env.VITE_API_URL || "";
 }
 
-function useLegacyFallbackRoutes() {
+function shouldUseLegacyFallbackRoutes() {
   if (typeof process === "undefined") {
     return false;
   }
@@ -37,32 +38,17 @@ function useLegacyFallbackRoutes() {
   );
 }
 
-function getLocalFallbackTravelportUrl() {
-  if (typeof window === "undefined") {
-    return "";
-  }
-
-  const { protocol, hostname, port } = window.location;
-  if (port === "3001") {
-    return `${protocol}//${hostname}:3000${TRAVELPORT_SEARCH_PATH}`;
-  }
-  if (port === "3000") {
-    return `${protocol}//${hostname}:3001${TRAVELPORT_SEARCH_PATH}`;
-  }
-  return "";
-}
 
 function getCandidateSearchUrls() {
   const configuredUrl = getConfiguredTravelportUrl();
-  const localFallbackUrl = getLocalFallbackTravelportUrl();
   const configuredBaseUrl = getConfiguredBaseUrl();
-  const legacyEnabled = useLegacyFallbackRoutes();
+  const legacyEnabled = shouldUseLegacyFallbackRoutes();
 
   const urls = [
     configuredUrl,
     TRAVELPORT_SEARCH_PATH,
     joinBaseAndPath(configuredBaseUrl, TRAVELPORT_SEARCH_PATH),
-    localFallbackUrl,
+
     legacyEnabled ? joinBaseAndPath(configuredBaseUrl, LEGACY_SEARCH_PATH) : "",
     legacyEnabled ? LEGACY_SEARCH_PATH : "",
   ].filter(Boolean);
@@ -167,6 +153,8 @@ function mapUnifiedSegmentToLegacy(segment) {
     OperatingCarrierName: segment?.operatingCarrierName || segment?.operatingCarrier || "",
     AvailabilitySourceCode:
       segment?.availabilitySourceCode || segment?.AvailabilitySourceCode || "N/A",
+    ContentSource:
+      segment?.contentSource || segment?.ContentSource || "GDS",
     brandTier: segment?.brandTier ?? null,
     DepFrom: segment?.depFrom || "",
     DepAirPort: segment?.depAirport || "",
@@ -241,6 +229,8 @@ function mapUnifiedFlightToLegacyCompat(unified) {
 
   return {
     System: "travelport",
+    contentSource: unified?.contentSource || "GDS",
+    ContentSource: unified?.contentSource || "GDS",
     ResultId: unified?.identifier || "",
     SearchId: unified?.transactionId || "",
     offerIdentifier,
@@ -347,7 +337,7 @@ export async function searchTravelportFlights(payload, token) {
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, {
+      const response = await fetchWithTimeout(url, {
         method: "POST",
         cache: "no-store",
         headers: {
@@ -358,7 +348,7 @@ export async function searchTravelportFlights(payload, token) {
       });
 
       if (response.ok) {
-        const data = await response.json();
+        const data = await readApiResponse(response);
         const normalizedData = normalizeSearchResponseForApp(data);
         persistLastSearchInBrowser({
           url,
@@ -382,6 +372,7 @@ export async function searchTravelportFlights(payload, token) {
 
       throw currentError;
     } catch (error) {
+      if (Number(error?.status) !== 404) throw error;
       lastError =
         error instanceof Error
           ? error

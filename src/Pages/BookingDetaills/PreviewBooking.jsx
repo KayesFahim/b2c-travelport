@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   Alert,
   Box,
@@ -29,6 +29,7 @@ import {
   fetchBookingAuthMe,
   loginBookingUser,
   registerBookingUser,
+  setBookingAuthToken,
 } from "../../utils/bookingAuth";
 import FlightDetailsContent from "../ShowDetails/FlightDetailsContent";
 
@@ -428,6 +429,7 @@ const PreviewBooking = () => {
   const [authUser, setAuthUser] = useState(null);
   const [authChecking, setAuthChecking] = useState(false);
   const [pendingAuthAction, setPendingAuthAction] = useState(null);
+  const commitInFlightRef = useRef(false);
   const [authForm, setAuthForm] = useState({
     name: "",
     email: "",
@@ -665,6 +667,7 @@ const PreviewBooking = () => {
 
     setAuthSubmitting(true);
     setAuthError("");
+    const actionToResume = pendingAuthAction;
     try {
       const user =
         authMode === "register"
@@ -672,12 +675,19 @@ const PreviewBooking = () => {
           : await loginBookingUser({ email, password });
       setAuthUser(user || null);
       setAuthDialogOpen(false);
-      Swal.fire({
+      setPendingAuthAction(null);
+      await Swal.fire({
         icon: "success",
         title: authMode === "register" ? "Registration successful" : "Login successful",
-        timer: 1200,
+        timer: 1000,
         showConfirmButton: false,
       });
+      if (user?.id && (actionToResume === "prepare" || actionToResume === "commit")) {
+        await handleFinalCommit({
+          fromAuthResume: true,
+          authenticatedUser: user,
+        });
+      }
     } catch (error) {
       setAuthError(error instanceof Error ? error.message : "Authentication failed.");
     } finally {
@@ -979,14 +989,19 @@ const PreviewBooking = () => {
     }
   };
 
-  const handleFinalCommit = async () => {
-    if (authChecking) {
+  const handleFinalCommit = async ({
+    fromAuthResume = false,
+    authenticatedUser = null,
+  } = {}) => {
+    if (authChecking || commitInFlightRef.current) {
       return;
     }
 
-    const effectiveUser = authUser?.id
-      ? authUser
-      : await refreshAuthSession({ silent: true });
+    const effectiveUser = authenticatedUser?.id
+      ? authenticatedUser
+      : authUser?.id
+        ? authUser
+        : await refreshAuthSession({ silent: true });
 
     if (!effectiveUser?.id) {
       openAuthDialogForAction("commit");
@@ -1021,6 +1036,7 @@ const PreviewBooking = () => {
 
     const activeContext = ensureActiveFlowContext(false);
 
+    commitInFlightRef.current = true;
     setSubmitting(true);
     Swal.fire({
       title: "Booking in progress...",
@@ -1095,7 +1111,17 @@ const PreviewBooking = () => {
     } catch (error) {
       if (error?.requiresLogin || error?.status === 401) {
         Swal.close();
-        openAuthDialogForAction("commit");
+        setAuthUser(null);
+        setBookingAuthToken("");
+        if (fromAuthResume) {
+          setPendingAuthAction(null);
+          setAuthError(
+            error?.message || "Your login session could not be verified. Please sign in again."
+          );
+          setAuthDialogOpen(true);
+        } else {
+          openAuthDialogForAction("commit");
+        }
         return;
       }
       if (error?.status === 409 && error?.payload?.previousBooking) {
@@ -1173,20 +1199,10 @@ const PreviewBooking = () => {
         navigate("/");
       }
     } finally {
+      commitInFlightRef.current = false;
       setSubmitting(false);
     }
   };
-
-  useEffect(() => {
-    if (!authUser?.id || !pendingAuthAction) return;
-    const action = pendingAuthAction;
-    setPendingAuthAction(null);
-    if (action === "prepare") {
-      handleFinalCommit();
-    } else if (action === "commit") {
-      handleFinalCommit();
-    }
-  }, [authUser, pendingAuthAction]);
 
   if (!passengers.length || !Object.keys(flightInfoSource || {}).length) {
     return (

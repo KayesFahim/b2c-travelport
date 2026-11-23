@@ -149,6 +149,7 @@ const MultiCity = ({
   toggleBanner,
   modifySearch,
   onSearchCommitted,
+  searchFilters,
 }) => {
   const MAX_MULTI_CITY_SEGMENTS = 4;
   const data = flightData;
@@ -842,6 +843,7 @@ const MultiCity = ({
         childCount,
         infantCount: infant,
         cabinClass: className,
+        searchFilters: searchFilters || null,
         segments: normalizedSegments,
       });
 
@@ -870,6 +872,7 @@ const MultiCity = ({
         result,
         valueBox,
         changeState,
+        searchFilters: searchFilters || null,
       },
     });
     if (modifySearch && window.innerWidth <= 768) {

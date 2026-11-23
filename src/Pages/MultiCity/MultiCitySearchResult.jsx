@@ -35,6 +35,11 @@ import {
 import { resolveAirportInfo } from "../../utils/travelLookup";
 import SearchContextDebugBadge from "../common/SearchContextDebugBadge";
 import Swal from "sweetalert2";
+import {
+  buildTravelportSearchRequestModifiers,
+  createDefaultTravelportSearchFilters,
+  normalizeTravelportSearchFilters,
+} from "../../utils/travelportSearchCriteria";
 
 const MultiCitySearchResult = () => {
   const MAX_MULTI_CITY_SEGMENTS = 4;
@@ -58,7 +63,12 @@ const MultiCitySearchResult = () => {
     changeState,
     departureDate,
     arrivalDate,
+    searchFilters,
   } = location.state || {};
+  const effectiveSearchFilters = normalizeTravelportSearchFilters(
+    searchFilters || createDefaultTravelportSearchFilters()
+  );
+  const effectiveSearchFiltersKey = JSON.stringify(effectiveSearchFilters);
   const effectiveSegments = Array.isArray(segments)
     ? segments.slice(0, MAX_MULTI_CITY_SEGMENTS)
     : [];
@@ -148,6 +158,7 @@ const MultiCitySearchResult = () => {
             infantcount: safeInfantCount,
             cabinclass: safeCabinClass,
             segments: formattedSegments,
+            ...buildTravelportSearchRequestModifiers(effectiveSearchFilters),
           },
           token
         );
@@ -205,6 +216,7 @@ const MultiCitySearchResult = () => {
     arrivalDate,
     safeCabinClass,
     segments,
+    effectiveSearchFiltersKey,
     MAX_MULTI_CITY_SEGMENTS,
     navigate,
   ]);
@@ -809,6 +821,7 @@ const MultiCitySearchResult = () => {
             valueBoxs={valueBox}
             segments={effectiveSegments}
             searchDatas={searchData}
+            searchFilters={effectiveSearchFilters}
             toggleBanner={toggleBanner}
           />
         </Box>
@@ -849,6 +862,7 @@ const MultiCitySearchResult = () => {
           valueBoxs={valueBox}
           segments={effectiveSegments}
           searchDatas={searchData}
+          searchFilters={effectiveSearchFilters}
         />
       </Box>
 
@@ -1107,8 +1121,13 @@ const MultiCitySearchResult = () => {
               ) : paginatedFlightGroups.length > 0 ? (
                 paginatedFlightGroups.map((group, index) => {
                   const groupRenderKey =
-                    String(group?.key || group?.primary?.ResultId || "") ||
-                    `group-${index}`;
+                    [
+                      String(group?.key || "").trim(),
+                      String(group?.primary?.ResultId || "").trim(),
+                      String(index),
+                    ]
+                      .filter(Boolean)
+                      .join("::");
                   return (
                     <Grid item xs={12} sm={12} md={12} lg={12} key={groupRenderKey}>
                       <SingleFlight

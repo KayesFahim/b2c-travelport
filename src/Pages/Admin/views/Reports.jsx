@@ -41,8 +41,8 @@ import {
 const ADMIN_AUTH_TOKEN_KEY = "flyjatt_admin_auth_token";
 
 const getAuthHeaders = () => {
-    const token = String(secureLocalStorage.getItem(ADMIN_AUTH_TOKEN_KEY) || "").trim();
-    return token ? { Authorization: `Bearer ${token}` } : {};
+    secureLocalStorage.removeItem(ADMIN_AUTH_TOKEN_KEY);
+    return {};
 };
 
 const STATUS_COLORS = ["#10b981", "#f59e0b", "#0ea5e9", "#ef4444", "#64748b"];

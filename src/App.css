@@ -87,3 +87,91 @@
     animation: none;
   }
 }
+
+/* Shared surface rhythm keeps the established navy, blue and teal palette. */
+.travelport-shell {
+  --surface-shadow: 0 6px 24px rgba(6, 42, 78, 0.055);
+  --surface-border: 1px solid rgba(7, 54, 98, 0.1);
+  line-height: 1.6;
+}
+
+.flyjatt-home-sections {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: clamp(1.5rem, 3vw, 3rem);
+  padding-block: clamp(1.5rem, 3vw, 2.5rem) 3.5rem;
+}
+
+.travelport-shell :where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--primary-color);
+  outline-offset: 4px;
+}
+
+.travelport-shell :where(input, select, textarea) {
+  scroll-margin-top: 6rem;
+}
+
+.travelport-shell .MuiButton-root {
+  transition: background-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
+}
+
+.travelport-shell .MuiButton-containedPrimary:not(.Mui-disabled):hover {
+  box-shadow: 0 6px 18px rgba(0, 121, 170, 0.22);
+}
+
+.travelport-shell .MuiButton-contained.Mui-disabled {
+  background: #e4eaf0;
+  color: #60758a;
+  box-shadow: none;
+}
+
+.travelport-shell .MuiOutlinedInput-root,
+.travelport-shell .MuiPaper-root {
+  background-image: none;
+}
+
+.travelport-shell .MuiTableCell-head {
+  background: #f2f9ff;
+  font-weight: 700;
+}
+
+.travelport-shell .MuiTableRow-root:last-child .MuiTableCell-root {
+  border-bottom: 0;
+}
+
+.travelport-shell .MuiDialogContent-root {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 600px) {
+  .travelport-shell .MuiDialog-paper {
+    margin: 16px;
+    max-width: calc(100% - 32px);
+  }
+
+  .travelport-shell :where(input, select, textarea) {
+    font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html:focus-within, .travelport-shell, .travelport-shell * {
+    scroll-behavior: auto !important;
+  }
+
+  .travelport-shell *, .travelport-shell *::before, .travelport-shell *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+.flyjatt-home-sections > *, .flyjatt-cq {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.travelport-shell .flyjatt-auth-container.MuiContainer-root {
+  max-width: 540px;
+}

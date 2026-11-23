@@ -1,3 +1,4 @@
+import { withApiHandler } from "@/server/api-handler";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { put } from "@vercel/blob";
 import { canManageCms, deny, getActor } from "@/server/rbac";
@@ -12,7 +13,7 @@ function sanitizeFileName(name: string): string {
     return name.replace(/[^a-zA-Z0-9._-]/g, "-");
 }
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
     if (req.method !== "POST") {
         res.setHeader("Allow", ["POST"]);
         return res.status(405).json({ message: "Method not allowed" });
@@ -52,3 +53,6 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         return res.status(500).json({ message: "Failed to upload image" });
     }
 }
+export default withApiHandler(handler, { methods: ["POST"], bodyLimit: 8 * 1024 * 1024 });
+
+export const config = { api: { bodyParser: false } };

@@ -1,3 +1,4 @@
+import { isValidPassword } from "@/utils/passwordPolicy";
 import { randomBytes } from "crypto";
 import bcrypt from "bcryptjs";
 import { cacheDelete, cacheGetJson, cacheSetJson } from "@/server/redis-cache";
@@ -161,7 +162,7 @@ export async function resetPasswordWithToken(params: {
 }): Promise<boolean> {
     const token = toText(params.token);
     const newPassword = String(params.newPassword || "");
-    if (!token || newPassword.length < 6) return false;
+    if (!token || !isValidPassword(newPassword)) return false;
 
     const payload = await cacheGetJson<ResetTokenPayload>(resetTokenKey(token));
     if (!payload?.email || !payload?.userId) return false;

@@ -1,0 +1,26 @@
+import { defineConfig, devices } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./tests/browser",
+  fullyParallel: false,
+  workers: 1,
+  timeout: 45_000,
+  reporter: "list",
+  use: {
+    baseURL: "http://127.0.0.1:4311",
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
+    ...(process.env.PLAYWRIGHT_CHROME === "1" ? { channel: "chrome" } : {}),
+  },
+  projects: [
+    { name: "desktop", use: { ...devices["Desktop Chrome"] } },
+    { name: "mobile", use: { ...devices["iPhone 13"], defaultBrowserType: "chromium" } },
+  ],
+  webServer: {
+    command: "npm run start -- --hostname 127.0.0.1 --port 4311",
+    url: "http://127.0.0.1:4311",
+    reuseExistingServer: false,
+    timeout: 60_000,
+    env: { NEXT_TELEMETRY_DISABLED: "1" },
+  },
+});
